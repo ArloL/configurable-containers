@@ -1,70 +1,82 @@
-import { firefox, type BrowserContext, type Page } from "playwright";
-import { withExtension } from "playwright-webextext";
+import { Builder, type WebDriver } from "selenium-webdriver";
+import firefox from "selenium-webdriver/firefox.js";
 import { fileURLToPath } from "node:url";
+import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { startServer, type TestServer } from "./server";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const PROBE_PATH = path.resolve(HERE, "../extensions/probe");
+const PROBE_DIR = path.resolve(HERE, "../extensions/probe");
 
 export interface Session {
-  context: BrowserContext;
+  driver: WebDriver;
   serverUrl: string;
   close(): Promise<void>;
 }
 
+// Package the unpacked probe extension into a temporary .xpi (a zip), because
+// geckodriver's installAddon expects an addon file, not a directory.
+function buildProbeXpi(): { xpiPath: string; cleanup: () => void } {
+  const dir = mkdtempSync(path.join(tmpdir(), "cc-e2e-xpi-"));
+  const xpiPath = path.join(dir, "probe.xpi");
+  execFileSync("zip", ["-r", "-FS", xpiPath, ".", "-x", ".*"], { cwd: PROBE_DIR });
+  return { xpiPath, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+}
+
 export async function launch(): Promise<Session> {
   const server: TestServer = await startServer();
-  const userDataDir = mkdtempSync(path.join(tmpdir(), "cc-e2e-"));
+  const { xpiPath, cleanup } = buildProbeXpi();
 
-  let context: BrowserContext;
+  const options = new firefox.Options();
+  options.addArguments("-headless");
+  // Enable the containers feature so the probe's contextualIdentities call works.
+  options.setPreference("privacy.userContext.enabled", true);
+  options.setPreference("xpinstall.signatures.required", false);
+
+  let driver: WebDriver;
   try {
-    const browserType = withExtension(firefox, PROBE_PATH);
-    context = await browserType.launchPersistentContext(userDataDir, {
-      headless: true,
-      // The contextualIdentities API is only available when the containers
-      // feature is enabled; enable it explicitly so the probe can create one.
-      firefoxUserPrefs: { "privacy.userContext.enabled": true },
-    });
+    driver = await new Builder().forBrowser("firefox").setFirefoxOptions(options).build();
+    // Temporary install of the unsigned probe; runs its startup (creates a container tab).
+    // installAddon is defined on firefox.Driver (a WebDriver subclass); the Builder's
+    // return type is the base WebDriver, so narrow it here for the call.
+    await (driver as unknown as firefox.Driver).installAddon(xpiPath, true);
   } catch (err) {
-    // Launch failed after the server + temp profile were created — release them
-    // so repeated failed runs don't leak ports or orphan temp dirs.
     await server.close();
-    rmSync(userDataDir, { recursive: true, force: true });
+    cleanup();
     throw err;
   }
 
   return {
-    context,
+    driver,
     serverUrl: server.url,
     async close() {
-      await context.close();
+      await driver.quit();
       await server.close();
-      rmSync(userDataDir, { recursive: true, force: true });
+      cleanup();
     },
   };
 }
 
-// Poll a tab's title until the probe has written "CSID:<cookieStoreId>".
-export async function readCookieStoreId(page: Page, timeoutMs = 5000): Promise<string> {
+// Poll the CURRENT window's title until the probe has written "CSID:<store>".
+export async function readCookieStoreId(driver: WebDriver, timeoutMs = 5000): Promise<string> {
   const deadline = Date.now() + timeoutMs;
   let lastTitle = "";
   while (Date.now() < deadline) {
-    lastTitle = await page.title();
+    lastTitle = await driver.getTitle();
     const m = lastTitle.match(/^CSID:(.+)$/);
     if (m) return m[1];
-    await new Promise((r) => setTimeout(r, 100));
+    await driver.sleep(100);
   }
   throw new Error(`Timed out waiting for probe report; last title: ${JSON.stringify(lastTitle)}`);
 }
 
-// Navigate every open tab to `url` (triggering a probe report on each) and
+// Navigate every window handle to `url` (triggering a probe report on each) and
 // collect their cookieStoreIds. Retries until a container store appears or the
 // deadline passes, tolerating the probe's container tab arriving asynchronously.
 export async function collectStoresUntilContainer(
-  context: BrowserContext,
+  driver: WebDriver,
   url: string,
   timeoutMs = 15_000,
 ): Promise<string[]> {
@@ -72,16 +84,18 @@ export async function collectStoresUntilContainer(
   let stores: string[] = [];
   while (Date.now() < deadline) {
     stores = [];
-    for (const page of context.pages()) {
+    const handles = await driver.getAllWindowHandles();
+    for (const handle of handles) {
       try {
-        await page.goto(url, { waitUntil: "load" });
-        stores.push(await readCookieStoreId(page, 2000));
+        await driver.switchTo().window(handle);
+        await driver.get(url);
+        stores.push(await readCookieStoreId(driver, 2000));
       } catch {
-        // A tab may have closed/navigated mid-loop; skip it this round.
+        // A handle may have closed mid-loop; skip it this round.
       }
     }
     if (stores.some((s) => /^firefox-container-\d+$/.test(s))) return stores;
-    await new Promise((r) => setTimeout(r, 500));
+    await driver.sleep(500);
   }
   return stores;
 }
