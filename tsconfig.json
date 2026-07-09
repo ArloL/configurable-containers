@@ -10,5 +10,5 @@
     "types": ["node"],
     "noEmit": true
   },
-  "include": ["harness", "test"]
+  "include": ["harness", "test", "src"]
 }
