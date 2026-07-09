@@ -164,6 +164,67 @@ Playwright trace/screenshot artifacts.
 It proves the read path, not the assertions that ride it. Container
 create/dispose timing, cookie isolation, MAC interop, and redirect binding are all
 future levels. The value delivered is a **validated, reusable observation
-mechanism** (the probe) and a **validated launcher** (Playwright +
-`playwright-webextext`) — the foundation the rest of the L4/L5 pyramid is built
-on.
+mechanism** (the probe) and a **validated launcher** — the foundation the rest of
+the L4/L5 pyramid is built on.
+
+## 11. Spike outcome (2026-07-09) — supersedes the §2 launcher choice
+
+The spike ran, and it overturned the §2 launcher decision with evidence. Both
+proofs are green; the driver is **Selenium/geckodriver**, not Playwright.
+
+### What was proven
+
+- **`playwright-webextext` does load an unsigned MV2 extension headlessly** — the
+  default-store read path worked end-to-end via Playwright, and `firefoxUserPrefs`
+  propagated (no `user.js` fallback needed). So the original §2 approach was
+  *partially* valid.
+- **Headline finding — Playwright is blind to container tabs.** Playwright's
+  Firefox (Juggler) never surfaces a WebExtension-opened container tab as a page,
+  in **both** `launchPersistentContext` and `.launch()` modes. The extension
+  side works fine (`contextualIdentities.create` + `tabs.create({ cookieStoreId })`
+  succeed; the probe's own `tabs.query({})` confirms a `firefox-container-N` tab
+  exists), but Playwright's `context.pages()` only ever reports the default tab.
+  There is no timing race — the container tab simply never appears.
+- **Selenium/geckodriver can see and drive container tabs.** Against **system
+  Firefox**, `getAllWindowHandles()` returned the container tab as an ordinary
+  handle; navigating it and reading `getTitle()` returned `CSID:firefox-container-6`.
+  No CDP/BiDi tricks, no extension relay needed for discovery.
+
+### Decision
+
+Because this project's entire domain is *routing tabs into containers*, nearly
+every L4/L5 assertion must observe a container tab. A driver that cannot see them
+is disqualifying. **The harness was pivoted to Selenium/geckodriver**
+(`selenium-webdriver`, system Firefox, headless; geckodriver auto-provisioned by
+Selenium Manager). `playwright` + `playwright-webextext` + their workaround deps
+(`tslib`, `@playwright/test`) were removed. This lands on the pre-`playwright-webextext`
+recommendation — the detour was not wasted; it produced the hard evidence above.
+
+### Answers to the §8 open questions
+
+- `playwright-webextext` loads unsigned MV2 headlessly: **yes** (but insufficient — see finding).
+- `firefoxUserPrefs` / `setPreference` propagated the containers pref: **yes, no `user.js` fallback**.
+- Extension-opened container tabs visible to the driver: **no via Playwright; yes via Selenium/geckodriver**.
+- Selenium fallback needed: **yes — it became the primary driver**.
+- Both proofs green: **yes** (`firefox-default` + `firefox-container-N`).
+
+### Implementation notes
+
+- geckodriver's `installAddon` needs an addon **file**, so the harness zips the
+  unpacked `extensions/probe/` into a temp `.xpi` at launch (requires the `zip`
+  CLI). Temporary install bypasses signing.
+- `installAddon` is typed on `firefox.Driver` (a `WebDriver` subclass), so the
+  call site narrows the `Builder`'s base-`WebDriver` return type.
+
+### Follow-ups this surfaces (out of scope here)
+
+- **`TESTING.md` needs correcting.** Its L4/L5 "web-ext + Playwright" recommendation
+  is now wrong — the driver is Selenium/geckodriver. This edit was **deferred**
+  because `TESTING.md` currently carries unrelated uncommitted changes; it should
+  be updated in the same pass that commits those.
+- **CI:** Selenium Manager provisions geckodriver over the network — vendor or
+  pre-cache it for CI air-gap. The harness uses **system Firefox**, so CI must
+  install a Firefox (not rely on Playwright's bundled build).
+- **Lost Playwright affordances:** tracing / network interception (wanted later for
+  the F9 redirect/POST-binding tests) don't come free with Selenium — revisit via
+  WebDriver BiDi or a proxy when L4 reaches F9.
