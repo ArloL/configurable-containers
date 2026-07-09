@@ -38,7 +38,7 @@ matrix](#subtle-bug-coverage-matrix) proves no class is orphaned.
         ┌─────────────────────────────┐
         │  L5  Acceptance (TESTS.md)   │  BDD code, real Firefox      slow
         ├─────────────────────────────┤
-        │  L4  Integration (Firefox)   │  web-ext + Playwright, +MAC
+        │  L4  Integration (Firefox)   │  Selenium/geckodriver, +MAC
         ├─────────────────────────────┤
         │  L3  Model-based (mock API)  │  event sequences + invariants
         ├─────────────────────────────┤
@@ -56,9 +56,16 @@ tests are milliseconds and exhaustive; only the stateful and browser-real classe
 
 Recommended stack (swappable): **Vitest** (L1–L3), **fast-check** for
 property-based, a **mock `browser.*`** (`sinon-chrome` or a hand-rolled fake),
-**web-ext + Playwright (Firefox)** for L4 and L5 (the L5 acceptance suite is
-plain BDD-style test code mirroring `TESTS.md` — no Gherkin runner), **Stryker**
-for mutation testing.
+**Selenium/geckodriver (real Firefox, headless)** for L4 and L5 (the L5 acceptance
+suite is plain BDD-style test code mirroring `TESTS.md` — no Gherkin runner),
+**Stryker** for mutation testing.
+
+> **Driver note (plumbing spike, 2026-07-09):** L4/L5 use Selenium/geckodriver,
+> **not** Playwright. Playwright's Firefox is structurally blind to
+> WebExtension-opened container tabs (they never surface as pages), which is
+> disqualifying for a container-routing engine; Selenium sees them as ordinary
+> window handles. See
+> `docs/superpowers/specs/2026-07-09-e2e-harness-plumbing-spike-design.md` §11.
 
 ---
 
@@ -142,9 +149,10 @@ home of F1, F2, F7, F8, F10.
 
 ## L4 — Integration in real Firefox
 
-Load the built extension with **web-ext** and drive a real Firefox (headless) via
-**Playwright**. Catches what mocks can't: real event ordering, real
-`cookieStoreId` assignment, real container create/dispose, real redirects.
+Install the built extension via geckodriver's temporary-addon install and drive a
+real Firefox (headless) with **Selenium/geckodriver**. Catches what mocks can't:
+real event ordering, real `cookieStoreId` assignment, real container
+create/dispose, real redirects.
 
 - **Real routing** — navigate; assert `tab.cookieStoreId` is the expected
   container; assert containers created/disposed via `contextualIdentities.query`.
@@ -255,8 +263,8 @@ jobs:
       - checkout; install
       - setup-firefox ${{ matrix.firefox }}
       - run mock-IdP fixture server
-      - xvfb-run playwright test        # web-ext run, L4 + L5 acceptance suite
-      - if failure: upload screenshots + web-ext logs
+      - npm test                        # selenium/geckodriver, L4 + L5 acceptance suite
+      - if failure: upload screenshots + geckodriver logs
 
   mutation:          # nightly only — slow
     if: github.event_name == 'schedule'
