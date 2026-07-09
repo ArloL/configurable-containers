@@ -107,9 +107,15 @@ type Decision =
   | { kind: "choice"; options: string[] };  // multi-open, no default, not already eligible
 
 type Target =
+  | { kind: "default" }                     // reopen into no container (firefox-default)
   | { kind: "permanent"; name: string }
   | { kind: "temporary" };                  // a FRESH throwaway (reuse is expressed as "stay")
 ```
+
+`Target` is structurally identical to `ContainerRef` (default | permanent |
+temporary), so "reopen into the initiator's container" is just `reopen{into:
+initiator}`. They are kept as distinct type names for intent (where a tab *is* vs
+where to reopen it).
 
 `Decision` is a discriminated union and is exhaustively switched (no `default`
 case) so a new variant fails to compile until handled (TESTING.md static gate).
@@ -124,6 +130,13 @@ Compute a **desired container**, then diff against `current` → `stay` or `reop
    (The conditional auto-close is a later lifecycle level, not this decision.)
 4. **`inherit`** → desired = `nav.initiator` (fall back to `current.container`; if
    both null — inherit from a blank tab with no initiator — desired = `default`).
+   Then diff (step 8) → `stay` or `reopen{into: desired}`.
+   **Temporary-identity limitation:** L1 `ContainerRef.temporary` carries no id, so
+   two temporaries compare equal. The founding `inherit` cases are same-tab auth
+   hops where `current` already *is* the initiator's throwaway → `stay` (correct).
+   The rare cross-tab case (initiator is a *different* throwaway than `current`)
+   would `reopen{into: temporary}` = a *fresh* one, losing the initiator's specific
+   throwaway. Accepted for L1; if it ever matters, `temporary` gains an id.
 5. **`open`** with a single container `X`:
    - `X === "Temporary"` → **disposable path** (step 7).
    - else desired = `{ permanent: X }`.
