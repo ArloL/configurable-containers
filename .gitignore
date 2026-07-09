@@ -1,2 +1,6 @@
 # Temporary Containers Plus source, checked out for research only
 tcp/
+
+node_modules/
+test-results/
+.playwright/
