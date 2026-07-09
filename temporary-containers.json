@@ -1,0 +1,758 @@
+{
+  "preferences": {
+    "automaticMode": {
+      "active": true,
+      "newTab": "created"
+    },
+    "notifications": false,
+    "container": {
+      "namePrefix": "tmp",
+      "color": "toolbar",
+      "colorRandom": false,
+      "colorRandomExcluded": [],
+      "icon": "circle",
+      "iconRandom": false,
+      "iconRandomExcluded": [],
+      "numberMode": "reuse",
+      "removal": 900000
+    },
+    "iconColor": "default",
+    "isolation": {
+      "reactivateDelay": 0,
+      "global": {
+        "navigation": {
+          "action": "notsamedomain"
+        },
+        "mouseClick": {
+          "middle": {
+            "action": "never",
+            "container": "default"
+          },
+          "ctrlleft": {
+            "action": "never",
+            "container": "default"
+          },
+          "left": {
+            "action": "never",
+            "container": "default"
+          }
+        },
+        "excluded": [
+          "login.microsoftonline.com",
+          "secure.kps-payment.de",
+          "*.login.microsoftonline.com",
+          "id.bund.de",
+          "threedssvc.pay1.de",
+          "accounts.spotify.com",
+          "challenge.spotify.com",
+          "accounts.google.com",
+          "threeds.upcgw.com",
+          "payment.unzer.com",
+          "acs.3dsecure-atruvia.de",
+          "*.credorax.net"
+        ],
+        "excludedContainers": []
+      },
+      "domain": [
+        {
+          "pattern": "login.microsoftonline.com",
+          "always": {
+            "action": "disabled",
+            "allowedInPermanent": false,
+            "allowedInTemporary": false
+          },
+          "navigation": {
+            "action": "never"
+          },
+          "mouseClick": {
+            "middle": {
+              "action": "global"
+            },
+            "ctrlleft": {
+              "action": "global"
+            },
+            "left": {
+              "action": "global"
+            }
+          },
+          "excluded": [],
+          "excludedContainers": []
+        },
+        {
+          "pattern": "secure.kps-payment.de",
+          "always": {
+            "action": "disabled",
+            "allowedInPermanent": false,
+            "allowedInTemporary": false
+          },
+          "navigation": {
+            "action": "never"
+          },
+          "mouseClick": {
+            "middle": {
+              "action": "global"
+            },
+            "ctrlleft": {
+              "action": "global"
+            },
+            "left": {
+              "action": "global"
+            }
+          },
+          "excluded": [],
+          "excludedContainers": []
+        },
+        {
+          "pattern": "*.login.microsoftonline.com",
+          "always": {
+            "action": "disabled",
+            "allowedInPermanent": false,
+            "allowedInTemporary": false
+          },
+          "navigation": {
+            "action": "never"
+          },
+          "mouseClick": {
+            "middle": {
+              "action": "global"
+            },
+            "ctrlleft": {
+              "action": "global"
+            },
+            "left": {
+              "action": "global"
+            }
+          },
+          "excluded": [],
+          "excludedContainers": []
+        },
+        {
+          "pattern": "id.bund.de",
+          "always": {
+            "action": "disabled",
+            "allowedInPermanent": false,
+            "allowedInTemporary": false
+          },
+          "navigation": {
+            "action": "never"
+          },
+          "mouseClick": {
+            "middle": {
+              "action": "global"
+            },
+            "ctrlleft": {
+              "action": "global"
+            },
+            "left": {
+              "action": "global"
+            }
+          },
+          "excluded": [],
+          "excludedContainers": []
+        },
+        {
+          "pattern": "/^moz-extension:\\/\\/[a-z0-9-]+\\/delayed\\.html.*/",
+          "always": {
+            "action": "disabled",
+            "allowedInPermanent": false,
+            "allowedInTemporary": false
+          },
+          "navigation": {
+            "action": "never"
+          },
+          "mouseClick": {
+            "middle": {
+              "action": "global"
+            },
+            "ctrlleft": {
+              "action": "global"
+            },
+            "left": {
+              "action": "global"
+            }
+          },
+          "excluded": [],
+          "excludedContainers": []
+        },
+        {
+          "pattern": "threedssvc.pay1.de",
+          "always": {
+            "action": "disabled",
+            "allowedInPermanent": false,
+            "allowedInTemporary": false
+          },
+          "navigation": {
+            "action": "never"
+          },
+          "mouseClick": {
+            "middle": {
+              "action": "global"
+            },
+            "ctrlleft": {
+              "action": "global"
+            },
+            "left": {
+              "action": "global"
+            }
+          },
+          "excluded": [],
+          "excludedContainers": []
+        },
+        {
+          "pattern": "*.google.com",
+          "always": {
+            "action": "disabled",
+            "allowedInPermanent": false,
+            "allowedInTemporary": false
+          },
+          "navigation": {
+            "action": "global"
+          },
+          "mouseClick": {
+            "middle": {
+              "action": "global"
+            },
+            "ctrlleft": {
+              "action": "global"
+            },
+            "left": {
+              "action": "global"
+            }
+          },
+          "excluded": [
+            "*.google.com",
+            "*.google.de",
+            "*.youtube.com"
+          ],
+          "excludedContainers": []
+        },
+        {
+          "pattern": "*.youtube.com",
+          "always": {
+            "action": "disabled",
+            "allowedInPermanent": false,
+            "allowedInTemporary": false
+          },
+          "navigation": {
+            "action": "global"
+          },
+          "mouseClick": {
+            "middle": {
+              "action": "global"
+            },
+            "ctrlleft": {
+              "action": "global"
+            },
+            "left": {
+              "action": "global"
+            }
+          },
+          "excluded": [
+            "accounts.google.com",
+            "youtu.be"
+          ],
+          "excludedContainers": []
+        },
+        {
+          "pattern": "www.conrad.de",
+          "always": {
+            "action": "disabled",
+            "allowedInPermanent": false,
+            "allowedInTemporary": false
+          },
+          "navigation": {
+            "action": "global"
+          },
+          "mouseClick": {
+            "middle": {
+              "action": "global"
+            },
+            "ctrlleft": {
+              "action": "global"
+            },
+            "left": {
+              "action": "global"
+            }
+          },
+          "excluded": [
+            "accounts.conrad.com"
+          ],
+          "excludedContainers": []
+        },
+        {
+          "pattern": "*.spotify.com",
+          "always": {
+            "action": "disabled",
+            "allowedInPermanent": false,
+            "allowedInTemporary": false
+          },
+          "navigation": {
+            "action": "global"
+          },
+          "mouseClick": {
+            "middle": {
+              "action": "global"
+            },
+            "ctrlleft": {
+              "action": "global"
+            },
+            "left": {
+              "action": "global"
+            }
+          },
+          "excluded": [
+            "*.spotify.com"
+          ],
+          "excludedContainers": []
+        },
+        {
+          "pattern": "www.paypal.com",
+          "always": {
+            "action": "disabled",
+            "allowedInPermanent": false,
+            "allowedInTemporary": false
+          },
+          "navigation": {
+            "action": "global"
+          },
+          "mouseClick": {
+            "middle": {
+              "action": "global",
+              "container": "default"
+            },
+            "ctrlleft": {
+              "action": "global",
+              "container": "default"
+            },
+            "left": {
+              "action": "global",
+              "container": "default"
+            }
+          },
+          "excluded": [],
+          "excludedContainers": []
+        },
+        {
+          "pattern": "maps.app.goo.gl",
+          "always": {
+            "action": "disabled",
+            "allowedInPermanent": false,
+            "allowedInTemporary": false
+          },
+          "navigation": {
+            "action": "global"
+          },
+          "mouseClick": {
+            "middle": {
+              "action": "global",
+              "container": "default"
+            },
+            "ctrlleft": {
+              "action": "global",
+              "container": "default"
+            },
+            "left": {
+              "action": "global",
+              "container": "default"
+            }
+          },
+          "excluded": [
+            "www.google.de"
+          ],
+          "excludedContainers": []
+        },
+        {
+          "pattern": "youtu.be",
+          "always": {
+            "action": "disabled",
+            "allowedInPermanent": false,
+            "allowedInTemporary": false
+          },
+          "navigation": {
+            "action": "global"
+          },
+          "mouseClick": {
+            "middle": {
+              "action": "global",
+              "container": "default"
+            },
+            "ctrlleft": {
+              "action": "global",
+              "container": "default"
+            },
+            "left": {
+              "action": "global",
+              "container": "default"
+            }
+          },
+          "excluded": [
+            "*.youtube.com"
+          ],
+          "excludedContainers": []
+        },
+        {
+          "pattern": "*.check24.de",
+          "always": {
+            "action": "disabled",
+            "allowedInPermanent": false,
+            "allowedInTemporary": false
+          },
+          "navigation": {
+            "action": "global"
+          },
+          "mouseClick": {
+            "middle": {
+              "action": "global",
+              "container": "default"
+            },
+            "ctrlleft": {
+              "action": "global",
+              "container": "default"
+            },
+            "left": {
+              "action": "global",
+              "container": "default"
+            }
+          },
+          "excluded": [
+            "*.check24.de",
+            "*.check24.com"
+          ],
+          "excludedContainers": []
+        },
+        {
+          "pattern": "*.check24.com",
+          "always": {
+            "action": "disabled",
+            "allowedInPermanent": false,
+            "allowedInTemporary": false
+          },
+          "navigation": {
+            "action": "global"
+          },
+          "mouseClick": {
+            "middle": {
+              "action": "global",
+              "container": "default"
+            },
+            "ctrlleft": {
+              "action": "global",
+              "container": "default"
+            },
+            "left": {
+              "action": "global",
+              "container": "default"
+            }
+          },
+          "excluded": [
+            "*.check24.de",
+            "*.check24.com"
+          ],
+          "excludedContainers": []
+        },
+        {
+          "pattern": "heidelpay.hpcgw.net",
+          "always": {
+            "action": "disabled",
+            "allowedInPermanent": false,
+            "allowedInTemporary": false
+          },
+          "navigation": {
+            "action": "global"
+          },
+          "mouseClick": {
+            "middle": {
+              "action": "global",
+              "container": "default"
+            },
+            "ctrlleft": {
+              "action": "global",
+              "container": "default"
+            },
+            "left": {
+              "action": "global",
+              "container": "default"
+            }
+          },
+          "excluded": [
+            "*"
+          ],
+          "excludedContainers": []
+        },
+        {
+          "pattern": "acs.3dsecure-atruvia.de",
+          "always": {
+            "action": "disabled",
+            "allowedInPermanent": false,
+            "allowedInTemporary": false
+          },
+          "navigation": {
+            "action": "global"
+          },
+          "mouseClick": {
+            "middle": {
+              "action": "global",
+              "container": "default"
+            },
+            "ctrlleft": {
+              "action": "global",
+              "container": "default"
+            },
+            "left": {
+              "action": "global",
+              "container": "default"
+            }
+          },
+          "excluded": [
+            "*"
+          ],
+          "excludedContainers": []
+        },
+        {
+          "pattern": "adventofcode.com",
+          "always": {
+            "action": "disabled",
+            "allowedInPermanent": false,
+            "allowedInTemporary": false
+          },
+          "navigation": {
+            "action": "global"
+          },
+          "mouseClick": {
+            "middle": {
+              "action": "global",
+              "container": "default"
+            },
+            "ctrlleft": {
+              "action": "global",
+              "container": "default"
+            },
+            "left": {
+              "action": "global",
+              "container": "default"
+            }
+          },
+          "excluded": [
+            "github.com"
+          ],
+          "excludedContainers": []
+        },
+        {
+          "pattern": "*.oracle.com",
+          "always": {
+            "action": "disabled",
+            "allowedInPermanent": false,
+            "allowedInTemporary": false
+          },
+          "navigation": {
+            "action": "global"
+          },
+          "mouseClick": {
+            "middle": {
+              "action": "global",
+              "container": "default"
+            },
+            "ctrlleft": {
+              "action": "global",
+              "container": "default"
+            },
+            "left": {
+              "action": "global",
+              "container": "default"
+            }
+          },
+          "excluded": [
+            "*.identity.oraclecloud.com",
+            "*.oraclecloud.com"
+          ],
+          "excludedContainers": []
+        },
+        {
+          "pattern": "*.identity.oraclecloud.com",
+          "always": {
+            "action": "disabled",
+            "allowedInPermanent": false,
+            "allowedInTemporary": false
+          },
+          "navigation": {
+            "action": "global"
+          },
+          "mouseClick": {
+            "middle": {
+              "action": "global",
+              "container": "default"
+            },
+            "ctrlleft": {
+              "action": "global",
+              "container": "default"
+            },
+            "left": {
+              "action": "global",
+              "container": "default"
+            }
+          },
+          "excluded": [
+            "*.oracle.com",
+            "oracle.com"
+          ],
+          "excludedContainers": []
+        },
+        {
+          "pattern": "*.oraclecloud.com",
+          "always": {
+            "action": "disabled",
+            "allowedInPermanent": false,
+            "allowedInTemporary": false
+          },
+          "navigation": {
+            "action": "global"
+          },
+          "mouseClick": {
+            "middle": {
+              "action": "global",
+              "container": "default"
+            },
+            "ctrlleft": {
+              "action": "global",
+              "container": "default"
+            },
+            "left": {
+              "action": "global",
+              "container": "default"
+            }
+          },
+          "excluded": [
+            "*.oracle.com",
+            "oracle.com"
+          ],
+          "excludedContainers": []
+        }
+      ],
+      "mac": {
+        "action": "enabled"
+      }
+    },
+    "browserActionPopup": false,
+    "pageAction": false,
+    "contextMenu": false,
+    "contextMenuBookmarks": false,
+    "keyboardShortcuts": {
+      "AltC": false,
+      "AltP": true,
+      "AltN": false,
+      "AltShiftC": false,
+      "AltX": false,
+      "AltO": false,
+      "AltI": false
+    },
+    "replaceTabs": false,
+    "closeRedirectorTabs": {
+      "active": true,
+      "delay": 2000,
+      "domains": [
+        "t.co",
+        "outgoing.prod.mozaws.net",
+        "slack-redir.net"
+      ]
+    },
+    "ignoreRequests": [
+      "getpocket.com",
+      "addons.mozilla.org",
+      "5b5e5f00-cdba-421c-b4ea-ff77c9132c48"
+    ],
+    "cookies": {
+      "domain": {
+        "*.woki.de": [
+          {
+            "domain": "www.woki.de",
+            "expirationDate": "",
+            "firstPartyDomain": "",
+            "httpOnly": "false",
+            "name": "klaro",
+            "path": "/",
+            "sameSite": "lax",
+            "secure": "false",
+            "url": "https://www.woki.de/",
+            "value": "%7B%22cpConfig%22%3Atrue%2C%22basicCookie%22%3Atrue%2C%22cpIt%22%3Atrue%2C%22scrollContent%22%3Atrue%2C%22klaro%22%3Atrue%2C%22youtube%22%3Afalse%2C%22googleMaps%22%3Afalse%2C%22googleRecaptcha%22%3Afalse%2C%22googleAnalytics%22%3Afalse%7D"
+          }
+        ],
+        "*.youtube.com": [
+          {
+            "name": "wide",
+            "value": "1",
+            "domain": ".youtube.com",
+            "url": "https://www.youtube.com/",
+            "expirationDate": "",
+            "firstPartyDomain": "",
+            "httpOnly": "false",
+            "path": "/",
+            "sameSite": "",
+            "secure": "false"
+          },
+          {
+            "name": "SOCS",
+            "value": "CAESEwgDEgk4MzE1NjQ2OTUaAmVuIAEaBgiAv9TIBg",
+            "domain": ".youtube.com",
+            "url": "https://www.youtube.com/",
+            "expirationDate": "",
+            "firstPartyDomain": "",
+            "httpOnly": "false",
+            "path": "/",
+            "sameSite": "lax",
+            "secure": "true"
+          }
+        ]
+      }
+    },
+    "scripts": {
+      "active": true,
+      "domain": {
+        "www.kraftfuttermischwerk.de": [
+          {
+            "code": "localStorage.setItem('jetpack_post_subscribe_modal_dismissed', Date.now().toString());",
+            "runAt": "document_start"
+          }
+        ],
+        "www.youtube.com": [
+          {
+            "code": "localStorage.setItem('yt-player-sticky-caption', JSON.stringify({data:'false',expiration:Date.now()+2592000000,creation:Date.now()}));",
+            "runAt": "document_start"
+          }
+        ]
+      }
+    },
+    "deletesHistory": {
+      "active": false,
+      "automaticMode": "never",
+      "contextMenu": false,
+      "contextMenuBookmarks": false,
+      "containerAlwaysPerDomain": "never",
+      "containerIsolation": "never",
+      "containerRemoval": 0,
+      "containerMouseClicks": "never",
+      "statistics": false
+    },
+    "statistics": false,
+    "ui": {
+      "expandPreferences": false,
+      "popupDefaultTab": "isolation-global"
+    },
+    "containerPrefixOverride": "",
+    "proxies": {
+      "active": false,
+      "assignmentMode": "random",
+      "entries": []
+    }
+  },
+  "statistics": {
+    "startTime": "2025-10-25T13:22:43.649Z",
+    "containersDeleted": 0,
+    "cookiesDeleted": 0,
+    "cacheDeleted": 0,
+    "deletesHistory": {
+      "containersDeleted": 0,
+      "cookiesDeleted": 0,
+      "urlsDeleted": 0
+    }
+  }
+}

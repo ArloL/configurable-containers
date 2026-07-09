@@ -1,0 +1,148 @@
+# Real config, generated from the MAC + Temporary Containers exports.
+# Format: YAML (provisional). A bare host is shorthand for *://*.<host>/*
+#
+# Routing-only: maps sites to containers; does not own container lifecycle.
+# Containers are created on demand by name; unlisted ones are left alone.
+# Unmatched sites open in a fresh Temporary container (no `default` needed).
+#
+# A rule with only `match` opens in a container NAMED after the host. When `match`
+# is a list, the FIRST host is used (e.g. [notion.com, notion.so] -> "notion.com").
+# `open:` is only needed to give the container a name that differs from that host.
+# First matching rule wins. A rule may also carry `cookies` / `scripts` overlays
+# (within-container side-effects). Isolation-continuity `groups` are a separate list.
+rules:
+
+  # SSO / auth / shared payment redirectors: stay in the initiating container.
+  - match: "login.microsoftonline.com"
+    inherit: true
+  - match: "accounts.google.com"
+    inherit: true
+  - match: "id.bund.de"
+    inherit: true
+  - match: "secure.kps-payment.de"
+    inherit: true
+  - match: "threedssvc.pay1.de"
+    inherit: true
+  - match: "threeds.upcgw.com"
+    inherit: true
+  - match: "payment.unzer.com"
+    inherit: true
+  - match: "acs.3dsecure-atruvia.de"
+    inherit: true
+  - match: "credorax.net"
+    inherit: true
+  - match: "heidelpay.hpcgw.net"
+    inherit: true
+  # "Log in with Spotify" SSO: must stay in the initiating container. Kept above the
+  # spotify.com rule below, which would otherwise route these into the Spotify container.
+  - match: "accounts.spotify.com"
+    inherit: true
+  - match: "challenge.spotify.com"
+    inherit: true
+
+  # Ignored: engine does nothing — never route, isolate, or run side-effects; the
+  # tab is left exactly as-is (was TC `ignoreRequests`).
+  - match: "getpocket.com"
+    ignore: true
+  - match: "addons.mozilla.org"
+    ignore: true
+
+  # Redirectors: transient link shims. Not isolated (like inherit for the hop); the
+  # tab auto-closes ~2s after it redirects (was TC closeRedirectorTabs).
+  - match: [t.co, slack-redir.net, outgoing.prod.mozaws.net]
+    redirector: true
+
+  # Curated names: `open:` because the container name differs from the host.
+  - match:
+    - haegerconsulting.atlassian.net
+    - haeger-consulting.atlassian.net
+    - haeger-consulting.app.personio.com
+    - haegerconsulting2006.sharepoint.com
+    open: Haeger
+  - match: "goflink.com"
+    open: Flink
+
+  # assigned to two named containers
+  - match: outlook.cloud.microsoft
+    open: [Haeger, HSP]
+
+  # Auto-named: container name = the matched host (first host when `match` is a list).
+  - match: "adventofcode.com"
+  - match: "airbnb.de"
+  - match: "bahn.de"
+  - match: "bandcamp.com"
+  - match: "beatport.com"
+  - match: "booking.com"
+  - match: "eatthismuch.com"
+  - match: "feedly.com"
+  - match: "followupthen.com"
+  - match: "hetzner.com"
+  - match: "immobilienscout24.de"
+  - match: "kagi.com"
+  - match: "kleinanzeigen.de"
+  - match: "lieferando.de"
+  - match: "linkedin.com"
+  - match: "mail.google.com"
+  - match: "mend.io"
+  - match: "mural.co"
+  - match: "overcast.fm"
+  - match: "songkick.com"
+  - match: "soundcloud.com"
+  - match: "splitwise.com"
+  - match: "spotify.com"
+  - match: "taste.io"
+  - match: "tensorx.ai"
+  - match: "thestorygraph.com"
+  - match: "tldraw.com"
+  - match: "tmclub.eu"
+  - match: "tradersplace.de"
+  - match: "trello.com"
+  - match: "typst.app"
+  - match: "whatsapp.com"
+  - match: "wohnsinn.com"
+  - match: "wolt.com"
+  - match: "zeldadungeon.net"
+
+  # Multi-host, auto-named after the first host (order chosen so the first host
+  # is the name we want; later hosts are additional matchers only).
+  - match: [claude.ai, claude.com]            # -> "claude.ai"
+  - match: [discord.com, discord.gg]          # -> "discord.com"
+  - match: [github.com, github.dev]           # -> "github.com"
+  - match: [gls.de, gls-online-filiale.de]    # -> "gls.de"
+  - match: [notion.com, notion.so]            # -> "notion.com"
+  - match: [openai.com, chatgpt.com]          # -> "openai.com"
+  - match: [paypal.com, py.pl]                # -> "paypal.com"
+  - match: [wikipedia.org, wikimedia.org]     # -> "wikipedia.org"
+  - match: [yahoo.com, yahooinc.com]          # -> "yahoo.com"
+
+  # Disposable + overlays: `open: Temporary` (reuse the current throwaway only within
+  # the same site/group, else isolate) plus per-domain cookie seeds / content scripts
+  # in one entry. Was TC `cookies` + `scripts` on otherwise-unmanaged domains.
+  - match: youtube.com
+    open: Temporary
+    cookies:
+      - { name: wide, url: "https://www.youtube.com/", value: "1" }
+      - { name: SOCS, url: "https://www.youtube.com/", value: "CAESEwgDEgk4MzE1NjQ2OTUaAmVuIAEaBgiAv9TIBg", secure: true, sameSite: lax }
+    scripts:
+      - at: document_start
+        run: "localStorage.setItem('yt-player-sticky-caption', JSON.stringify({data:'false',expiration:Date.now()+2592000000,creation:Date.now()}));"
+  - match: woki.de
+    open: Temporary
+    cookies:
+      - { name: klaro, url: "https://www.woki.de/", value: '%7B%22cpConfig%22%3Atrue%2C%22basicCookie%22%3Atrue%2C%22cpIt%22%3Atrue%2C%22scrollContent%22%3Atrue%2C%22klaro%22%3Atrue%2C%22youtube%22%3Afalse%2C%22googleMaps%22%3Afalse%2C%22googleRecaptcha%22%3Afalse%2C%22googleAnalytics%22%3Afalse%7D' }
+  - match: kraftfuttermischwerk.de
+    open: Temporary
+    scripts:
+      - at: document_start
+        run: "localStorage.setItem('jetpack_post_subscribe_modal_dismissed', Date.now().toString());"
+
+# Isolation-continuity groups: members count as one site for temp isolation.
+# Separate top-level list, order-significant, first-match wins (like rules); a URL
+# resolves to at most one group. Groups never route and never override a rule.
+groups:
+  - [google.com, google.de, youtube.com]
+  - [oracle.com, oraclecloud.com, identity.oraclecloud.com]
+  - [check24.de, check24.com]
+  - [conrad.de, conrad.com]
+  - [microsoft.com, office.com, cloud.microsoft, sharepoint.com, microsoftonline.com]
+  - [atlassian.net, atlassian.com, trello.com]

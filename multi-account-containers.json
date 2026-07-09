@@ -1,0 +1,1841 @@
+{
+  "containers": [
+    {
+      "name": "tldraw",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "AirBnB",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "Amazon",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "AoC",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "Apple",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "Atlassian",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "Bandcamp",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "Beatport",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "Booking",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "Claude",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "DB",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "DHL",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "Discord",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "eatthismuch",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "examine.com",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "Feedly",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "Figma",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "Flink",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "followupthen",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "GitHub",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "GitLab",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "GLS",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "Gmail",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "Hacker News",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "ImmoScout24",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "immowelt",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "kagi",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "Kleinanzeigen",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "Lieferando",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "Lingvist",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "LinkedIn",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "LouisCK",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "MB",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "Microsoft",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "Miro",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "Mural",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "notion",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "openai",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "ohne-makler",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "Overcast",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "Padlet",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "PayPal",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "Spotify",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "Subscene",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "Splitwise",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "Songkick",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "taste.io",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "TasteDive",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "Tycho",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "tmclub",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "SoundCloud",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "SprintEins",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "The StoryGraph",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "WhatsApp",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "Wikipedia",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "xing",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "yahoo",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "zeldadungeon",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "typst",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "Wohnsinn",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "mend.io",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "tradersplace",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "Hetzner",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "Wolt",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "TensorX",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "personio",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "tmp5",
+      "color": "toolbar",
+      "icon": "circle"
+    },
+    {
+      "name": "tmp2",
+      "color": "toolbar",
+      "icon": "circle"
+    }
+  ],
+  "assignments": [
+    {
+      "domain": "",
+      "container": "26138",
+      "neverAsk": false
+    },
+    {
+      "domain": "4tothefloor.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "account.beatport.com",
+      "container": "4084",
+      "neverAsk": true
+    },
+    {
+      "domain": "account.booking.com",
+      "container": "89",
+      "neverAsk": false
+    },
+    {
+      "domain": "accounts.bahn.de",
+      "container": "37",
+      "neverAsk": true
+    },
+    {
+      "domain": "accounts.hetzner.com",
+      "container": "13846",
+      "neverAsk": true
+    },
+    {
+      "domain": "accounts.songkick.com",
+      "container": "75",
+      "neverAsk": true
+    },
+    {
+      "domain": "accounts.spotify.com",
+      "container": "23",
+      "neverAsk": false
+    },
+    {
+      "domain": "acidtestrecords.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "adventofcode.com",
+      "container": "12",
+      "neverAsk": true
+    },
+    {
+      "domain": "against-all-logic.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "alexandredevoulangis.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "alexkassian2.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "altrice.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "alunaaa.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "andhim.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "andmekeinemusik.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "anjunadeep.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "anonym.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "antiskate.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "api.login.yahoo.com",
+      "container": "58",
+      "neverAsk": true
+    },
+    {
+      "domain": "api.typst.app",
+      "container": "7418",
+      "neverAsk": true
+    },
+    {
+      "domain": "apollorecords.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "app.followupthen.com",
+      "container": "98",
+      "neverAsk": true
+    },
+    {
+      "domain": "app.mural.co",
+      "container": "80",
+      "neverAsk": true
+    },
+    {
+      "domain": "app.tensorx.ai",
+      "container": "25966",
+      "neverAsk": true
+    },
+    {
+      "domain": "app.thestorygraph.com",
+      "container": "551",
+      "neverAsk": true
+    },
+    {
+      "domain": "app.wohnsinn.com",
+      "container": "7882",
+      "neverAsk": true
+    },
+    {
+      "domain": "apparat-music.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "aquariusheaven.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "arealrecords.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "argocd.digizbzsp2.azure.deutschepost.de",
+      "container": "29",
+      "neverAsk": true
+    },
+    {
+      "domain": "argocd.digizbzsp2.test.azure.deutschepost.de",
+      "container": "29",
+      "neverAsk": true
+    },
+    {
+      "domain": "armadamusic.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "arno2.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "artifactory.dhl.com",
+      "container": "29",
+      "neverAsk": true
+    },
+    {
+      "domain": "asatate-techsupport.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "auth.lieferando.de",
+      "container": "5128",
+      "neverAsk": false
+    },
+    {
+      "domain": "auth.openai.com",
+      "container": "55",
+      "neverAsk": true
+    },
+    {
+      "domain": "auth.wikimedia.org",
+      "container": "95",
+      "neverAsk": true
+    },
+    {
+      "domain": "avemsounds.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "axelboman.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "b-l-a-z-e.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "balanceseries.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "bar25music.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "baril.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "barrycantswim.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "bellaboo.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "bergeraclabel.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "bestworksrecords.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "bicep.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "bicepaus.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "bonitaetscheck.immobilienscout24.de",
+      "container": "10",
+      "neverAsk": false
+    },
+    {
+      "domain": "bostropesopeo.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "bvok-test.deutschepost.de",
+      "container": "29",
+      "neverAsk": true
+    },
+    {
+      "domain": "caribouband.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "cerroneofficial.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "chatgpt.com",
+      "container": "55",
+      "neverAsk": true
+    },
+    {
+      "domain": "chillexecutiveofficer.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "christianloffler.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "claude.ai",
+      "container": "9",
+      "neverAsk": true
+    },
+    {
+      "domain": "cloneroyaloak.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "coma-cologne.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "confluence1.lcm.deutschepost.de",
+      "container": "29",
+      "neverAsk": true
+    },
+    {
+      "domain": "consent.yahoo.com",
+      "container": "58",
+      "neverAsk": true
+    },
+    {
+      "domain": "console.hetzner.com",
+      "container": "13846",
+      "neverAsk": true
+    },
+    {
+      "domain": "crowd1.lcm.deutschepost.de",
+      "container": "29",
+      "neverAsk": true
+    },
+    {
+      "domain": "daily.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "dds-label.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "de.linkedin.com",
+      "container": "52",
+      "neverAsk": false
+    },
+    {
+      "domain": "de.wikipedia.org",
+      "container": "95",
+      "neverAsk": true
+    },
+    {
+      "domain": "de.yahoo.com",
+      "container": "58",
+      "neverAsk": true
+    },
+    {
+      "domain": "demaxx.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "developer.mend.io",
+      "container": "10770",
+      "neverAsk": true
+    },
+    {
+      "domain": "digizbzsp-test01.deutschepost.de",
+      "container": "29",
+      "neverAsk": true
+    },
+    {
+      "domain": "digizbzsp-test02.deutschepost.de",
+      "container": "29",
+      "neverAsk": true
+    },
+    {
+      "domain": "digizbzsp-test03.deutschepost.de",
+      "container": "29",
+      "neverAsk": true
+    },
+    {
+      "domain": "discoedit.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "discolypso.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "discord.com",
+      "container": "57",
+      "neverAsk": true
+    },
+    {
+      "domain": "discord.gg",
+      "container": "57",
+      "neverAsk": true
+    },
+    {
+      "domain": "djseinfeld.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "dominikeulberg.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "dpdhl.css-qhcr-pi.azure.deutschepost.de",
+      "container": "29",
+      "neverAsk": true
+    },
+    {
+      "domain": "dstone.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "eelf.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "efdemindial.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "einmusika.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "eletronicdanceclub.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "eliescobar.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "en.wikipedia.org",
+      "container": "95",
+      "neverAsk": true
+    },
+    {
+      "domain": "fazedjset.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "feedly.com",
+      "container": "32",
+      "neverAsk": true
+    },
+    {
+      "domain": "file.notion.so",
+      "container": "8",
+      "neverAsk": true
+    },
+    {
+      "domain": "fiofio.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "floorpan.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "frameofmindrec.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "francisharris.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "frankandtony.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "frankeysandrino.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "futureboogie-recordings.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "futuredisco.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "galaktikarecords.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "galcherlustwerk.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "geniusoftime.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "geo.yahoo.com",
+      "container": "58",
+      "neverAsk": true
+    },
+    {
+      "domain": "gettraum.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "ghostly.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "gist.git.dhl.com",
+      "container": "29",
+      "neverAsk": true
+    },
+    {
+      "domain": "gist.github.com",
+      "container": "70",
+      "neverAsk": true
+    },
+    {
+      "domain": "git.dhl.com",
+      "container": "29",
+      "neverAsk": true
+    },
+    {
+      "domain": "gitea.sprinteins.com",
+      "container": "94",
+      "neverAsk": true
+    },
+    {
+      "domain": "github.com",
+      "container": "70",
+      "neverAsk": true
+    },
+    {
+      "domain": "github.dev",
+      "container": "70",
+      "neverAsk": true
+    },
+    {
+      "domain": "goodguymikesh.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "grafana.digizbzsp2.test.azure.deutschepost.de",
+      "container": "29",
+      "neverAsk": true
+    },
+    {
+      "domain": "guce.yahoo.com",
+      "container": "58",
+      "neverAsk": true
+    },
+    {
+      "domain": "guce.yahooinc.com",
+      "container": "58",
+      "neverAsk": false
+    },
+    {
+      "domain": "guygerber.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "habibifunkrecords.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "haeger-consulting.app.personio.com",
+      "container": "26138",
+      "neverAsk": true
+    },
+    {
+      "domain": "hasci-reporting-fachtum3.deutschepost.de5601",
+      "container": "29",
+      "neverAsk": true
+    },
+    {
+      "domain": "hasci-reporting.deutschepost.de5601",
+      "container": "29",
+      "neverAsk": true
+    },
+    {
+      "domain": "heimat.sprinteins.com",
+      "container": "94",
+      "neverAsk": true
+    },
+    {
+      "domain": "help.kagi.com",
+      "container": "61",
+      "neverAsk": true
+    },
+    {
+      "domain": "hnny.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "hotpiscis.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "hubbabubbaklubb.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "hunee.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "hypercolour-records.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "id.atlassian.com",
+      "container": "48",
+      "neverAsk": true
+    },
+    {
+      "domain": "imogenheap.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "innervisionsmusic.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "iugou.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "jackj.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "jamiexx.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "jenkins.sprinteins.com",
+      "container": "94",
+      "neverAsk": true
+    },
+    {
+      "domain": "jimpster.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "jira1.lcm.deutschepost.de",
+      "container": "29",
+      "neverAsk": true
+    },
+    {
+      "domain": "josephashworth.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "josgonzlez.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "k7records.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "kagi.com",
+      "container": "61",
+      "neverAsk": true
+    },
+    {
+      "domain": "kann.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "karokaro.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "keycloak1.lcm.deutschepost.de",
+      "container": "29",
+      "neverAsk": true
+    },
+    {
+      "domain": "kiasmos.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "kingstreetsounds.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "klausjohanngrobe.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "kneecap.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "kompakt.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "krakataurecords.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "lakepeople.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "larmour.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "lauer.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "lautluise.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "liveatrobertjohnson.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "loftrecords.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "logic1000.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "login.immobilienscout24.de",
+      "container": "10",
+      "neverAsk": true
+    },
+    {
+      "domain": "login.personio.com",
+      "container": "26138",
+      "neverAsk": true
+    },
+    {
+      "domain": "login.yahoo.com",
+      "container": "58",
+      "neverAsk": true
+    },
+    {
+      "domain": "maceoplex.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "mail.google.com",
+      "container": "30",
+      "neverAsk": true
+    },
+    {
+      "domain": "mail.yahoo.com",
+      "container": "58",
+      "neverAsk": true
+    },
+    {
+      "domain": "mariboustate.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "martyn.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "matthewherbert.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "maurizio3.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "maxcooper.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "melaniedebiasio.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "mentalgroove.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "mf.gls.de",
+      "container": "88",
+      "neverAsk": true
+    },
+    {
+      "domain": "michaelmayer.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "midlandsound.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "midnightmagic.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "moltlabel.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "monaberry.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "moodmusicrecords.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "moodymann.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "mosleyjr.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "move-d.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "movidarecords.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "mslxrecordings.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "mykingislight.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "nicolasjaar.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "ninjatune.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "noire-et-blanche.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "notevennoticed.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "oathcreations.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "oflynn.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "ohwhy.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "on.soundcloud.com",
+      "container": "93",
+      "neverAsk": true
+    },
+    {
+      "domain": "open.spotify.com",
+      "container": "23",
+      "neverAsk": true
+    },
+    {
+      "domain": "orbitalofficial.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "ostgut.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "osunlade.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "overcast.fm",
+      "container": "38",
+      "neverAsk": true
+    },
+    {
+      "domain": "pamparecords.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "pantherakrause.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "paperbeatscissors.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "pay.lieferando.de",
+      "container": "5128",
+      "neverAsk": true
+    },
+    {
+      "domain": "perm-vac.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "pgadmin.digizbzsp2.azure.deutschepost.de",
+      "container": "29",
+      "neverAsk": true
+    },
+    {
+      "domain": "pgadmin.digizbzsp2.test.azure.deutschepost.de",
+      "container": "29",
+      "neverAsk": true
+    },
+    {
+      "domain": "pgprettygirl.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "platform.claude.com",
+      "container": "9",
+      "neverAsk": true
+    },
+    {
+      "domain": "platipusmusic.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "plplplpl.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "portal.tradersplace.de",
+      "container": "11506",
+      "neverAsk": true
+    },
+    {
+      "domain": "powel.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "py.pl",
+      "container": "84",
+      "neverAsk": true
+    },
+    {
+      "domain": "raymang.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "rework.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "rivalconsoles.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "robagwruhme.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "rossfromfriends.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "round.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "runningbackrecords.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "rushhourmusic.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "saadabonaire.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "samshure.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "secure.soundcloud.com",
+      "container": "93",
+      "neverAsk": true
+    },
+    {
+      "domain": "secure.splitwise.com",
+      "container": "50",
+      "neverAsk": true
+    },
+    {
+      "domain": "senders.yahooinc.com",
+      "container": "58",
+      "neverAsk": true
+    },
+    {
+      "domain": "sofiakourtesis.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "solomun.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "sonarqube.dhl.com",
+      "container": "29",
+      "neverAsk": true
+    },
+    {
+      "domain": "songkick.com",
+      "container": "75",
+      "neverAsk": true
+    },
+    {
+      "domain": "soulwax.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "soulwun.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "soundcloud.com",
+      "container": "93",
+      "neverAsk": true
+    },
+    {
+      "domain": "spookyuk.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "sso.immobilienscout24.de",
+      "container": "10",
+      "neverAsk": false
+    },
+    {
+      "domain": "steffiedoms.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "streetedits.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "studiobarnhus.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "sunsetchill.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "superpitcherkompakt.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "support.github.com",
+      "container": "70",
+      "neverAsk": true
+    },
+    {
+      "domain": "talaboman.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "tbtbtb.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "techsupportuk.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "tennisdj.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "tensorx.ai",
+      "container": "25966",
+      "neverAsk": true
+    },
+    {
+      "domain": "terranova.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "tessellatelondon.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "theaxelboman.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "thecyclist.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "thestorygraph.com",
+      "container": "551",
+      "neverAsk": true
+    },
+    {
+      "domain": "tmclub.eu",
+      "container": "51",
+      "neverAsk": true
+    },
+    {
+      "domain": "tonylionni.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "toroymoi.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "tradersplace.de",
+      "container": "11506",
+      "neverAsk": true
+    },
+    {
+      "domain": "translate.kagi.com",
+      "container": "61",
+      "neverAsk": true
+    },
+    {
+      "domain": "trello.com",
+      "container": "48",
+      "neverAsk": true
+    },
+    {
+      "domain": "tshamusic.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "tunnelvisionsforever.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "typst.app",
+      "container": "7418",
+      "neverAsk": true
+    },
+    {
+      "domain": "upperclasslofi.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "valbyrotary.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "villamagica.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "w.soundcloud.com",
+      "container": "93",
+      "neverAsk": false
+    },
+    {
+      "domain": "warprecords.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "watergaterecords.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "web.whatsapp.com",
+      "container": "87",
+      "neverAsk": true
+    },
+    {
+      "domain": "wereleasewhateverthefuckwewantrecords.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "weval.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "windingroadrecords.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "wolt.com",
+      "container": "17841",
+      "neverAsk": true
+    },
+    {
+      "domain": "workingmensclub.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "www.airbnb.de",
+      "container": "73",
+      "neverAsk": true
+    },
+    {
+      "domain": "www.bahn.de",
+      "container": "37",
+      "neverAsk": true
+    },
+    {
+      "domain": "www.beatport.com",
+      "container": "4084",
+      "neverAsk": true
+    },
+    {
+      "domain": "www.booking.com",
+      "container": "89",
+      "neverAsk": true
+    },
+    {
+      "domain": "www.eatthismuch.com",
+      "container": "81",
+      "neverAsk": true
+    },
+    {
+      "domain": "www.followupthen.com",
+      "container": "98",
+      "neverAsk": true
+    },
+    {
+      "domain": "www.gls-online-filiale.de",
+      "container": "88",
+      "neverAsk": true
+    },
+    {
+      "domain": "www.gls.de",
+      "container": "88",
+      "neverAsk": true
+    },
+    {
+      "domain": "www.goflink.com",
+      "container": "5355",
+      "neverAsk": true
+    },
+    {
+      "domain": "www.immobilienscout24.de",
+      "container": "10",
+      "neverAsk": true
+    },
+    {
+      "domain": "www.kleinanzeigen.de",
+      "container": "97",
+      "neverAsk": true
+    },
+    {
+      "domain": "www.lieferando.de",
+      "container": "5128",
+      "neverAsk": true
+    },
+    {
+      "domain": "www.linkedin.com",
+      "container": "52",
+      "neverAsk": true
+    },
+    {
+      "domain": "www.notion.com",
+      "container": "8",
+      "neverAsk": true
+    },
+    {
+      "domain": "www.notion.so",
+      "container": "8",
+      "neverAsk": true
+    },
+    {
+      "domain": "www.paypal.com",
+      "container": "84",
+      "neverAsk": true
+    },
+    {
+      "domain": "www.songkick.com",
+      "container": "75",
+      "neverAsk": true
+    },
+    {
+      "domain": "www.splitwise.com",
+      "container": "50",
+      "neverAsk": true
+    },
+    {
+      "domain": "www.spotify.com",
+      "container": "23",
+      "neverAsk": true
+    },
+    {
+      "domain": "www.taste.io",
+      "container": "11",
+      "neverAsk": true
+    },
+    {
+      "domain": "www.tldraw.com",
+      "container": "24267",
+      "neverAsk": true
+    },
+    {
+      "domain": "www.yahoo.com",
+      "container": "58",
+      "neverAsk": false
+    },
+    {
+      "domain": "www.zeldadungeon.net",
+      "container": "19",
+      "neverAsk": true
+    },
+    {
+      "domain": "x3d-redirect.credorax.net",
+      "container": "17841",
+      "neverAsk": true
+    },
+    {
+      "domain": "yahoo.com",
+      "container": "58",
+      "neverAsk": true
+    },
+    {
+      "domain": "youandewan.bandcamp.com",
+      "container": "2401",
+      "neverAsk": false
+    },
+    {
+      "domain": "zrecords.bandcamp.com",
+      "container": "2401",
+      "neverAsk": true
+    }
+  ]
+}
