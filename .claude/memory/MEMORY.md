@@ -1,0 +1,4 @@
+- [Critical thinking partner](critical-thinking-partner.md) — constructive disagreement gated to decisions and reviews; build collaboratively during brainstorming
+- [No Gherkin DSL for tests](no-gherkin-dsl.md) — spec notation ok, execution must be plain BDD code
+- [Compare tooling before deciding](compare-tooling-before-deciding.md) — wants detailed tool comparisons before being asked to pick
+- [E2E driver is Selenium not Playwright](e2e-driver-selenium-not-playwright.md) — Playwright can't see WebExtension container tabs; harness uses selenium/geckodriver

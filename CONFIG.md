@@ -11,18 +11,18 @@ Containers exports.
 
 ## What the config is (and isn't)
 
-- **Top-level lists.** `rules` map sites to containers and `groups` declare
-  isolation-continuity sets — the two core lists (see
-  [Groups](#groups-isolation-continuity)). Two optional overlay lists — `cookies`
-  and `scripts` — carry over per-domain conveniences from the previous Temporary
-  Containers setup (see [Overlay lists](#overlay-lists)). There is no separate
+- **Two top-level lists.** `rules` map sites to containers and `groups` declare
+  isolation-continuity sets (see [Groups](#groups-isolation-continuity)). A rule
+  may additionally carry two optional overlay keys — `cookies` and `scripts` —
+  which carry over per-domain conveniences from the previous Temporary
+  Containers setup (see [Overlays](#overlays-cookies--scripts)). There is no separate
   container-definition block: containers are named by the rules that target them.
 - **Routing-first, not a container manifest.** The core job is mapping sites to
   containers; it does **not** own container lifecycle. A container is created on
   demand the first time a rule routes to its name; a container that no rule
   mentions is left untouched (never managed, never deleted). **A container's name
   is its identity** — renaming a target creates a new, empty container and
-  strands the old one's cookies. The overlay lists act *within* whatever
+  strands the old one's cookies. The overlay keys act *within* whatever
   container a tab is already in and never move identity across one.
 - **Temporary by default.** Anything no rule matches opens in a fresh
   **Temporary** container. This is the founding premise, so there is no
@@ -46,6 +46,12 @@ Every rule is a `match` plus **at most one** action:
 Isolation-continuity sets are **not** a rule action; they live in a separate
 top-level `groups` list (see [Groups](#groups-isolation-continuity)).
 
+A rule may also carry the `cookies` / `scripts` **overlay keys** alongside its
+action. Overlays are not actions: they never decide the container, only apply a
+within-container side-effect once routing has happened (see
+[Overlays](#overlays-cookies--scripts)). They may accompany any action except
+`ignore`, whose contract is that the engine does nothing at all.
+
 A rule with **no action** is the common case: `- match: wohnsinn.com` opens in a
 container called `wohnsinn.com`. When `match` is a list of plain hostnames the
 container is named after the **first** one, so `- match: [notion.com, notion.so]`
@@ -63,6 +69,13 @@ choice screen instead.
 anywhere a container name is accepted (`open: Temporary`, `open: [Temporary, X]`,
 `default: Temporary`) and means "a fresh throwaway container." You cannot create a
 permanent container named `Temporary`.
+
+"Fresh" is relative to a **site boundary**, not to every navigation. A rule that
+resolves to `Temporary` behaves exactly like the unmatched path for isolation:
+staying within the same registrable domain (or the same `group`) keeps the
+current temporary container, and only crossing a real boundary spins up a new
+one (see [mechanism 2](#resolution-engine)). Without this, clicking around an
+`open: Temporary` site would churn a new throwaway per click.
 
 ```yaml
 rules:
@@ -137,9 +150,13 @@ order:
    is *not* subject to any "same site" continuity: a rule's reach is exactly what
    its `match` covers. Navigating `www.google.com` (unmanaged) → `mail.google.com`
    (→ Gmail) switches into Gmail. Registrable domain is irrelevant here.
+   Exception: when the resolved container is the reserved `Temporary`,
+   enforcement means "must be in *some* temporary container" — *which* one is
+   mechanism 2's continuity decision.
 
 2. **Temporary isolation — same-site continuity.** For navigation matching no
-   rule (the disposable path), a *new* temporary container is created only on
+   rule — or matching a rule that resolves to `Temporary` — (together, the
+   disposable path), a *new* temporary container is created only on
    cross-site navigation. Staying within the same registrable domain (PSL-derived —
    see [Same site](#same-site-is-the-registrable-domain-via-the-public-suffix-list))
    — or within a declared `group` — keeps the current temporary container, so
@@ -149,7 +166,7 @@ order:
 3. **Explicit exemptions (`inherit` / `ignore` / `redirector`).** Exempt from both
    above. `inherit: true` keeps the tab in whichever container *initiated* the
    navigation — the SSO mechanism; the navigation is otherwise handled normally
-   (overlay lists still apply). `ignore: true` goes further: the engine does
+   (rule overlays still apply). `ignore: true` goes further: the engine does
    **nothing** — no routing, no isolation, no overlays, and the domain is not treated
    as a "site" for continuity — the tab is simply left where it is.
    `redirector: true` marks a transient link shim (`t.co`, `slack-redir.net`): the
@@ -256,16 +273,18 @@ constraint above. **Residual risk:** a login hop through a domain *outside* the
 group (e.g. a stray `*.googleusercontent.com`) would still isolate; the fix is to
 add that domain to the group.
 
-## Overlay lists
+## Overlays (`cookies` / `scripts`)
 
-Two optional top-level lists carry over per-domain conveniences from the previous
-Temporary Containers setup. Unlike `rules`, they do **not** decide a tab's container
-or lifecycle — they *overlay* a within-container side-effect on top of whatever
-routing already happened, and never cross a container boundary. The routing model
-above stands on its own without them; they exist for drop-in parity, and both use
-the same match grammar as `rules`. (The third TC carry-over, redirector auto-close,
-*is* a container/lifecycle decision, so it lives in `rules` as the `redirector`
-action — see [The rule](#the-rule) — not here.)
+Two optional keys a rule may carry alongside its action, carrying over per-domain
+conveniences from the previous Temporary Containers setup. Unlike actions, they do
+**not** decide a tab's container or lifecycle — they *overlay* a within-container
+side-effect on top of whatever routing already happened, and never cross a
+container boundary. An overlay has no `match` of its own: it fires whenever its
+rule matches, whatever the rule's action resolved to (`ignore` rules excepted —
+there the engine does nothing, overlays included). The routing model above stands
+on its own without them; they exist for drop-in parity. (The third TC carry-over,
+redirector auto-close, *is* a container/lifecycle decision, so it is the
+`redirector` action — see [The rule](#the-rule) — not an overlay.)
 
 ### `cookies` — seed cookies into the tab's container
 
@@ -276,11 +295,11 @@ write that honours the [identity boundary](#identity-and-cookies-a-boundary-not-
 it never copies a cookie from one container to another.
 
 ```yaml
-cookies:
-  - match: "*.youtube.com"
-    set:
-      - { name: wide, url: "https://www.youtube.com/", value: "1" }
-      - { name: SOCS, url: "https://www.youtube.com/", value: "…", secure: true, sameSite: lax }
+- match: youtube.com
+  open: Temporary
+  cookies:
+    - { name: wide, url: "https://www.youtube.com/", value: "1" }
+    - { name: SOCS, url: "https://www.youtube.com/", value: "…", secure: true, sameSite: lax }
 ```
 
 Seeded on load into the resolved container when the cookie is absent. `url` scopes
@@ -289,15 +308,16 @@ optional and default to a session cookie.
 
 ### `scripts` — per-domain content injection
 
-Inject a snippet at `document_start` on matching domains — to dismiss a modal or set
-a `localStorage` pref before the page runs. Runs in the page's container like any
-content script.
+Inject a snippet at `document_start` when the rule's domain loads — to dismiss a
+modal or set a `localStorage` pref before the page runs. Runs in the page's
+container like any content script.
 
 ```yaml
-scripts:
-  - match: "www.youtube.com"
-    at: document_start
-    run: "localStorage.setItem('yt-player-sticky-caption', JSON.stringify({…}));"
+- match: youtube.com
+  open: Temporary
+  scripts:
+    - at: document_start
+      run: "localStorage.setItem('yt-player-sticky-caption', JSON.stringify({…}));"
 ```
 
 **Capability note:** this is arbitrary code execution in the page and needs broad
@@ -345,7 +365,8 @@ crosses it — that is what containers exist to prevent. Practical consequences:
   previously retired as a top-level global; may mislead.
 - **Validity rules to codify** — a rule's action must be at most one of
   `open` / `inherit` / `ignore` / `redirector`; a `default` must be a member of its
-  `open` list; `Temporary` is a reserved name.
+  `open` list; `Temporary` is a reserved name; the `cookies` / `scripts` overlay
+  keys may accompany any action except `ignore`.
 
 **Groups**
 - **Symmetric group vs directional "target domains"** — groups are symmetric
@@ -362,8 +383,8 @@ crosses it — that is what containers exist to prevent. Practical consequences:
 **Temporary Containers parity — resolved**
 - Redirector auto-close → the `redirector` rule action (a container/lifecycle
   decision, so it lives in `rules`).
-- Cookie seeding, content-script injection → the [overlay lists](#overlay-lists)
-  (`cookies`, `scripts`).
+- Cookie seeding, content-script injection → the rule-attached
+  [overlays](#overlays-cookies--scripts) (`cookies`, `scripts`).
 - Fully ignored domains (`getpocket.com`, `addons.mozilla.org`) → the `ignore`
   action (engine does nothing; leave the tab as-is).
 - Mouse-click isolation (left / middle / ctrl+left) → **out of scope**: unused in

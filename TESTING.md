@@ -36,7 +36,7 @@ matrix](#subtle-bug-coverage-matrix) proves no class is orphaned.
 
 ```
         ┌─────────────────────────────┐
-        │  L5  Acceptance (Gherkin)    │  TESTS.md, real Firefox      slow
+        │  L5  Acceptance (TESTS.md)   │  BDD code, real Firefox      slow
         ├─────────────────────────────┤
         │  L4  Integration (Firefox)   │  web-ext + Playwright, +MAC
         ├─────────────────────────────┤
@@ -56,8 +56,9 @@ tests are milliseconds and exhaustive; only the stateful and browser-real classe
 
 Recommended stack (swappable): **Vitest** (L1–L3), **fast-check** for
 property-based, a **mock `browser.*`** (`sinon-chrome` or a hand-rolled fake),
-**web-ext + Playwright (Firefox)** for L4, **cucumber-js** to execute `TESTS.md`
-at L5, **Stryker** for mutation testing.
+**web-ext + Playwright (Firefox)** for L4 and L5 (the L5 acceptance suite is
+plain BDD-style test code mirroring `TESTS.md` — no Gherkin runner), **Stryker**
+for mutation testing.
 
 ---
 
@@ -170,13 +171,19 @@ Load the built extension with **web-ext** and drive a real Firefox (headless) vi
   seconds so real timers are exercised without 15-minute waits; a separate
   nightly job runs one real-delay case to guard against the fake clock lying.
 
-## L5 — Acceptance: execute TESTS.md
+## L5 — Acceptance: TESTS.md as BDD test code
 
-The Gherkin in [`TESTS.md`](TESTS.md) is run as living documentation with
-**cucumber-js** driving the L4 Firefox harness. Every scenario is a CI assertion;
-the age-gate chain (F4 end-to-end), the choice screen, and the strict-SSO
-breakage are the headline acceptance cases. A scenario with no step binding fails
-the build — the spec cannot drift from the code silently.
+Every scenario in [`TESTS.md`](TESTS.md) is implemented as a plain BDD-style
+test (`describe` / `it`, given-when-then expressed in code) driving the L4
+Firefox harness. Deliberately **no Gherkin runner**: cucumber-style step binding
+is regex matching over prose — an extra DSL layer that adds indirection without
+adding power. TESTS.md stays the human-readable spec; the acceptance suite
+mirrors it one test per scenario, each test named after its scenario title. The
+age-gate chain (F4 end-to-end), the choice screen, and the strict-SSO breakage
+are the headline acceptance cases. Drift is guarded structurally instead of via
+step binding: a CI check parses the scenario titles out of TESTS.md and fails
+the build if any title lacks a matching test (or a test lacks a scenario) — the
+same spec-can't-drift guarantee, without the DSL.
 
 ## Cross-cutting gates
 
@@ -208,10 +215,13 @@ the build — the spec cannot drift from the code silently.
 | F9 redirect binding        |    |    |    | ✅ | ✅ |    |
 | F10 disposal timing        |    |    | ✅ | ✅ |    |    |
 | F11 cookie boundary        | ✅ |    |    | ✅ | ✅ |    |
-| F12 side-effect timing     |    |    | ✅ | ✅ |    |    |
+| F12 side-effect timing     |    |    | ✅ | ✅ | ✅ |    |
 
-Every class has at least one deterministic owner (L1–L3) *and*, where the browser
-is the source of truth (F1, F2, F7, F9, F10, F11, F12), a real-Firefox confirmation.
+Every class except F9 has at least one deterministic owner (L1–L3) *and*, where
+the browser is the source of truth (F1, F2, F7, F9, F10, F11, F12), a
+real-Firefox confirmation. F9 is the exception by nature: POST bodies and
+redirect bindings don't exist in a pure resolver, so it is owned entirely by the
+real-Firefox levels (L4 fixtures + L5 scenarios).
 
 ## GitHub Actions pipeline
 
@@ -245,7 +255,7 @@ jobs:
       - checkout; install
       - setup-firefox ${{ matrix.firefox }}
       - run mock-IdP fixture server
-      - xvfb-run playwright test        # web-ext run, cucumber-js
+      - xvfb-run playwright test        # web-ext run, L4 + L5 acceptance suite
       - if failure: upload screenshots + web-ext logs
 
   mutation:          # nightly only — slow

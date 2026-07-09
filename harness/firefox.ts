@@ -35,6 +35,14 @@ export async function launch(): Promise<Session> {
   options.setPreference("privacy.userContext.enabled", true);
   options.setPreference("xpinstall.signatures.required", false);
 
+  // In CI the runner's default Firefox is a snap geckodriver can't drive; point
+  // Selenium at the real Firefox the workflow installed when FIREFOX_BIN is set.
+  // Unset locally, this is a no-op and the system Firefox is used.
+  const firefoxBin = process.env.FIREFOX_BIN;
+  if (firefoxBin) {
+    options.setBinary(firefoxBin);
+  }
+
   let driver: WebDriver;
   try {
     driver = await new Builder().forBrowser("firefox").setFirefoxOptions(options).build();

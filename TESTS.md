@@ -4,6 +4,11 @@ BDD-style scenarios describing the intended behaviour of the resolution engine,
 for reviewing edge cases before implementation. See [CONFIG.md](CONFIG.md) for the
 model these exercise. Every scenario runs against the one example config below.
 
+The Gherkin notation here is **spec notation only** — the scenarios are
+implemented as plain BDD-style test code (one test per scenario, named after its
+title), not executed by a Gherkin/cucumber runner. See
+[TESTING.md](TESTING.md#l5--acceptance-testsmd-as-bdd-test-code).
+
 ## Example config
 
 ```yaml
@@ -17,6 +22,10 @@ rules:
   # Ignored: engine does nothing; tab left as-is.
   - match: getpocket.com
     ignore: true
+
+  # Redirector shim: hop not isolated; auto-closed only if left stranded.
+  - match: t.co
+    redirector: true
 
   # Auto-named: container name = the matched host.
   - match: bandcamp.com
@@ -38,10 +47,16 @@ rules:
   - match: figma.com
     open: [Personal, Work]
 
-  # Temporary by default, escalatable, reopen restricted.
+  # Temporary by default, escalatable, reopen restricted; seeded cookie overlay.
   - match: youtube.com
     open: [Temporary, Personal]
     default: Temporary
+    cookies:
+      - { name: wide, url: "https://www.youtube.com/", value: "1" }
+
+  # Temporary via rule, member of NO group: continuity comes from same-site only.
+  - match: pinterest.com
+    open: Temporary
 
 # Isolation-continuity groups: separate top-level list, order-significant,
 # first-match wins, a URL resolves to at most one group. NOTE youtube.com also
@@ -159,6 +174,90 @@ Scenario: The reopen picker is restricted to the rule's containers
   When I invoke "reopen this tab in a container"
   Then only Temporary and Personal are offered
   And no other container appears in the picker
+```
+
+## Feature: Temporary as a rule target
+
+```gherkin
+Scenario: An open:Temporary domain opens in a fresh temporary container
+  Given I am in the Work container
+  When I navigate to pinterest.com
+  Then a new temporary container is created
+  And I do NOT stay in Work
+
+Scenario: Same-site continuity applies to an open:Temporary domain
+  Given I am on pinterest.com in temporary container T
+  When I click a link to www.pinterest.com/ideas/
+  Then I stay in T
+  And no new temporary container is created
+  # The rule matches again, but Temporary defers "which temp" to continuity;
+  # pinterest.com is in no group, so this is pure registrable-domain continuity
+
+Scenario: Crossing between two open:Temporary sites isolates
+  Given I am on pinterest.com in temporary container T
+  When I navigate to youtube.com
+  Then a new temporary container is created
+  And I leave T
+  # Both resolve to Temporary, but different site and different group -> isolate
+```
+
+## Feature: Redirector shims
+
+```gherkin
+Scenario: A redirector hop is not isolated
+  Given I am on an unmatched site in temporary container T
+  When I open a t.co link in that tab
+  Then the tab stays in T while on t.co
+  And no new temporary container is created for the hop
+
+Scenario: A stranded shim tab is closed after its destination reopens elsewhere
+  Given a t.co link whose destination is mail.google.com
+  When the destination is reopened into the Gmail container
+  And the original tab is still sitting on t.co after ~2 seconds
+  Then the original tab is auto-closed
+
+Scenario: A shim tab that redirected onward in-place is never closed
+  Given I am in the Work container
+  And a t.co link whose destination is trello.com
+  When the tab redirects in-place to trello.com
+  Then the tab stays in Work (trello.com defaults to Work; no reopen needed)
+  And the tab is NOT closed
+  # The close is conditional on still being stranded on the shim domain
+```
+
+## Feature: Rule-attached overlays
+
+```gherkin
+Scenario: A seeded cookie is present before the page first reads it
+  Given the youtube.com rule seeds the "wide" cookie
+  When I navigate to youtube.com
+  Then the "wide" cookie exists in the tab's cookie store before document_start
+  And the page sees it on its first read
+
+Scenario: A seeded cookie is written per container, never copied across
+  Given the youtube.com rule seeded "wide" in temporary container T
+  When I reopen youtube.com in the Personal container
+  Then "wide" is seeded fresh in Personal's cookie store
+  And nothing is copied from T
+```
+
+## Feature: Redirect binding across a container switch
+
+```gherkin
+Scenario: An OAuth code flow (GET redirect) survives a reopen
+  Given a login that completes via a GET redirect carrying a code parameter
+  And the redirect target matches a rule that reopens the tab into another container
+  When the reopen happens
+  Then the code parameter is preserved in the reopened tab's URL
+  And the login completes
+
+Scenario: A SAML POST binding is never dropped silently
+  Given an IdP that returns its assertion via a POST-binding form
+  And the POST target matches a rule that reopens the tab into another container
+  When the reopen happens
+  Then either the assertion survives the container switch
+  Or an explicit, visible error explains that the switch dropped the POST body
+  # Handled or loud — never a silent GET that loses the assertion
 ```
 
 ## Feature: Inherit and SSO

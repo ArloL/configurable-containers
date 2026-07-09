@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # The runner's default Firefox is a snap, which geckodriver/Selenium cannot
+      # drive reliably. Install a real Firefox tarball instead.
+      - uses: browser-actions/setup-firefox@v1
+        id: firefox
+        with:
+          firefox-version: latest
+
+      - run: ${{ steps.firefox.outputs.firefox-path }} --version
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      # Selenium Manager auto-provisions geckodriver at runtime (network needed).
+      # FIREFOX_BIN points the harness at the Firefox installed above.
+      - name: Run tests (headless Firefox via Selenium)
+        run: npm test
+        env:
+          FIREFOX_BIN: ${{ steps.firefox.outputs.firefox-path }}
