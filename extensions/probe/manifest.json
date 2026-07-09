@@ -1,0 +1,15 @@
+{
+  "manifest_version": 2,
+  "name": "cc-e2e-probe",
+  "version": "0.0.1",
+  "browser_specific_settings": {
+    "gecko": { "id": "probe@configurable-containers.test" }
+  },
+  "permissions": [
+    "tabs",
+    "contextualIdentities",
+    "cookies",
+    "<all_urls>"
+  ],
+  "background": { "scripts": ["background.js"] }
+}
