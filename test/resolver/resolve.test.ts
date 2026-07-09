@@ -93,3 +93,50 @@ describe("resolve — disposable path + continuity", () => {
     )).toEqual({ kind: "reopen", into: { kind: "temporary" } });
   });
 });
+
+describe("resolve — multi-open", () => {
+  const withDefault: Rule = {
+    match: ["trello.com"],
+    action: { kind: "open", containers: ["Personal", "Work"], default: "Work" },
+  };
+  const noDefault: Rule = {
+    match: ["figma.com"],
+    action: { kind: "open", containers: ["Personal", "Work"] },
+  };
+  const tempDefault: Rule = {
+    match: ["youtube.com"],
+    action: { kind: "open", containers: ["Temporary", "Personal"], default: "Temporary" },
+  };
+
+  it("multi-open with default auto-opens the default", () => {
+    expect(resolve(nav("https://trello.com/"), config([withDefault]), deps))
+      .toEqual({ kind: "reopen", into: { kind: "permanent", name: "Work" } });
+  });
+
+  it("multi-open stays when already in an eligible container", () => {
+    expect(resolve(
+      nav("https://figma.com/", { url: "https://figma.com/", container: perm("Work") }),
+      config([noDefault]), deps,
+    )).toEqual({ kind: "stay" });
+  });
+
+  it("multi-open without default shows a choice screen", () => {
+    expect(resolve(nav("https://figma.com/"), config([noDefault]), deps))
+      .toEqual({ kind: "choice", options: ["Personal", "Work"] });
+  });
+
+  it("multi-open default:Temporary takes the disposable path", () => {
+    expect(resolve(
+      nav("https://youtube.com/", { url: "https://work.example/", container: perm("Work") }, perm("Work")),
+      config([tempDefault]), deps,
+    )).toEqual({ kind: "reopen", into: { kind: "temporary" } });
+  });
+
+  it("multi-open default:Temporary honours group continuity (age gate)", () => {
+    const cfg = config([tempDefault], [{ match: ["google.com", "youtube.com"] }]);
+    expect(resolve(
+      nav("https://youtube.com/", { url: "https://accounts.google.com/", container: temp }),
+      cfg, deps,
+    )).toEqual({ kind: "stay" });
+  });
+});

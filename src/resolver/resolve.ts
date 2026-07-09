@@ -50,12 +50,25 @@ export function resolve(nav: NavContext, config: Config, deps: Deps): Decision {
       }
 
       case "open": {
-        // Single-container open here; multi-open is added in Task 4.
-        if (action.containers.length === 1) {
-          if (action.containers[0] === TEMPORARY) return disposablePath(nav, config, deps);
-          return toward(current, { kind: "permanent", name: action.containers[0] });
+        const { containers, default: def } = action;
+
+        // Single container.
+        if (containers.length === 1) {
+          if (containers[0] === TEMPORARY) return disposablePath(nav, config, deps);
+          return toward(current, { kind: "permanent", name: containers[0] });
         }
-        break; // multi-open falls through to Task 4's branch (not yet reachable by tests)
+
+        // Multi-open: already in an eligible (permanent) container -> stay.
+        if (current && current.kind === "permanent" && containers.includes(current.name)) {
+          return { kind: "stay" };
+        }
+        // A configured default decides automatically.
+        if (def !== undefined) {
+          if (def === TEMPORARY) return disposablePath(nav, config, deps);
+          return toward(current, { kind: "permanent", name: def });
+        }
+        // No default -> choice screen over the configured containers.
+        return { kind: "choice", options: containers };
       }
     }
   }
