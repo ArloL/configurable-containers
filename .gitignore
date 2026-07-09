@@ -1,6 +1,7 @@
-# Temporary Containers Plus source, checked out for research only
+/node_modules/
+
+# Add custom entries after this line to be preserved during automated updates
+
 tcp/
 
-node_modules/
 test-results/
-.playwright/
