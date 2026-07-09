@@ -19,13 +19,22 @@ export async function launch(): Promise<Session> {
   const server: TestServer = await startServer();
   const userDataDir = mkdtempSync(path.join(tmpdir(), "cc-e2e-"));
 
-  const browserType = withExtension(firefox, PROBE_PATH);
-  const context = await browserType.launchPersistentContext(userDataDir, {
-    headless: true,
-    // The contextualIdentities API is only available when the containers
-    // feature is enabled; enable it explicitly so the probe can create one.
-    firefoxUserPrefs: { "privacy.userContext.enabled": true },
-  });
+  let context: BrowserContext;
+  try {
+    const browserType = withExtension(firefox, PROBE_PATH);
+    context = await browserType.launchPersistentContext(userDataDir, {
+      headless: true,
+      // The contextualIdentities API is only available when the containers
+      // feature is enabled; enable it explicitly so the probe can create one.
+      firefoxUserPrefs: { "privacy.userContext.enabled": true },
+    });
+  } catch (err) {
+    // Launch failed after the server + temp profile were created — release them
+    // so repeated failed runs don't leak ports or orphan temp dirs.
+    await server.close();
+    rmSync(userDataDir, { recursive: true, force: true });
+    throw err;
+  }
 
   return {
     context,
