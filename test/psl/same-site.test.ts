@@ -52,4 +52,16 @@ describe("sameSite", () => {
     expect(() => sameSite("not a url", "")).not.toThrow();
     expect(sameSite("not a url", "")).toBe(false);
   });
+
+  it("handles a PSL wildcard + exception (kawasaki.jp)", () => {
+    // getDomain(www.city.kawasaki.jp) => city.kawasaki.jp ; getDomain(foo.city.kawasaki.jp) => city.kawasaki.jp
+    // The "!city.kawasaki.jp" PSL exception makes city.kawasaki.jp itself registrable,
+    // so both hosts share it -> same registrable domain -> sameSite.
+    expect(sameSite("https://www.city.kawasaki.jp/", "https://foo.city.kawasaki.jp/")).toBe(true);
+    // getDomain(a.kawasaki.jp) => null ; getDomain(b.kawasaki.jp) => null
+    // The "*.kawasaki.jp" PSL wildcard makes single-label-under-kawasaki hosts bare public
+    // suffixes (no registrable domain). Both-null falls back to exact hostname equality,
+    // and the hostnames differ -> not sameSite.
+    expect(sameSite("https://a.kawasaki.jp/", "https://b.kawasaki.jp/")).toBe(false);
+  });
 });
