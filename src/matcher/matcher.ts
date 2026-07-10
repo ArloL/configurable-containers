@@ -1,6 +1,8 @@
 // Bare-hostname matcher. Pure, no I/O. See
 // docs/superpowers/specs/2026-07-10-l2-matcher-design.md §2–§3.
 
+import type { Rule, Group } from "../resolver/types";
+
 export type HostMatcher = { kind: "host"; host: string }; // host is the CANONICAL form
 export type Matcher = HostMatcher; // extensible later: | PatternMatcher | RegexMatcher
 
@@ -54,4 +56,19 @@ export function matches(m: Matcher, url: string): boolean {
     case "host":
       return h === m.host || h.endsWith("." + m.host);
   }
+}
+
+// A rule/group matches if ANY of its matcher entries hits. The resolver stores
+// matchers as an opaque `unknown[]`; here they are concrete `Matcher`s.
+function anyMatch(entries: unknown[], url: string): boolean {
+  return entries.some((e) => matches(e as Matcher, url));
+}
+
+export function matchRule(url: string, rules: Rule[]): Rule | null {
+  return rules.find((r) => anyMatch(r.match, url)) ?? null;
+}
+
+export function matchGroup(url: string, groups: Group[]): number | null {
+  const i = groups.findIndex((g) => anyMatch(g.match, url));
+  return i === -1 ? null : i;
 }
