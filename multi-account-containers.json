@@ -334,6 +334,41 @@
       "name": "Trello",
       "color": "blue",
       "icon": "circle"
+    },
+    {
+      "name": "tunebat",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "Slack",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "Haeger",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "AWS",
+      "color": "blue",
+      "icon": "circle"
+    },
+    {
+      "name": "tmp23",
+      "color": "toolbar",
+      "icon": "circle"
+    },
+    {
+      "name": "tmp3",
+      "color": "toolbar",
+      "icon": "circle"
+    },
+    {
+      "name": "tmp4",
+      "color": "toolbar",
+      "icon": "circle"
     }
   ],
   "assignments": [
@@ -349,7 +384,7 @@
     },
     {
       "domain": "account.beatport.com",
-      "container": "4084",
+      "container": "38",
       "neverAsk": true
     },
     {
@@ -359,7 +394,7 @@
     },
     {
       "domain": "accounts.bahn.de",
-      "container": "37",
+      "container": "20",
       "neverAsk": true
     },
     {
@@ -369,13 +404,13 @@
     },
     {
       "domain": "accounts.songkick.com",
-      "container": "75",
+      "container": "278",
       "neverAsk": true
     },
     {
       "domain": "accounts.spotify.com",
-      "container": "23",
-      "neverAsk": false
+      "container": "270",
+      "neverAsk": true
     },
     {
       "domain": "acidtestrecords.bandcamp.com",
@@ -454,12 +489,17 @@
     },
     {
       "domain": "app.followupthen.com",
-      "container": "98",
+      "container": "134",
       "neverAsk": true
     },
     {
       "domain": "app.mural.co",
-      "container": "80",
+      "container": "232",
+      "neverAsk": true
+    },
+    {
+      "domain": "app.slack.com",
+      "container": "468",
       "neverAsk": true
     },
     {
@@ -469,7 +509,7 @@
     },
     {
       "domain": "app.thestorygraph.com",
-      "container": "551",
+      "container": "325",
       "neverAsk": true
     },
     {
@@ -489,7 +529,7 @@
     },
     {
       "domain": "arealrecords.bandcamp.com",
-      "container": "2401",
+      "container": "65",
       "neverAsk": true
     },
     {
@@ -523,18 +563,23 @@
       "neverAsk": false
     },
     {
+      "domain": "assistant.kagi.com",
+      "container": "170",
+      "neverAsk": true
+    },
+    {
       "domain": "auth.lieferando.de",
-      "container": "5128",
+      "container": "176",
       "neverAsk": false
     },
     {
       "domain": "auth.openai.com",
-      "container": "55",
+      "container": "243",
       "neverAsk": true
     },
     {
       "domain": "auth.wikimedia.org",
-      "container": "95",
+      "container": "53",
       "neverAsk": true
     },
     {
@@ -559,7 +604,7 @@
     },
     {
       "domain": "bandcamp.com",
-      "container": "2401",
+      "container": "65",
       "neverAsk": true
     },
     {
@@ -574,7 +619,7 @@
     },
     {
       "domain": "barrycantswim.bandcamp.com",
-      "container": "2401",
+      "container": "65",
       "neverAsk": true
     },
     {
@@ -589,7 +634,7 @@
     },
     {
       "domain": "bestworksrecords.bandcamp.com",
-      "container": "2401",
+      "container": "65",
       "neverAsk": true
     },
     {
@@ -619,7 +664,7 @@
     },
     {
       "domain": "caribouband.bandcamp.com",
-      "container": "2401",
+      "container": "65",
       "neverAsk": true
     },
     {
@@ -628,8 +673,13 @@
       "neverAsk": false
     },
     {
+      "domain": "challenge.spotify.com",
+      "container": "270",
+      "neverAsk": true
+    },
+    {
       "domain": "chatgpt.com",
-      "container": "55",
+      "container": "243",
       "neverAsk": true
     },
     {
@@ -644,17 +694,17 @@
     },
     {
       "domain": "claude.ai",
-      "container": "9",
+      "container": "26",
       "neverAsk": true
     },
     {
       "domain": "cloneroyaloak.bandcamp.com",
-      "container": "2401",
+      "container": "65",
       "neverAsk": false
     },
     {
       "domain": "coma-cologne.bandcamp.com",
-      "container": "2401",
+      "container": "65",
       "neverAsk": true
     },
     {
@@ -668,6 +718,11 @@
       "neverAsk": true
     },
     {
+      "domain": "console.aws.amazon.com",
+      "container": "931",
+      "neverAsk": true
+    },
+    {
       "domain": "console.hetzner.com",
       "container": "13846",
       "neverAsk": true
@@ -675,6 +730,11 @@
     {
       "domain": "crowd1.lcm.deutschepost.de",
       "container": "29",
+      "neverAsk": true
+    },
+    {
+      "domain": "d-99670a2310.awsapps.com",
+      "container": "931",
       "neverAsk": true
     },
     {
@@ -689,8 +749,8 @@
     },
     {
       "domain": "de.linkedin.com",
-      "container": "52",
-      "neverAsk": false
+      "container": "188",
+      "neverAsk": true
     },
     {
       "domain": "de.wikipedia.org",
@@ -710,6 +770,11 @@
     {
       "domain": "developer.mend.io",
       "container": "10770",
+      "neverAsk": true
+    },
+    {
+      "domain": "developer.spotify.com",
+      "container": "270",
       "neverAsk": true
     },
     {
@@ -734,22 +799,22 @@
     },
     {
       "domain": "discolypso.bandcamp.com",
-      "container": "2401",
+      "container": "65",
       "neverAsk": true
     },
     {
       "domain": "discord.com",
-      "container": "57",
+      "container": "151",
       "neverAsk": true
     },
     {
       "domain": "discord.gg",
-      "container": "57",
+      "container": "151",
       "neverAsk": true
     },
     {
       "domain": "djseinfeld.bandcamp.com",
-      "container": "2401",
+      "container": "65",
       "neverAsk": true
     },
     {
@@ -774,7 +839,7 @@
     },
     {
       "domain": "efdemindial.bandcamp.com",
-      "container": "2401",
+      "container": "65",
       "neverAsk": true
     },
     {
@@ -784,7 +849,7 @@
     },
     {
       "domain": "eletronicdanceclub.bandcamp.com",
-      "container": "2401",
+      "container": "65",
       "neverAsk": true
     },
     {
@@ -794,7 +859,32 @@
     },
     {
       "domain": "en.wikipedia.org",
-      "container": "95",
+      "container": "53",
+      "neverAsk": true
+    },
+    {
+      "domain": "eu-central-1.console.aws.amazon.com",
+      "container": "931",
+      "neverAsk": false
+    },
+    {
+      "domain": "eu-central-1.signin.aws",
+      "container": "931",
+      "neverAsk": true
+    },
+    {
+      "domain": "eu-central-1.signin.aws.amazon.com",
+      "container": "931",
+      "neverAsk": true
+    },
+    {
+      "domain": "eu-north-1.console.aws.amazon.com",
+      "container": "931",
+      "neverAsk": true
+    },
+    {
+      "domain": "eu-north-1.signin.aws.amazon.com",
+      "container": "931",
       "neverAsk": true
     },
     {
@@ -804,12 +894,12 @@
     },
     {
       "domain": "feedly.com",
-      "container": "32",
+      "container": "94",
       "neverAsk": true
     },
     {
       "domain": "file.notion.so",
-      "container": "8",
+      "container": "233",
       "neverAsk": true
     },
     {
@@ -834,7 +924,7 @@
     },
     {
       "domain": "frankandtony.bandcamp.com",
-      "container": "2401",
+      "container": "65",
       "neverAsk": true
     },
     {
@@ -859,7 +949,7 @@
     },
     {
       "domain": "galcherlustwerk.bandcamp.com",
-      "container": "2401",
+      "container": "65",
       "neverAsk": true
     },
     {
@@ -889,7 +979,7 @@
     },
     {
       "domain": "gist.github.com",
-      "container": "70",
+      "container": "79",
       "neverAsk": true
     },
     {
@@ -899,17 +989,17 @@
     },
     {
       "domain": "gitea.sprinteins.com",
-      "container": "94",
+      "container": "324",
       "neverAsk": true
     },
     {
       "domain": "github.com",
-      "container": "70",
+      "container": "79",
       "neverAsk": true
     },
     {
       "domain": "github.dev",
-      "container": "70",
+      "container": "79",
       "neverAsk": true
     },
     {
@@ -934,7 +1024,7 @@
     },
     {
       "domain": "guygerber.bandcamp.com",
-      "container": "2401",
+      "container": "65",
       "neverAsk": true
     },
     {
@@ -944,7 +1034,27 @@
     },
     {
       "domain": "haeger-consulting.app.personio.com",
-      "container": "26138",
+      "container": "823",
+      "neverAsk": true
+    },
+    {
+      "domain": "haeger-consulting.atlassian.net",
+      "container": "823",
+      "neverAsk": true
+    },
+    {
+      "domain": "haegerconsulting.atlassian.net",
+      "container": "823",
+      "neverAsk": true
+    },
+    {
+      "domain": "haegerconsulting.slack.com",
+      "container": "468",
+      "neverAsk": true
+    },
+    {
+      "domain": "haegerconsulting2006.sharepoint.com",
+      "container": "199",
       "neverAsk": true
     },
     {
@@ -959,12 +1069,12 @@
     },
     {
       "domain": "heimat.sprinteins.com",
-      "container": "94",
+      "container": "324",
       "neverAsk": true
     },
     {
       "domain": "help.kagi.com",
-      "container": "61",
+      "container": "170",
       "neverAsk": true
     },
     {
@@ -973,9 +1083,19 @@
       "neverAsk": true
     },
     {
+      "domain": "home.atlassian.com",
+      "container": "823",
+      "neverAsk": true
+    },
+    {
       "domain": "hotpiscis.bandcamp.com",
       "container": "2401",
       "neverAsk": false
+    },
+    {
+      "domain": "hsp.haeger-consulting.de",
+      "container": "823",
+      "neverAsk": true
     },
     {
       "domain": "hubbabubbaklubb.bandcamp.com",
@@ -984,7 +1104,7 @@
     },
     {
       "domain": "hunee.bandcamp.com",
-      "container": "2401",
+      "container": "65",
       "neverAsk": true
     },
     {
@@ -1014,17 +1134,17 @@
     },
     {
       "domain": "jamiexx.bandcamp.com",
-      "container": "2401",
+      "container": "65",
       "neverAsk": true
     },
     {
       "domain": "jenkins.sprinteins.com",
-      "container": "94",
+      "container": "324",
       "neverAsk": true
     },
     {
       "domain": "jimpster.bandcamp.com",
-      "container": "2401",
+      "container": "65",
       "neverAsk": true
     },
     {
@@ -1044,17 +1164,17 @@
     },
     {
       "domain": "k7records.bandcamp.com",
-      "container": "2401",
+      "container": "65",
       "neverAsk": true
     },
     {
       "domain": "kagi.com",
-      "container": "61",
+      "container": "170",
       "neverAsk": true
     },
     {
       "domain": "kann.bandcamp.com",
-      "container": "2401",
+      "container": "65",
       "neverAsk": true
     },
     {
@@ -1089,7 +1209,7 @@
     },
     {
       "domain": "kompakt.bandcamp.com",
-      "container": "2401",
+      "container": "65",
       "neverAsk": true
     },
     {
@@ -1134,7 +1254,7 @@
     },
     {
       "domain": "login.immobilienscout24.de",
-      "container": "10",
+      "container": "167",
       "neverAsk": true
     },
     {
@@ -1164,12 +1284,12 @@
     },
     {
       "domain": "mariboustate.bandcamp.com",
-      "container": "2401",
+      "container": "65",
       "neverAsk": true
     },
     {
       "domain": "martyn.bandcamp.com",
-      "container": "2401",
+      "container": "65",
       "neverAsk": true
     },
     {
@@ -1199,7 +1319,7 @@
     },
     {
       "domain": "mf.gls.de",
-      "container": "88",
+      "container": "138",
       "neverAsk": true
     },
     {
@@ -1249,7 +1369,7 @@
     },
     {
       "domain": "movidarecords.bandcamp.com",
-      "container": "2401",
+      "container": "65",
       "neverAsk": true
     },
     {
@@ -1258,8 +1378,18 @@
       "neverAsk": false
     },
     {
+      "domain": "myaccount.microsoft.com",
+      "container": "199",
+      "neverAsk": true
+    },
+    {
       "domain": "mykingislight.bandcamp.com",
-      "container": "2401",
+      "container": "65",
+      "neverAsk": true
+    },
+    {
+      "domain": "mysignins.microsoft.com",
+      "container": "199",
       "neverAsk": true
     },
     {
@@ -1274,12 +1404,12 @@
     },
     {
       "domain": "noire-et-blanche.bandcamp.com",
-      "container": "2401",
+      "container": "65",
       "neverAsk": true
     },
     {
       "domain": "notevennoticed.bandcamp.com",
-      "container": "2401",
+      "container": "65",
       "neverAsk": true
     },
     {
@@ -1289,7 +1419,7 @@
     },
     {
       "domain": "oflynn.bandcamp.com",
-      "container": "2401",
+      "container": "65",
       "neverAsk": true
     },
     {
@@ -1304,7 +1434,7 @@
     },
     {
       "domain": "open.spotify.com",
-      "container": "23",
+      "container": "270",
       "neverAsk": true
     },
     {
@@ -1323,18 +1453,33 @@
       "neverAsk": true
     },
     {
+      "domain": "outlook.cloud.microsoft",
+      "container": "199",
+      "neverAsk": true
+    },
+    {
+      "domain": "outlook.cloud.microsoft.com",
+      "container": "199",
+      "neverAsk": true
+    },
+    {
+      "domain": "outlook.office.com",
+      "container": "199",
+      "neverAsk": true
+    },
+    {
       "domain": "overcast.fm",
-      "container": "38",
+      "container": "267",
       "neverAsk": true
     },
     {
       "domain": "pamparecords.bandcamp.com",
-      "container": "2401",
+      "container": "65",
       "neverAsk": true
     },
     {
       "domain": "pantherakrause.bandcamp.com",
-      "container": "2401",
+      "container": "65",
       "neverAsk": true
     },
     {
@@ -1344,12 +1489,12 @@
     },
     {
       "domain": "pay.lieferando.de",
-      "container": "5128",
+      "container": "176",
       "neverAsk": true
     },
     {
       "domain": "perm-vac.bandcamp.com",
-      "container": "2401",
+      "container": "65",
       "neverAsk": true
     },
     {
@@ -1419,17 +1564,17 @@
     },
     {
       "domain": "rossfromfriends.bandcamp.com",
-      "container": "2401",
+      "container": "65",
       "neverAsk": true
     },
     {
       "domain": "round.bandcamp.com",
-      "container": "2401",
+      "container": "65",
       "neverAsk": true
     },
     {
       "domain": "runningbackrecords.bandcamp.com",
-      "container": "2401",
+      "container": "65",
       "neverAsk": true
     },
     {
@@ -1449,12 +1594,12 @@
     },
     {
       "domain": "secure.soundcloud.com",
-      "container": "93",
+      "container": "320",
       "neverAsk": true
     },
     {
       "domain": "secure.splitwise.com",
-      "container": "50",
+      "container": "277",
       "neverAsk": true
     },
     {
@@ -1463,8 +1608,18 @@
       "neverAsk": true
     },
     {
+      "domain": "signin.aws.amazon.com",
+      "container": "931",
+      "neverAsk": true
+    },
+    {
+      "domain": "slack.com",
+      "container": "468",
+      "neverAsk": true
+    },
+    {
       "domain": "sofiakourtesis.bandcamp.com",
-      "container": "2401",
+      "container": "65",
       "neverAsk": false
     },
     {
@@ -1484,7 +1639,7 @@
     },
     {
       "domain": "soulwax.bandcamp.com",
-      "container": "2401",
+      "container": "65",
       "neverAsk": true
     },
     {
@@ -1494,7 +1649,7 @@
     },
     {
       "domain": "soundcloud.com",
-      "container": "93",
+      "container": "320",
       "neverAsk": true
     },
     {
@@ -1504,8 +1659,13 @@
     },
     {
       "domain": "sso.immobilienscout24.de",
-      "container": "10",
+      "container": "167",
       "neverAsk": false
+    },
+    {
+      "domain": "start.atlassian.com",
+      "container": "823",
+      "neverAsk": true
     },
     {
       "domain": "steffiedoms.bandcamp.com",
@@ -1544,7 +1704,7 @@
     },
     {
       "domain": "tbtbtb.bandcamp.com",
-      "container": "2401",
+      "container": "65",
       "neverAsk": true
     },
     {
@@ -1554,7 +1714,7 @@
     },
     {
       "domain": "tennisdj.bandcamp.com",
-      "container": "2401",
+      "container": "65",
       "neverAsk": true
     },
     {
@@ -1569,7 +1729,7 @@
     },
     {
       "domain": "tessellatelondon.bandcamp.com",
-      "container": "2401",
+      "container": "65",
       "neverAsk": true
     },
     {
@@ -1579,17 +1739,17 @@
     },
     {
       "domain": "thecyclist.bandcamp.com",
-      "container": "2401",
+      "container": "65",
       "neverAsk": true
     },
     {
       "domain": "thestorygraph.com",
-      "container": "551",
+      "container": "325",
       "neverAsk": true
     },
     {
       "domain": "tmclub.eu",
-      "container": "51",
+      "container": "319",
       "neverAsk": true
     },
     {
@@ -1609,17 +1769,22 @@
     },
     {
       "domain": "translate.kagi.com",
-      "container": "61",
+      "container": "170",
       "neverAsk": true
     },
     {
       "domain": "trello.com",
-      "container": "26403",
+      "container": "809",
       "neverAsk": true
     },
     {
       "domain": "tshamusic.bandcamp.com",
       "container": "2401",
+      "neverAsk": true
+    },
+    {
+      "domain": "tunebat.com",
+      "container": "130",
       "neverAsk": true
     },
     {
@@ -1638,8 +1803,13 @@
       "neverAsk": true
     },
     {
+      "domain": "us-east-1.console.aws.amazon.com",
+      "container": "931",
+      "neverAsk": true
+    },
+    {
       "domain": "valbyrotary.bandcamp.com",
-      "container": "2401",
+      "container": "65",
       "neverAsk": true
     },
     {
@@ -1659,12 +1829,12 @@
     },
     {
       "domain": "watergaterecords.bandcamp.com",
-      "container": "2401",
+      "container": "65",
       "neverAsk": true
     },
     {
       "domain": "web.whatsapp.com",
-      "container": "87",
+      "container": "111",
       "neverAsk": true
     },
     {
@@ -1699,87 +1869,87 @@
     },
     {
       "domain": "www.bahn.de",
-      "container": "37",
+      "container": "20",
       "neverAsk": true
     },
     {
       "domain": "www.beatport.com",
-      "container": "4084",
+      "container": "38",
       "neverAsk": true
     },
     {
       "domain": "www.booking.com",
-      "container": "89",
+      "container": "331",
       "neverAsk": true
     },
     {
       "domain": "www.eatthismuch.com",
-      "container": "81",
+      "container": "333",
       "neverAsk": true
     },
     {
       "domain": "www.followupthen.com",
-      "container": "98",
+      "container": "134",
       "neverAsk": true
     },
     {
       "domain": "www.gls-online-filiale.de",
-      "container": "88",
+      "container": "138",
       "neverAsk": true
     },
     {
       "domain": "www.gls.de",
-      "container": "88",
+      "container": "138",
       "neverAsk": true
     },
     {
       "domain": "www.goflink.com",
-      "container": "5355",
+      "container": "133",
       "neverAsk": true
     },
     {
       "domain": "www.immobilienscout24.de",
-      "container": "10",
+      "container": "167",
       "neverAsk": true
     },
     {
       "domain": "www.kleinanzeigen.de",
-      "container": "97",
+      "container": "174",
       "neverAsk": true
     },
     {
       "domain": "www.lieferando.de",
-      "container": "5128",
+      "container": "176",
       "neverAsk": true
     },
     {
       "domain": "www.linkedin.com",
-      "container": "52",
+      "container": "188",
       "neverAsk": true
     },
     {
       "domain": "www.notion.com",
-      "container": "8",
+      "container": "233",
       "neverAsk": true
     },
     {
       "domain": "www.notion.so",
-      "container": "8",
+      "container": "233",
       "neverAsk": true
     },
     {
       "domain": "www.paypal.com",
-      "container": "84",
+      "container": "269",
       "neverAsk": true
     },
     {
       "domain": "www.songkick.com",
-      "container": "75",
+      "container": "278",
       "neverAsk": true
     },
     {
       "domain": "www.splitwise.com",
-      "container": "50",
+      "container": "277",
       "neverAsk": true
     },
     {
@@ -1789,7 +1959,7 @@
     },
     {
       "domain": "www.taste.io",
-      "container": "11",
+      "container": "80",
       "neverAsk": true
     },
     {
