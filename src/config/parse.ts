@@ -129,6 +129,14 @@ function parseRule(raw: unknown, i: number): Rule {
   return { match: matchers, action };
 }
 
+function parseGroup(raw: unknown, i: number): Group {
+  const path = `groups[${i}]`;
+  if (!Array.isArray(raw)) throw new ConfigError(`${path} must be a list of hostnames`, { path });
+  if (raw.length === 0) throw new ConfigError(`${path} must not be empty`, { path });
+  const match = raw.map((e, j) => toMatcher(e, `${path}[${j}]`));
+  return { match };
+}
+
 export function parseConfig(yamlText: string): Config {
   let doc: unknown;
   try {
@@ -150,6 +158,6 @@ export function parseConfig(yamlText: string): Config {
   if (!Array.isArray(rawGroups)) throw new ConfigError("`groups` must be a list", { path: "groups" });
 
   const rules = rawRules.map((r, i) => parseRule(r, i));
-  const groups: Group[] = []; // group parsing added in Task 2
+  const groups = rawGroups.map((g, i) => parseGroup(g, i));
   return { rules, groups };
 }
