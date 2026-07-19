@@ -1,7 +1,7 @@
 // Parse + normalize + validate the user's YAML config into the resolver's Config.
 // See docs/superpowers/specs/2026-07-10-config-parser-design.md.
 import { parse, YAMLParseError } from "yaml";
-import { hostMatcher } from "../matcher/matcher";
+import { hostMatcher, type HostMatcher } from "../matcher/matcher";
 import type { Action, Config, Group, Matcher, Rule } from "../resolver/types";
 
 export class ConfigError extends Error {
@@ -28,12 +28,17 @@ function isMapping(v: unknown): v is Record<string, unknown> {
 
 // Turn one raw `match` entry into a Matcher. Only bare hostnames are supported;
 // match patterns and the regex object form raise a clear ConfigError.
-function toMatcher(entry: unknown, path: string): Matcher {
+const GLOB_META = /[*?[]/;
+
+function toMatcher(entry: unknown, path: string): HostMatcher {
   if (isMapping(entry) && "regex" in entry) {
     throw new ConfigError(`${path}: regex matches are not supported yet (bare hostnames only for now)`, { path });
   }
   if (typeof entry !== "string") {
     throw new ConfigError(`${path}: match entry must be a bare hostname string`, { path });
+  }
+  if (GLOB_META.test(entry)) {
+    throw new ConfigError(`${path}: "${entry}" is not a bare hostname (match patterns/regex not supported yet)`, { path });
   }
   try {
     return hostMatcher(entry);
@@ -48,7 +53,7 @@ function parseMatch(raw: unknown, path: string): { matchers: Matcher[]; firstHos
     throw new ConfigError(`${path}.match must not be empty`, { path: `${path}.match` });
   }
   const matchers = list.map((e, j) => toMatcher(e, `${path}.match[${j}]`));
-  return { matchers, firstHost: list[0] as string }; // toMatcher proved list[0] is a string
+  return { matchers, firstHost: matchers[0].host }; // canonical host of the first match entry
 }
 
 function parseOpen(raw: Record<string, unknown>, path: string): Action {

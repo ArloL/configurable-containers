@@ -19,6 +19,11 @@ describe("parseConfig — rule forms", () => {
     });
   });
 
+  it("auto-names from the canonical host, not the raw string", () => {
+    const c = parseConfig(`rules:\n  - match: Notion.COM\n`);
+    expect(c.rules[0].action).toEqual({ kind: "open", containers: ["notion.com"] });
+  });
+
   it("parses open single / multi / default and Temporary passthrough", () => {
     const c = parseConfig(
       `rules:\n` +
@@ -99,6 +104,12 @@ describe("parseConfig — rule validation", () => {
   it("rejects a match pattern / regex (bare hosts only)", () => {
     expect(err(`rules:\n  - match: "https://app.example.com/x/*"\n`).message).toMatch(/not a bare hostname|bare hostnames only/);
     expect(err(`rules:\n  - match:\n      regex: "^https://x/"\n`).message).toMatch(/regex/);
+  });
+
+  it("rejects a bare glob match entry (no scheme/slash)", () => {
+    const e = err(`rules:\n  - match: "*.example.com"\n`);
+    expect(e).toBeInstanceOf(ConfigError);
+    expect(e.message).toMatch(/not a bare hostname|bare hostnames only/);
   });
 
   it("reports a YAML syntax error with a line number", () => {
