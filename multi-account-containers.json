@@ -331,13 +331,8 @@
       "icon": "circle"
     },
     {
-      "name": "tmp5",
-      "color": "toolbar",
-      "icon": "circle"
-    },
-    {
-      "name": "tmp2",
-      "color": "toolbar",
+      "name": "Trello",
+      "color": "blue",
       "icon": "circle"
     }
   ],
@@ -998,11 +993,6 @@
       "neverAsk": true
     },
     {
-      "domain": "id.atlassian.com",
-      "container": "48",
-      "neverAsk": true
-    },
-    {
       "domain": "imogenheap.bandcamp.com",
       "container": "2401",
       "neverAsk": false
@@ -1350,7 +1340,7 @@
     {
       "domain": "paperbeatscissors.bandcamp.com",
       "container": "2401",
-      "neverAsk": false
+      "neverAsk": true
     },
     {
       "domain": "pay.lieferando.de",
@@ -1624,7 +1614,7 @@
     },
     {
       "domain": "trello.com",
-      "container": "48",
+      "container": "26403",
       "neverAsk": true
     },
     {
