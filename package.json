@@ -12,7 +12,7 @@
     "yaml": "^2.5.0"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
+    "@types/node": "^26.1.1",
     "@types/selenium-webdriver": "^4.1.0",
     "fast-check": "^3.22.0",
     "selenium-webdriver": "^4.25.0",
