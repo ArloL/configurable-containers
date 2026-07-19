@@ -60,12 +60,16 @@ function parseOpen(raw: Record<string, unknown>, path: string): Action {
   const open = raw.open;
   let containers: string[];
   if (typeof open === "string") {
+    if (open === "") throw new ConfigError(`${path}.open must not be an empty container name`, { path: `${path}.open` });
     containers = [open];
   } else if (Array.isArray(open)) {
     if (open.length === 0) throw new ConfigError(`${path}.open must not be empty`, { path: `${path}.open` });
     containers = open.map((c, j) => {
       if (typeof c !== "string") {
         throw new ConfigError(`${path}.open[${j}] must be a container name (string)`, { path: `${path}.open[${j}]` });
+      }
+      if (c === "") {
+        throw new ConfigError(`${path}.open[${j}] must not be an empty container name`, { path: `${path}.open[${j}]` });
       }
       return c;
     });

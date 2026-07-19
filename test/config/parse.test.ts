@@ -107,9 +107,28 @@ describe("parseConfig — rule validation", () => {
   });
 
   it("rejects a bare glob match entry (no scheme/slash)", () => {
-    const e = err(`rules:\n  - match: "*.example.com"\n`);
-    expect(e).toBeInstanceOf(ConfigError);
-    expect(e.message).toMatch(/not a bare hostname|bare hostnames only/);
+    for (const host of ["*.example.com", "ex?mple.com", "[abc].com"]) {
+      const e = err(`rules:\n  - match: "${host}"\n`);
+      expect(e).toBeInstanceOf(ConfigError);
+      expect(e.message).toMatch(/not a bare hostname|bare hostnames only/);
+    }
+  });
+
+  it("rejects an empty match list", () => {
+    const e = err(`rules:\n  - match: []\n`);
+    expect(e.message).toMatch(/must not be empty/);
+    expect(e.path).toBe("rules[0].match");
+  });
+
+  it("rejects an empty open list", () => {
+    const e = err(`rules:\n  - match: x.com\n    open: []\n`);
+    expect(e.message).toMatch(/must not be empty/);
+    expect(e.path).toBe("rules[0].open");
+  });
+
+  it("rejects an empty container name in open", () => {
+    expect(err(`rules:\n  - match: x.com\n    open: ""\n`).path).toBe("rules[0].open");
+    expect(err(`rules:\n  - match: x.com\n    open: ["", Work]\n`).path).toBe("rules[0].open[0]");
   });
 
   it("reports a YAML syntax error with a line number", () => {
