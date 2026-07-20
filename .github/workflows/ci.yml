@@ -35,3 +35,20 @@ jobs:
         run: npm test
         env:
           FIREFOX_BIN: ${{ steps.firefox.outputs.firefox-path }}
+
+  required-status-check:
+    name: ci.required-status-check
+    needs:
+    - test
+    # GitHub Actions skips this job when any of the dependents fail. And skips
+    # are considered success in their weird logic. So we always run it and fail
+    # ourselves if necessary
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+    - run: echo "Use this job as the required status check of this workflow"
+    - name: Check that all jobs were successful
+      env:
+        RESULTS: ${{ toJSON(needs) }}
+      run: |
+        echo "$RESULTS" | jq --exit-status 'all(.result == "success")' || exit 1
