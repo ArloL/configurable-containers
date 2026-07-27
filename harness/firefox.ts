@@ -24,6 +24,7 @@ export interface LaunchOptions {
   extensions?: ("probe" | "cc")[];
   ccGraceMs?: number; // grace passed to the cc build (default: production 300000)
   ccRedirectorDelayMs?: number; // redirector-close delay (default: production 2000)
+  headless?: boolean; // default true; set false for manual/interactive testing
 }
 
 // Zip an unpacked extension directory into a temporary .xpi (geckodriver's
@@ -55,7 +56,7 @@ export async function launch(opts: LaunchOptions = {}): Promise<Session> {
   const cleanupXpis = () => xpis.forEach((x) => x.cleanup());
 
   const options = new firefox.Options();
-  options.addArguments("-headless");
+  if (opts.headless !== false) options.addArguments("-headless");
   options.setPreference("privacy.userContext.enabled", true);
   options.setPreference("xpinstall.signatures.required", false);
   // Resolve the test's fake domains straight to loopback (cross-platform, no DNS).
