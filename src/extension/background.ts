@@ -1,13 +1,21 @@
 import { createEngine } from "../engine/engine";
-import { createBrowserPort } from "../engine/browser-port";
+import { createDisposer } from "../engine/disposer";
+import { createBrowserPort, realClock } from "../engine/browser-port";
 import { parseConfig } from "../config/parse";
 import { matchRule, matchGroup } from "../matcher/matcher";
 import { sameSite } from "../psl/same-site";
 import { BUNDLED_CONFIG_YAML } from "./config";
 
+// Injected at bundle time by esbuild (harness/build-extension.ts).
+declare const __CC_GRACE_MS__: number;
+
+const port = createBrowserPort();
+
 createEngine({
-  port: createBrowserPort(),
+  port,
   config: parseConfig(BUNDLED_CONFIG_YAML),
   deps: { matchRule, matchGroup, sameSite },
   onChoice: () => {}, // no picker UI in this slice; the bundled config has no choice rule
 });
+
+createDisposer({ port, clock: realClock, graceMs: __CC_GRACE_MS__ });
