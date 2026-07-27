@@ -10,4 +10,9 @@ rules:
       - { at: document_start, run: "localStorage.setItem('cc_script', '1');" }
   - match: redirect.example
     redirector: true
+  - match: figma.example
+    open: [Personal, Work]
+  - match: youtube.example
+    open: [Temporary, Personal]
+    default: Temporary
 `;
