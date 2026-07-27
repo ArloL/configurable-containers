@@ -72,3 +72,14 @@ export function matchGroup(url: string, groups: Group[]): number | null {
   const i = groups.findIndex((g) => anyMatch(g.match, url));
   return i === -1 ? null : i;
 }
+
+// The WebExtension match patterns that exactly cover a matcher's matches() semantics
+// for http(s). A HostMatcher { host } matches the bare host OR any subdomain, so it
+// expands to two patterns: *://<host>/* and *://*.<host>/*. Used by the script-injector
+// to register content scripts against URL patterns (not per-URL).
+export function matcherToPatterns(m: Matcher): string[] {
+  switch (m.kind) {
+    case "host":
+      return [`*://${m.host}/*`, `*://*.${m.host}/*`];
+  }
+}
