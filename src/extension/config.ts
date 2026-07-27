@@ -4,4 +4,6 @@ export const BUNDLED_CONFIG_YAML = `
 rules:
   - match: work.example
     open: Work
+    cookies:
+      - { name: seed, url: "http://work.example/", value: "1" }
 `;
