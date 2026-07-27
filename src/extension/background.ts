@@ -1,6 +1,7 @@
 import { createEngine } from "../engine/engine";
 import { createDisposer } from "../engine/disposer";
 import { createCookieSeeder } from "../engine/cookie-seeder";
+import { createScriptInjector } from "../engine/script-injector";
 import { createBrowserPort, realClock } from "../engine/browser-port";
 import { parseConfig } from "../config/parse";
 import { matchRule, matchGroup } from "../matcher/matcher";
@@ -23,3 +24,5 @@ createEngine({
 createDisposer({ port, clock: realClock, graceMs: __CC_GRACE_MS__ });
 
 createCookieSeeder({ port, config, deps: { matchRule } });
+
+void createScriptInjector({ port, config });

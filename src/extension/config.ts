@@ -6,4 +6,6 @@ rules:
     open: Work
     cookies:
       - { name: seed, url: "http://work.example/", value: "1" }
+    scripts:
+      - { at: document_start, run: "localStorage.setItem('cc_script', '1');" }
 `;

@@ -21,4 +21,12 @@ describe("bundled extension config", () => {
     const rule = matchRule("https://work.example/", config.rules);
     expect(rule!.cookies).toEqual([{ name: "seed", url: "http://work.example/", value: "1" }]);
   });
+
+  it("carries the document_start script overlay on the work.example rule", () => {
+    const config = parseConfig(BUNDLED_CONFIG_YAML);
+    const rule = matchRule("https://work.example/", config.rules);
+    expect(rule!.scripts).toEqual([
+      { at: "document_start", run: "localStorage.setItem('cc_script', '1');" },
+    ]);
+  });
 });
