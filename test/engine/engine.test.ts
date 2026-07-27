@@ -3,8 +3,8 @@ import { createMockPort } from "./mock-port";
 import { createEngine } from "../../src/engine/engine";
 import { matchRule, matchGroup, hostMatcher } from "../../src/matcher/matcher";
 import { sameSite } from "../../src/psl/same-site";
-import type { Config, Deps } from "../../src/resolver/types";
-import type { WebRequestDetails } from "../../src/engine/port";
+import type { Config, Deps, Target } from "../../src/resolver/types";
+import type { Tab, WebRequestDetails } from "../../src/engine/port";
 
 const deps: Deps = { matchRule, matchGroup, sameSite };
 
@@ -216,5 +216,50 @@ describe("engine — F7 MAC defer + choice", () => {
 
     expect(res).toBeUndefined();
     expect(called).toBe(false);
+  });
+});
+
+describe("engine.reopen — extracted F1-guarded effect", () => {
+  it("reopens a tab into the target container, preserving placement, and guards the reopened tab's first nav", async () => {
+    const mp = createMockPort();
+    const old = mp.addTab({ url: "https://start.test/", cookieStoreId: "firefox-default", index: 3, active: true, openerTabId: 7 });
+    const engine = createEngine({ port: mp.port, config: workConfig(), deps, onChoice: noop, tmpSuffix: counter() });
+
+    await engine.reopen(old, "https://example.com/", { kind: "permanent", name: "Work" });
+
+    expect(mp.calls.createTab).toHaveLength(1);
+    const created = mp.calls.createTab[0];
+    const work = (await mp.port.queryIdentities()).find((c) => c.name === "Work")!;
+    expect(created).toMatchObject({ url: "https://example.com/", cookieStoreId: work.cookieStoreId, index: 3, active: true, openerTabId: 7 });
+    expect(mp.calls.removeTab).toEqual([old.id]);
+
+    // F1 guard: the reopened tab's first onBeforeRequest is a no-op (it fires before url commits).
+    const newTab = [...mp.tabs.values()].find((t) => t.id !== old.id)!;
+    newTab.url = "about:blank";
+    const res = await mp.fire(req({ requestId: "2", tabId: newTab.id }));
+    expect(res).toBeUndefined();
+    expect(mp.calls.createTab).toHaveLength(1); // no second reopen
+  });
+
+  it("reopen into Temporary creates a tmp-prefixed container", async () => {
+    const mp = createMockPort();
+    const old = mp.addTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
+    const engine = createEngine({ port: mp.port, config: { rules: [], groups: [] }, deps, onChoice: noop, tmpSuffix: counter() });
+
+    await engine.reopen(old, "https://example.com/", { kind: "temporary" });
+
+    expect(mp.calls.createIdentity).toHaveLength(1);
+    expect(mp.calls.createIdentity[0].name).toMatch(/^tmp/);
+    expect(mp.calls.removeTab).toEqual([old.id]);
+  });
+
+  it("reopen throws when createTab fails (does not swallow); old tab not removed", async () => {
+    const mp = createMockPort();
+    const old = mp.addTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
+    mp.setCreateTabThrows(true);
+    const engine = createEngine({ port: mp.port, config: workConfig(), deps, onChoice: noop, tmpSuffix: counter() });
+
+    await expect(engine.reopen(old, "https://example.com/", { kind: "permanent", name: "Work" })).rejects.toThrow();
+    expect(mp.calls.removeTab).toEqual([]); // old tab not removed on failure
   });
 });
