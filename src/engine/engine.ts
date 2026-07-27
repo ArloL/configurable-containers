@@ -1,9 +1,16 @@
 import { resolve } from "../resolver/resolve";
-import type { Config, ContainerRef, Deps, NavContext } from "../resolver/types";
+import type { Config, ContainerRef, Deps, NavContext, Target } from "../resolver/types";
 import type { BrowserPort, Tab, WebRequestDetails } from "./port";
 import { createRegistry, type ContainerRegistry } from "./registry";
 
 export const MAC_ID = "@testpilot-containers";
+
+export interface Engine {
+  // The F1-guarded reopen effect. Reopens `tab`'s `url` into `target`, preserving
+  // placement (index/active/opener), and leaves the reopened tab's first navigation
+  // alone via the `freshlyReopened` guard. Throws on failure (callers react).
+  reopen(tab: Tab, url: string, target: Target): Promise<void>;
+}
 
 export interface EngineOptions {
   port: BrowserPort;
@@ -50,7 +57,7 @@ async function buildNavContext(
   return { targetUrl: d.url, current, initiator };
 }
 
-export function createEngine(opts: EngineOptions): void {
+export function createEngine(opts: EngineOptions): Engine {
   const { port, config, deps, onChoice } = opts;
   const registry = createRegistry(port, opts.tmpSuffix ?? defaultSuffix());
   const handled = new Set<string>();
@@ -59,6 +66,23 @@ export function createEngine(opts: EngineOptions): void {
   // commits, so it still reads as about:blank and resolve() cannot tell it is
   // already correctly contained — without this guard it would reopen forever (F1).
   const freshlyReopened = new Set<number>();
+
+  // The F1-guarded reopen effect. Shared by the engine's own `case "reopen"` and the
+  // picker (choice screen / reopen picker). Throws on failure — callers decide whether
+  // to swallow (the engine's request-time path clears `handled` and fails open) or to
+  // surface the result (the picker reports {ok:false} to the choice page).
+  async function reopen(tab: Tab, url: string, target: Target): Promise<void> {
+    const store = await registry.toStoreId(target);
+    const created = await port.createTab({
+      url,
+      cookieStoreId: store,
+      index: tab.index,
+      active: tab.active,
+      openerTabId: tab.openerTabId,
+    });
+    freshlyReopened.add(created.id); // leave its first nav alone (see 1b)
+    await port.removeTab(tab.id);
+  }
 
   port.onBeforeRequest(async (d) => {
     // (0) Scope: only top-level http(s) navigations.
@@ -99,16 +123,7 @@ export function createEngine(opts: EngineOptions): void {
         if (await macOwns(port, d.url)) return; // F7 defer
         handled.add(key); // guard BEFORE the async effects
         try {
-          const store = await registry.toStoreId(decision.into);
-          const created = await port.createTab({
-            url: d.url,
-            cookieStoreId: store,
-            index: tab.index,
-            active: tab.active,
-            openerTabId: tab.openerTabId,
-          });
-          freshlyReopened.add(created.id); // leave its first nav alone (see 1b)
-          await port.removeTab(tab.id);
+          await reopen(tab, d.url, decision.into);
         } catch (e) {
           handled.delete(key); // fail open — allow a retry
           console.warn("[engine] reopen failed", e);
@@ -118,4 +133,6 @@ export function createEngine(opts: EngineOptions): void {
       }
     }
   });
+
+  return { reopen };
 }
