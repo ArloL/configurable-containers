@@ -9,6 +9,20 @@ import { decodePayload, choiceKeys, type PickMessage, type PickResponse } from "
 const payload = decodePayload(location.hash.slice(1));
 const keys = choiceKeys(payload.options.length);
 
+// Only navigate to http(s) URLs — the hash payload is attacker-controllable (a crafted
+// moz-extension://<id>/choice.html#... link could otherwise inject a javascript: URL,
+// executing script in the extension's privileged context, or redirect to an arbitrary
+// scheme). Mirrors the engine's own onBeforeRequest http(s) guard.
+function safeNavigate(url: string): void {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return;
+  } catch {
+    return;
+  }
+  location.href = url;
+}
+
 document.getElementById("cc-dest")!.textContent = "Opening: " + payload.url;
 
 const list = document.getElementById("cc-options")!;
@@ -30,17 +44,17 @@ async function pick(container: string): Promise<void> {
   try {
     const res = (await browser.runtime.sendMessage(msg)) as PickResponse | undefined;
     if (res && !res.ok) {
-      location.href = payload.url; // reopen failed — fail open back to the url
+      safeNavigate(payload.url); // reopen failed — fail open back to the url
     }
     // else: the background's reopen closed this tab; nothing to do
   } catch {
-    location.href = payload.url; // no handler / background gone — fail open
+    safeNavigate(payload.url); // no handler / background gone — fail open
   }
 }
 
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
-    location.href = payload.url;
+    safeNavigate(payload.url);
     return;
   }
   const li = list.querySelector<HTMLElement>(`[data-key="${e.key}"]`);
