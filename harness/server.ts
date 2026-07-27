@@ -1,9 +1,10 @@
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 
-const HTML =
-  "<!doctype html><html><head><title>probe-target</title></head>" +
-  "<body>ok</body></html>";
+// Escape a string for safe inclusion in a double-quoted HTML attribute.
+function escapeAttr(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+}
 
 export interface TestServer {
   url: string;
@@ -11,9 +12,15 @@ export interface TestServer {
 }
 
 export async function startServer(): Promise<TestServer> {
-  const server = createServer((_req, res) => {
+  const server = createServer((req, res) => {
+    // Reflect the request's Cookie header into a body attribute so an external driver
+    // can assert the FIRST request already carried a seeded cookie (F12 wire side).
+    const cookie = req.headers.cookie ?? "";
+    const html =
+      "<!doctype html><html><head><title>probe-target</title></head>" +
+      `<body data-seen-cookie="${escapeAttr(cookie)}">ok</body></html>`;
     res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-    res.end(HTML);
+    res.end(html);
   });
 
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));

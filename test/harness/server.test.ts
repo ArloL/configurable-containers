@@ -16,4 +16,15 @@ describe("startServer", () => {
     // After close, the port is released — a second connect should fail.
     await expect(fetch(server.url)).rejects.toBeTruthy();
   });
+
+  it("reflects the request Cookie header into a body attribute", async () => {
+    const server = await startServer();
+    try {
+      const res = await fetch(server.url, { headers: { cookie: "seed=1" } });
+      const body = await res.text();
+      expect(body).toContain('data-seen-cookie="seed=1"');
+    } finally {
+      await server.close();
+    }
+  });
 });
