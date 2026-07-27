@@ -13,6 +13,7 @@ import type {
   RegisteredContentScript,
   SetCookieDetails,
   Tab,
+  TabUpdateInfo,
   WebRequestDetails,
 } from "../../src/engine/port";
 
@@ -38,6 +39,7 @@ export interface MockPort {
   addIdentity(props: { name: string; color?: string; icon?: string }): ContextualIdentity;
   emitTabCreated(props: { url: string; cookieStoreId: string; index?: number; active?: boolean; openerTabId?: number }): Promise<Tab>;
   emitTabRemoved(tabId: number): Promise<void>;
+  emitTabUpdated(tab: Tab, info: TabUpdateInfo): Promise<void>;
   setMacAssignment(url: string, value: unknown): void;
   setMacThrows(on: boolean): void;
   setCreateTabThrows(on: boolean): void;
@@ -64,6 +66,7 @@ export function createMockPort(): MockPort {
   let handler: ((d: WebRequestDetails) => Promise<BlockingResponse | void>) | null = null;
   let onTabCreatedH: ((tab: Tab) => void) | null = null;
   let onTabRemovedH: ((tabId: number) => void) | null = null;
+  let onTabUpdatedH: ((tab: Tab, info: TabUpdateInfo) => void) | null = null;
   let headersHandler: ((d: HeadersDetails) => Promise<BlockingHeadersResponse | void>) | null = null;
   const cookieStore = new Map<string, Map<string, Cookie>>(); // storeId -> name -> cookie
   const registeredScripts: RegisterContentScriptDetails[] = [];
@@ -129,6 +132,9 @@ export function createMockPort(): MockPort {
     onTabRemoved(h) {
       onTabRemovedH = h;
     },
+    onTabUpdated(h) {
+      onTabUpdatedH = h;
+    },
     async queryTabs(filter) {
       const all = [...tabs.values()];
       return filter.cookieStoreId ? all.filter((t) => t.cookieStoreId === filter.cookieStoreId) : all;
@@ -175,6 +181,12 @@ export function createMockPort(): MockPort {
     async emitTabRemoved(id) {
       tabs.delete(id);
       onTabRemovedH?.(id);
+      await flushMicrotasks();
+    },
+    async emitTabUpdated(tab, info) {
+      // Reflect the updated tab into the mock's tabs map so getTab sees the new URL.
+      tabs.set(tab.id, tab);
+      onTabUpdatedH?.(tab, info);
       await flushMicrotasks();
     },
     setMacAssignment: (url, value) => void macMap.set(url, value),

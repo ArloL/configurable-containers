@@ -71,6 +71,11 @@ export interface RegisteredContentScript {
   unregister(): Promise<void>;
 }
 
+// The subset of tabs.onUpdated's changeInfo the port surface exposes.
+export interface TabUpdateInfo {
+  status?: "loading" | "complete";
+}
+
 export interface Tab {
   id: number;
   url: string; // "" / about:blank for a fresh tab
@@ -127,6 +132,7 @@ export interface BrowserPort {
   // F10 — temp-container disposal.
   onTabCreated(handler: (tab: Tab) => void): void;
   onTabRemoved(handler: (tabId: number) => void): void;
+  onTabUpdated(handler: (tab: Tab, info: TabUpdateInfo) => void): void;
   queryTabs(filter: { cookieStoreId?: string }): Promise<Tab[]>;
   removeIdentity(cookieStoreId: string): Promise<void>;
 
