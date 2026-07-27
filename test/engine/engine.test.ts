@@ -137,3 +137,69 @@ describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
     expect(retry).toEqual({ cancel: true }); // guard was cleared, retry works
   });
 });
+
+// Config: example.com opens Work OR Personal with no default -> choice.
+function choiceConfig(): Config {
+  return {
+    rules: [{ match: [hostMatcher("example.com")], action: { kind: "open", containers: ["Work", "Personal"] } }],
+    groups: [],
+  };
+}
+
+describe("engine — F7 MAC defer + choice", () => {
+  it("F7: defers (no reopen) when MAC owns the URL", async () => {
+    const mp = createMockPort();
+    const tab = mp.addTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
+    mp.setMacAssignment("https://example.com/", { userContextId: 5 });
+    createEngine({ port: mp.port, config: workConfig(), deps, onChoice: noop, tmpSuffix: counter() });
+
+    const res = await mp.fire(req({ tabId: tab.id }));
+
+    expect(res).toBeUndefined();
+    expect(mp.calls.createTab).toHaveLength(0);
+  });
+
+  it("F7: reopens normally when MAC is absent (sendExternalMessage throws)", async () => {
+    const mp = createMockPort();
+    const tab = mp.addTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
+    mp.setMacThrows(true);
+    createEngine({ port: mp.port, config: workConfig(), deps, onChoice: noop, tmpSuffix: counter() });
+
+    const res = await mp.fire(req({ tabId: tab.id }));
+
+    expect(res).toEqual({ cancel: true });
+    expect(mp.calls.createTab).toHaveLength(1);
+  });
+
+  it("choice: emits onChoice with the options and cancels, opening no tab", async () => {
+    const mp = createMockPort();
+    const tab = mp.addTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
+    const seen: Array<{ options: string[]; nav: { tabId: number; url: string } }> = [];
+    createEngine({
+      port: mp.port,
+      config: choiceConfig(),
+      deps,
+      onChoice: (options, nav) => seen.push({ options, nav }),
+      tmpSuffix: counter(),
+    });
+
+    const res = await mp.fire(req({ tabId: tab.id }));
+
+    expect(res).toEqual({ cancel: true });
+    expect(mp.calls.createTab).toHaveLength(0);
+    expect(seen).toEqual([{ options: ["Work", "Personal"], nav: { tabId: tab.id, url: "https://example.com/" } }]);
+  });
+
+  it("choice: defers to MAC (no emit) when MAC owns the URL", async () => {
+    const mp = createMockPort();
+    const tab = mp.addTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
+    mp.setMacAssignment("https://example.com/", { userContextId: 5 });
+    let called = false;
+    createEngine({ port: mp.port, config: choiceConfig(), deps, onChoice: () => (called = true), tmpSuffix: counter() });
+
+    const res = await mp.fire(req({ tabId: tab.id }));
+
+    expect(res).toBeUndefined();
+    expect(called).toBe(false);
+  });
+});
