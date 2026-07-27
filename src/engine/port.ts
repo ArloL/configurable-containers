@@ -1,6 +1,9 @@
 // The narrow browser.* facade the L3 engine depends on. The ONLY module aware
 // that browser.* exists. Real adapter is an L4 concern; L3 tests use a mock.
 
+import type { HttpHeader } from "../overlays/cookies";
+export type { HttpHeader };
+
 export interface WebRequestDetails {
   requestId: string;
   tabId: number;
@@ -9,6 +12,48 @@ export interface WebRequestDetails {
   method: string; // "GET" | "POST" | … (spine routes main_frame only)
   originUrl?: string;
   documentUrl?: string;
+}
+
+export interface HeadersDetails {
+  requestId: string;
+  tabId: number;
+  url: string;
+  type: "main_frame" | "sub_frame" | string;
+  requestHeaders: HttpHeader[]; // present because the listener asks for "requestHeaders"
+}
+
+export interface BlockingHeadersResponse {
+  requestHeaders?: HttpHeader[]; // returned to apply header edits
+}
+
+// The browser.cookies.set surface (complete minus nothing) — storeId is REQUIRED and
+// the seeder always sets it to the tab's own store (F11). Mirrors CookieSpec + storeId.
+export interface SetCookieDetails {
+  url: string;
+  name: string;
+  value?: string;
+  domain?: string;
+  path?: string;
+  secure?: boolean;
+  httpOnly?: boolean;
+  sameSite?: "no_restriction" | "lax" | "strict";
+  expirationDate?: number;
+  firstPartyDomain?: string;
+  partitionKey?: { topLevelSite?: string };
+  storeId: string;
+}
+
+export interface GetCookieDetails {
+  url: string;
+  name: string;
+  storeId: string;
+  firstPartyDomain?: string;
+  partitionKey?: { topLevelSite?: string };
+}
+
+export interface Cookie {
+  name: string;
+  value: string;
 }
 
 export interface Tab {
@@ -69,6 +114,15 @@ export interface BrowserPort {
   onTabRemoved(handler: (tabId: number) => void): void;
   queryTabs(filter: { cookieStoreId?: string }): Promise<Tab[]>;
   removeIdentity(cookieStoreId: string): Promise<void>;
+
+  // Cookies overlay — a blocking main_frame onBeforeSendHeaders listener plus
+  // cookie read/write. The seeder seeds into the tab's OWN store and rewrites the
+  // outgoing Cookie header (F11/F12).
+  onBeforeSendHeaders(
+    handler: (d: HeadersDetails) => Promise<BlockingHeadersResponse | void>
+  ): void;
+  setCookie(details: SetCookieDetails): Promise<void>;
+  getCookie(details: GetCookieDetails): Promise<Cookie | null>;
 }
 
 // Injected timing seam so grace/GC delays are deterministic in tests. The disposer

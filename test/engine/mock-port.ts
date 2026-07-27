@@ -1,10 +1,15 @@
 import type {
+  BlockingHeadersResponse,
   BlockingResponse,
   BrowserPort,
   Clock,
+  Cookie,
   ContextualIdentity,
   CreateIdentityProps,
   CreateTabProps,
+  GetCookieDetails,
+  HeadersDetails,
+  SetCookieDetails,
   Tab,
   WebRequestDetails,
 } from "../../src/engine/port";
@@ -24,6 +29,7 @@ export interface MockPort {
     removeTab: number[];
     createIdentity: CreateIdentityProps[];
     removeIdentity: string[];
+    setCookie: SetCookieDetails[];
   };
   addTab(props: { url: string; cookieStoreId: string; index?: number; active?: boolean; openerTabId?: number }): Tab;
   addIdentity(props: { name: string; color?: string; icon?: string }): ContextualIdentity;
@@ -32,6 +38,8 @@ export interface MockPort {
   setMacAssignment(url: string, value: unknown): void;
   setMacThrows(on: boolean): void;
   setCreateTabThrows(on: boolean): void;
+  fireHeaders(d: HeadersDetails): Promise<BlockingHeadersResponse | void>;
+  getStoredCookie(storeId: string, name: string): Cookie | null;
 }
 
 export function createMockPort(): MockPort {
@@ -43,6 +51,7 @@ export function createMockPort(): MockPort {
     removeTab: [] as number[],
     createIdentity: [] as CreateIdentityProps[],
     removeIdentity: [] as string[],
+    setCookie: [] as SetCookieDetails[],
   };
 
   let tabId = 0;
@@ -52,6 +61,8 @@ export function createMockPort(): MockPort {
   let handler: ((d: WebRequestDetails) => Promise<BlockingResponse | void>) | null = null;
   let onTabCreatedH: ((tab: Tab) => void) | null = null;
   let onTabRemovedH: ((tabId: number) => void) | null = null;
+  let headersHandler: ((d: HeadersDetails) => Promise<BlockingHeadersResponse | void>) | null = null;
+  const cookieStore = new Map<string, Map<string, Cookie>>(); // storeId -> name -> cookie
 
   function makeTab(props: { url: string; cookieStoreId: string; index?: number; active?: boolean; openerTabId?: number }): Tab {
     const id = ++tabId;
@@ -122,6 +133,18 @@ export function createMockPort(): MockPort {
       calls.removeIdentity.push(cookieStoreId);
       identities.delete(cookieStoreId);
     },
+    onBeforeSendHeaders(h) {
+      headersHandler = h;
+    },
+    async setCookie(details) {
+      calls.setCookie.push(details);
+      const jar = cookieStore.get(details.storeId) ?? new Map<string, Cookie>();
+      jar.set(details.name, { name: details.name, value: details.value ?? "" });
+      cookieStore.set(details.storeId, jar);
+    },
+    async getCookie(details: GetCookieDetails) {
+      return cookieStore.get(details.storeId)?.get(details.name) ?? null;
+    },
   };
 
   return {
@@ -149,6 +172,11 @@ export function createMockPort(): MockPort {
     setMacAssignment: (url, value) => void macMap.set(url, value),
     setMacThrows: (on) => void (macThrows = on),
     setCreateTabThrows: (on) => void (createTabThrows = on),
+    async fireHeaders(d) {
+      if (!headersHandler) throw new Error("no onBeforeSendHeaders handler registered");
+      return headersHandler(d);
+    },
+    getStoredCookie: (storeId, name) => cookieStore.get(storeId)?.get(name) ?? null,
   };
 }
 
