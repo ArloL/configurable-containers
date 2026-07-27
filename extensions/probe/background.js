@@ -9,11 +9,18 @@ async function reportTab(tabId, cookieStoreId) {
   } catch (_e) {
     // firefox-default has no identity — leave name empty.
   }
+  let list = "";
+  try {
+    list = (await browser.contextualIdentities.query({})).map((c) => c.name).join(",");
+  } catch (_e) {
+    // ignore
+  }
   try {
     await browser.tabs.executeScript(tabId, {
       code:
         "document.title = " + JSON.stringify(REPORT_PREFIX + cookieStoreId) + ";" +
-        "document.documentElement.setAttribute('data-cc-container', " + JSON.stringify(name) + ");",
+        "document.documentElement.setAttribute('data-cc-container', " + JSON.stringify(name) + ");" +
+        "document.documentElement.setAttribute('data-cc-containers', " + JSON.stringify(list) + ");",
     });
   } catch (_e) {
     // about:, view-source:, moz-extension: pages cannot be injected — ignore.

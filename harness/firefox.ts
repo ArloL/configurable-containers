@@ -22,6 +22,7 @@ export interface Session {
 
 export interface LaunchOptions {
   extensions?: ("probe" | "cc")[];
+  ccGraceMs?: number; // grace passed to the cc build (default: production 300000)
 }
 
 // Zip an unpacked extension directory into a temporary .xpi (geckodriver's
@@ -34,8 +35,8 @@ function zipDir(dir: string): { xpiPath: string; cleanup: () => void } {
 }
 
 // Build (cc only) then zip the given extension into an installable .xpi.
-async function buildXpiFor(ext: "probe" | "cc"): Promise<{ xpiPath: string; cleanup: () => void }> {
-  if (ext === "cc") await buildExtension();
+async function buildXpiFor(ext: "probe" | "cc", ccGraceMs?: number): Promise<{ xpiPath: string; cleanup: () => void }> {
+  if (ext === "cc") await buildExtension({ graceMs: ccGraceMs });
   return zipDir(EXT_DIRS[ext]);
 }
 
@@ -45,7 +46,7 @@ export async function launch(opts: LaunchOptions = {}): Promise<Session> {
 
   const xpis: { xpiPath: string; cleanup: () => void }[] = [];
   for (const ext of extensions) {
-    xpis.push(await buildXpiFor(ext));
+    xpis.push(await buildXpiFor(ext, opts.ccGraceMs));
   }
   const cleanupXpis = () => xpis.forEach((x) => x.cleanup());
 
@@ -102,6 +103,14 @@ export async function readContainerName(driver: WebDriver): Promise<string> {
   return (await driver.executeScript(
     "return document.documentElement.getAttribute('data-cc-container') || '';"
   )) as string;
+}
+
+// Read the live container-name list the probe wrote into the current tab's DOM.
+export async function readContainerList(driver: WebDriver): Promise<string[]> {
+  const raw = (await driver.executeScript(
+    "return document.documentElement.getAttribute('data-cc-containers') || '';"
+  )) as string;
+  return raw ? raw.split(",") : [];
 }
 
 // Poll window handles (WITHOUT re-navigating them — CC does the reopening) until a
