@@ -6,9 +6,13 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { startServer, type TestServer } from "./server";
+import { buildExtension } from "./build-extension";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const PROBE_DIR = path.resolve(HERE, "../extensions/probe");
+const EXT_DIRS: Record<"probe" | "cc", string> = {
+  probe: path.resolve(HERE, "../extensions/probe"),
+  cc: path.resolve(HERE, "../extensions/cc"),
+};
 
 export interface Session {
   driver: WebDriver;
@@ -16,28 +20,42 @@ export interface Session {
   close(): Promise<void>;
 }
 
-// Package the unpacked probe extension into a temporary .xpi (a zip), because
-// geckodriver's installAddon expects an addon file, not a directory.
-function buildProbeXpi(): { xpiPath: string; cleanup: () => void } {
-  const dir = mkdtempSync(path.join(tmpdir(), "cc-e2e-xpi-"));
-  const xpiPath = path.join(dir, "probe.xpi");
-  execFileSync("zip", ["-r", "-FS", xpiPath, ".", "-x", ".*"], { cwd: PROBE_DIR });
-  return { xpiPath, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+export interface LaunchOptions {
+  extensions?: ("probe" | "cc")[];
 }
 
-export async function launch(): Promise<Session> {
+// Zip an unpacked extension directory into a temporary .xpi (geckodriver's
+// installAddon wants a file, not a directory).
+function zipDir(dir: string): { xpiPath: string; cleanup: () => void } {
+  const out = mkdtempSync(path.join(tmpdir(), "cc-e2e-xpi-"));
+  const xpiPath = path.join(out, "addon.xpi");
+  execFileSync("zip", ["-r", "-FS", xpiPath, ".", "-x", ".*"], { cwd: dir });
+  return { xpiPath, cleanup: () => rmSync(out, { recursive: true, force: true }) };
+}
+
+// Build (cc only) then zip the given extension into an installable .xpi.
+async function buildXpiFor(ext: "probe" | "cc"): Promise<{ xpiPath: string; cleanup: () => void }> {
+  if (ext === "cc") await buildExtension();
+  return zipDir(EXT_DIRS[ext]);
+}
+
+export async function launch(opts: LaunchOptions = {}): Promise<Session> {
+  const extensions = opts.extensions ?? ["probe"];
   const server: TestServer = await startServer();
-  const { xpiPath, cleanup } = buildProbeXpi();
+
+  const xpis: { xpiPath: string; cleanup: () => void }[] = [];
+  for (const ext of extensions) {
+    xpis.push(await buildXpiFor(ext));
+  }
+  const cleanupXpis = () => xpis.forEach((x) => x.cleanup());
 
   const options = new firefox.Options();
   options.addArguments("-headless");
-  // Enable the containers feature so the probe's contextualIdentities call works.
   options.setPreference("privacy.userContext.enabled", true);
   options.setPreference("xpinstall.signatures.required", false);
+  // Resolve the test's fake domains straight to loopback (cross-platform, no DNS).
+  options.setPreference("network.dns.localDomains", "work.example,nomatch.example");
 
-  // In CI the runner's default Firefox is a snap geckodriver can't drive; point
-  // Selenium at the real Firefox the workflow installed when FIREFOX_BIN is set.
-  // Unset locally, this is a no-op and the system Firefox is used.
   const firefoxBin = process.env.FIREFOX_BIN;
   if (firefoxBin) {
     options.setBinary(firefoxBin);
@@ -46,13 +64,12 @@ export async function launch(): Promise<Session> {
   let driver: WebDriver;
   try {
     driver = await new Builder().forBrowser("firefox").setFirefoxOptions(options).build();
-    // Temporary install of the unsigned probe; runs its startup (creates a container tab).
-    // installAddon is defined on firefox.Driver (a WebDriver subclass); the Builder's
-    // return type is the base WebDriver, so narrow it here for the call.
-    await (driver as unknown as firefox.Driver).installAddon(xpiPath, true);
+    for (const { xpiPath } of xpis) {
+      await (driver as unknown as firefox.Driver).installAddon(xpiPath, true);
+    }
   } catch (err) {
     await server.close();
-    cleanup();
+    cleanupXpis();
     throw err;
   }
 
@@ -62,7 +79,7 @@ export async function launch(): Promise<Session> {
     async close() {
       await driver.quit();
       await server.close();
-      cleanup();
+      cleanupXpis();
     },
   };
 }
@@ -78,6 +95,38 @@ export async function readCookieStoreId(driver: WebDriver, timeoutMs = 5000): Pr
     await driver.sleep(100);
   }
   throw new Error(`Timed out waiting for probe report; last title: ${JSON.stringify(lastTitle)}`);
+}
+
+// Read the container name the probe wrote into the current tab's DOM.
+export async function readContainerName(driver: WebDriver): Promise<string> {
+  return (await driver.executeScript(
+    "return document.documentElement.getAttribute('data-cc-container') || '';"
+  )) as string;
+}
+
+// Poll window handles (WITHOUT re-navigating them — CC does the reopening) until a
+// tab shows `url` in a non-default container; return its store + reported name.
+export async function awaitContainerTab(
+  driver: WebDriver,
+  url: string,
+  timeoutMs = 15_000,
+): Promise<{ store: string; name: string }> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    for (const handle of await driver.getAllWindowHandles()) {
+      try {
+        await driver.switchTo().window(handle);
+        const m = (await driver.getTitle()).match(/^CSID:(.+)$/);
+        if (m && /^firefox-container-\d+$/.test(m[1]) && (await driver.getCurrentUrl()).startsWith(url)) {
+          return { store: m[1], name: await readContainerName(driver) };
+        }
+      } catch {
+        // A handle may have closed mid-loop; skip it this round.
+      }
+    }
+    await driver.sleep(300);
+  }
+  throw new Error(`no container tab for ${url} within ${timeoutMs}ms`);
 }
 
 // Navigate every window handle to `url` (triggering a probe report on each) and
