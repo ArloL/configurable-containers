@@ -389,3 +389,15 @@ crosses it — that is what containers exist to prevent. Practical consequences:
   action (engine does nothing; leave the tab as-is).
 - Mouse-click isolation (left / middle / ctrl+left) → **out of scope**: unused in
   the author's setup (all `never`), deliberately not modeled.
+
+**Temporary Containers parity — outstanding**
+- **Automatic mode** (TCP's `maybeReopenInTmpContainer`): a freshly-opened blank/new
+  tab (`about:blank` / `about:newtab` / `about:home`) should reopen into a fresh
+  temporary container *immediately*, so the new-tab page itself is isolated before
+  the user navigates. The engine today skips non-`http(s)` URLs
+  (`src/engine/engine.ts`), so a new tab stays in `firefox-default` until its first
+  navigation — a real regression for a TCP migrant. This is a **known gap, not a
+  design decision**: it is deferred to a future slice (a `tabs.onCreated`-based
+  sibling mirroring TCP's approach), not declined. No config key, rule action, or
+  scenario in `TESTS.md` exists for it yet — design + plan will be written when the
+  slice is taken on.

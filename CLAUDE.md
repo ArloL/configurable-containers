@@ -40,6 +40,16 @@ engine's reopen, not duplicating it.
   `No permission for cookieStoreId` on `tabs.create({ cookieStoreId })` without it,
   so every container reopen silently fails and nothing routes. Any code opening a tab
   into a container needs it.
+- **Automatic mode (blank/newtab → immediate temp) is a known gap, not a design
+  decision.** The engine today skips non-`http(s)` URLs (`src/engine/engine.ts`), so a
+  freshly-opened tab stays in `firefox-default` until its first navigation. TCP's
+  `maybeReopenInTmpContainer` containerizes `about:blank` / `about:newtab` /
+  `about:home` on `tabs.onCreated` *immediately*; CC does not, and this is a real
+  regression for a TCP migrant. It is the one remaining Temporary Containers
+  carry-over — deferred to a future slice (a `tabs.onCreated` sibling), not declined.
+  Don't assume the `about:blank` skip is intentional or out of scope; don't remove the
+  non-http guard without it (that guard is also what keeps the F1 reopen loop safe).
+  See CONFIG.md §"Temporary Containers parity — outstanding".
 - **The engine's `freshlyReopened` tab-id guard is load-bearing.** When the engine
   reopens a tab, the *new* tab's `onBeforeRequest` fires **before its url commits**
   (it still reads as `about:blank`), so `resolve()` can't tell it is already in the
