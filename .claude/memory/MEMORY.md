@@ -2,3 +2,4 @@
 - [No Gherkin DSL for tests](no-gherkin-dsl.md) — spec notation ok, execution must be plain BDD code
 - [Compare tooling before deciding](compare-tooling-before-deciding.md) — wants detailed tool comparisons before being asked to pick
 - [E2E driver is Selenium not Playwright](e2e-driver-selenium-not-playwright.md) — Playwright can't see WebExtension container tabs; harness uses selenium/geckodriver
+- [Upstream reference submodules](upstream-reference-submodules.md) — tcp/ and mac/ track upstream Temporary Containers + Multi-Account Containers for reference
