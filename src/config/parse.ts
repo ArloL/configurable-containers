@@ -2,7 +2,7 @@
 // See docs/superpowers/specs/2026-07-10-config-parser-design.md.
 import { parse, YAMLParseError } from "yaml";
 import { hostMatcher, type HostMatcher } from "../matcher/matcher";
-import type { Action, Config, CookieSpec, Group, Matcher, Rule } from "../resolver/types";
+import type { Action, Config, CookieSpec, Group, Matcher, Rule, ScriptSpec } from "../resolver/types";
 
 export class ConfigError extends Error {
   readonly path?: string;
@@ -26,6 +26,8 @@ const ALLOWED_COOKIE_KEYS = new Set([
   "sameSite", "expirationDate", "firstPartyDomain", "partitionKey",
 ]);
 const SAME_SITE = new Set(["no_restriction", "lax", "strict"]);
+const RUN_AT = new Set(["document_start", "document_end", "document_idle"]);
+const ALLOWED_SCRIPT_KEYS = new Set(["at", "run"]);
 
 function isMapping(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -144,6 +146,39 @@ function parseCookies(raw: unknown, path: string): CookieSpec[] {
   return raw.map((entry, j) => parseCookie(entry, `${path}.cookies[${j}]`));
 }
 
+function parseScript(raw: unknown, path: string): ScriptSpec {
+  if (!isMapping(raw)) throw new ConfigError(`${path} must be a mapping`, { path });
+  for (const k of Object.keys(raw)) {
+    if (!ALLOWED_SCRIPT_KEYS.has(k)) throw new ConfigError(`unknown key "${k}" in ${path}`, { path });
+  }
+
+  const spec = {} as ScriptSpec;
+
+  const run = raw.run;
+  if (run === undefined || run === "") {
+    throw new ConfigError(`${path}.run is required and must be a non-empty string`, { path: `${path}.run` });
+  }
+  if (typeof run !== "string") {
+    throw new ConfigError(`${path}.run must be a string`, { path: `${path}.run` });
+  }
+  spec.run = run;
+
+  if ("at" in raw) {
+    const v = raw.at;
+    if (typeof v !== "string" || !RUN_AT.has(v)) {
+      throw new ConfigError(`${path}.at must be one of document_start, document_end, document_idle`, { path: `${path}.at` });
+    }
+    spec.at = v as ScriptSpec["at"];
+  }
+
+  return spec;
+}
+
+function parseScripts(raw: unknown, path: string): ScriptSpec[] {
+  if (!Array.isArray(raw)) throw new ConfigError(`${path}.scripts must be a list`, { path: `${path}.scripts` });
+  return raw.map((entry, j) => parseScript(entry, `${path}.scripts[${j}]`));
+}
+
 function parseRule(raw: unknown, i: number): Rule {
   const path = `rules[${i}]`;
   if (!isMapping(raw)) throw new ConfigError(`${path} must be a mapping`, { path });
@@ -195,14 +230,23 @@ function parseRule(raw: unknown, i: number): Rule {
     action = { ...action, default: def };
   }
 
+  const out: Rule = { match: matchers, action };
+
   if ("cookies" in raw) {
     if (action.kind === "ignore") {
       throw new ConfigError(`${path}.cookies is not allowed on an "ignore" rule`, { path: `${path}.cookies` });
     }
-    return { match: matchers, action, cookies: parseCookies(raw.cookies, path) };
+    out.cookies = parseCookies(raw.cookies, path);
   }
 
-  return { match: matchers, action };
+  if ("scripts" in raw) {
+    if (action.kind === "ignore") {
+      throw new ConfigError(`${path}.scripts is not allowed on an "ignore" rule`, { path: `${path}.scripts` });
+    }
+    out.scripts = parseScripts(raw.scripts, path);
+  }
+
+  return out;
 }
 
 function parseGroup(raw: unknown, i: number): Group {
