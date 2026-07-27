@@ -18,6 +18,16 @@ function defaultSuffix(): () => string {
   return () => String(++n);
 }
 
+// F7: a truthy getAssignment result means MAC owns this URL and we back off.
+async function macOwns(port: BrowserPort, url: string): Promise<boolean> {
+  try {
+    const a = await port.sendExternalMessage(MAC_ID, { method: "getAssignment", url });
+    return a != null;
+  } catch {
+    return false; // MAC absent ⇒ nobody else owns it
+  }
+}
+
 async function buildNavContext(
   d: WebRequestDetails,
   tab: Tab,
@@ -45,10 +55,6 @@ export function createEngine(opts: EngineOptions): void {
   const registry = createRegistry(port, opts.tmpSuffix ?? defaultSuffix());
   const handled = new Set<string>();
 
-  // onChoice is wired in Task 4 (choice emission); referenced here to keep the
-  // option in use while the choice branch is still a no-op.
-  void onChoice;
-
   port.onBeforeRequest(async (d) => {
     // (0) Scope: only top-level http(s) navigations.
     if (d.type !== "main_frame") return;
@@ -73,10 +79,13 @@ export function createEngine(opts: EngineOptions): void {
         return;
 
       case "choice":
-        // F7 gate + emit are added in Task 4; no-op for now.
-        return;
+        if (await macOwns(port, d.url)) return; // F7 defer
+        handled.add(key);
+        onChoice(decision.options, { tabId: d.tabId, url: d.url });
+        return { cancel: true };
 
       case "reopen": {
+        if (await macOwns(port, d.url)) return; // F7 defer
         handled.add(key); // guard BEFORE the async effects
         try {
           const store = await registry.toStoreId(decision.into);
