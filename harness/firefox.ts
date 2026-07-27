@@ -23,6 +23,7 @@ export interface Session {
 export interface LaunchOptions {
   extensions?: ("probe" | "cc")[];
   ccGraceMs?: number; // grace passed to the cc build (default: production 300000)
+  ccRedirectorDelayMs?: number; // redirector-close delay (default: production 2000)
 }
 
 // Zip an unpacked extension directory into a temporary .xpi (geckodriver's
@@ -35,8 +36,11 @@ function zipDir(dir: string): { xpiPath: string; cleanup: () => void } {
 }
 
 // Build (cc only) then zip the given extension into an installable .xpi.
-async function buildXpiFor(ext: "probe" | "cc", ccGraceMs?: number): Promise<{ xpiPath: string; cleanup: () => void }> {
-  if (ext === "cc") await buildExtension({ graceMs: ccGraceMs });
+async function buildXpiFor(
+  ext: "probe" | "cc",
+  opts: { graceMs?: number; redirectorDelayMs?: number },
+): Promise<{ xpiPath: string; cleanup: () => void }> {
+  if (ext === "cc") await buildExtension(opts);
   return zipDir(EXT_DIRS[ext]);
 }
 
@@ -46,7 +50,7 @@ export async function launch(opts: LaunchOptions = {}): Promise<Session> {
 
   const xpis: { xpiPath: string; cleanup: () => void }[] = [];
   for (const ext of extensions) {
-    xpis.push(await buildXpiFor(ext, opts.ccGraceMs));
+    xpis.push(await buildXpiFor(ext, { graceMs: opts.ccGraceMs, redirectorDelayMs: opts.ccRedirectorDelayMs }));
   }
   const cleanupXpis = () => xpis.forEach((x) => x.cleanup());
 
@@ -55,7 +59,7 @@ export async function launch(opts: LaunchOptions = {}): Promise<Session> {
   options.setPreference("privacy.userContext.enabled", true);
   options.setPreference("xpinstall.signatures.required", false);
   // Resolve the test's fake domains straight to loopback (cross-platform, no DNS).
-  options.setPreference("network.dns.localDomains", "work.example,nomatch.example");
+  options.setPreference("network.dns.localDomains", "work.example,nomatch.example,redirect.example");
 
   const firefoxBin = process.env.FIREFOX_BIN;
   if (firefoxBin) {

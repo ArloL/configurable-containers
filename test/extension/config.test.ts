@@ -29,4 +29,10 @@ describe("bundled extension config", () => {
       { at: "document_start", run: "localStorage.setItem('cc_script', '1');" },
     ]);
   });
+
+  it("carries a redirector rule on redirect.example", () => {
+    const config = parseConfig(BUNDLED_CONFIG_YAML);
+    const rule = matchRule("https://redirect.example/", config.rules);
+    expect(rule!.action).toEqual({ kind: "redirector" });
+  });
 });

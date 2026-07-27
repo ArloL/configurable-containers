@@ -2,6 +2,7 @@ import { createEngine } from "../engine/engine";
 import { createDisposer } from "../engine/disposer";
 import { createCookieSeeder } from "../engine/cookie-seeder";
 import { createScriptInjector } from "../engine/script-injector";
+import { createRedirectorCloser } from "../engine/redirector-closer";
 import { createBrowserPort, realClock } from "../engine/browser-port";
 import { parseConfig } from "../config/parse";
 import { matchRule, matchGroup } from "../matcher/matcher";
@@ -10,6 +11,7 @@ import { BUNDLED_CONFIG_YAML } from "./config";
 
 // Injected at bundle time by esbuild (harness/build-extension.ts).
 declare const __CC_GRACE_MS__: number;
+declare const __CC_REDIRECTOR_DELAY_MS__: number;
 
 const port = createBrowserPort();
 const config = parseConfig(BUNDLED_CONFIG_YAML);
@@ -26,3 +28,5 @@ createDisposer({ port, clock: realClock, graceMs: __CC_GRACE_MS__ });
 createCookieSeeder({ port, config, deps: { matchRule } });
 
 void createScriptInjector({ port, config });
+
+createRedirectorCloser({ port, clock: realClock, config, deps: { matchRule }, delayMs: __CC_REDIRECTOR_DELAY_MS__ });

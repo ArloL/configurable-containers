@@ -8,7 +8,9 @@ const OUTFILE = path.resolve(HERE, "../extensions/cc/background.js");
 
 // Bundle the extension background (engine + real port + tldts + yaml) into one
 // classic script Firefox can load as an MV2 background. Returns the output path.
-export async function buildExtension(opts: { graceMs?: number } = {}): Promise<string> {
+export async function buildExtension(
+  opts: { graceMs?: number; redirectorDelayMs?: number } = {},
+): Promise<string> {
   await build({
     entryPoints: [ENTRY],
     bundle: true,
@@ -17,7 +19,10 @@ export async function buildExtension(opts: { graceMs?: number } = {}): Promise<s
     platform: "browser",
     target: "firefox115",
     logLevel: "silent",
-    define: { __CC_GRACE_MS__: String(opts.graceMs ?? 300000) },
+    define: {
+      __CC_GRACE_MS__: String(opts.graceMs ?? 300000),
+      __CC_REDIRECTOR_DELAY_MS__: String(opts.redirectorDelayMs ?? 2000),
+    },
   });
   return OUTFILE;
 }
