@@ -27,4 +27,19 @@ describe("startServer", () => {
       await server.close();
     }
   });
+
+  it("embeds a first-script probe that records the cc_script localStorage value", async () => {
+    const server = await startServer();
+    try {
+      const res = await fetch(server.url);
+      const body = await res.text();
+      // The page carries an inline script that records — at the page's first run —
+      // whether cc_script was already set. The attribute value is only observable in a
+      // real browser (the L4 test asserts "1"); here we just assert the probe ships.
+      expect(body).toContain("data-cc-script-at-start");
+      expect(body).toContain("<script>");
+    } finally {
+      await server.close();
+    }
+  });
 });

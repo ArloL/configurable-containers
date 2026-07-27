@@ -17,8 +17,12 @@ export async function startServer(): Promise<TestServer> {
     // can assert the FIRST request already carried a seeded cookie (F12 wire side).
     const cookie = req.headers.cookie ?? "";
     const html =
-      "<!doctype html><html><head><title>probe-target</title></head>" +
-      `<body data-seen-cookie="${escapeAttr(cookie)}">ok</body></html>`;
+      "<!doctype html><html><head><title>probe-target</title>" +
+      // This inline script runs at parse time, AFTER document_start content scripts.
+      // If CC's script-injector already set localStorage.cc_script, it's visible here —
+      // proving the injected script ran before the page's own scripts (F12 timing).
+      "<script>document.documentElement.setAttribute('data-cc-script-at-start', localStorage.getItem('cc_script') || '');</script>" +
+      `</head><body data-seen-cookie="${escapeAttr(cookie)}">ok</body></html>`;
     res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
     res.end(html);
   });
