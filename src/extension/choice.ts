@@ -13,14 +13,15 @@ const keys = choiceKeys(payload.options.length);
 // moz-extension://<id>/choice.html#... link could otherwise inject a javascript: URL,
 // executing script in the extension's privileged context, or redirect to an arbitrary
 // scheme). Mirrors the engine's own onBeforeRequest http(s) guard.
-function safeNavigate(url: string): void {
+function safeNavigate(href: string): void {
+  let u: URL;
   try {
-    const u = new URL(url);
-    if (u.protocol !== "http:" && u.protocol !== "https:") return;
+    u = new URL(href);
   } catch {
     return;
   }
-  location.href = url;
+  if (u.protocol !== "http:" && u.protocol !== "https:") return;
+  location.href = u.href;
 }
 
 document.getElementById("cc-dest")!.textContent = "Opening: " + payload.url;
