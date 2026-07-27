@@ -66,6 +66,21 @@ describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
     expect(mp.calls.createTab).toHaveLength(1); // no second reopen
   });
 
+  it("F1: the freshly reopened tab does not re-reopen when its first request fires before the url commits", async () => {
+    const mp = createMockPort();
+    const old = mp.addTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
+    createEngine({ port: mp.port, config: workConfig(), deps, onChoice: noop, tmpSuffix: counter() });
+
+    await mp.fire(req({ requestId: "1", tabId: old.id }));
+    const newTab = [...mp.tabs.values()].find((t) => t.id !== old.id)!;
+    // Real Firefox fires the reopened tab's onBeforeRequest BEFORE its url commits,
+    // so the tab still reads as about:blank even though it is already in Work.
+    newTab.url = "about:blank";
+    await mp.fire(req({ requestId: "2", tabId: newTab.id }));
+
+    expect(mp.calls.createTab).toHaveLength(1); // no second reopen — loop broken
+  });
+
   it("F2: a tab already in the target container stays (no effects)", async () => {
     const mp = createMockPort();
     const work = mp.addIdentity({ name: "Work" });
