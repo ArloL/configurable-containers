@@ -1,6 +1,17 @@
 import type {
-  BrowserPort, ContextualIdentity, CreateIdentityProps, CreateTabProps, Tab, WebRequestDetails,
+  BrowserPort, Clock, ContextualIdentity, CreateIdentityProps, CreateTabProps, Tab, WebRequestDetails,
 } from "./port";
+
+function mapTab(t: browser.tabs.Tab): Tab {
+  return {
+    id: t.id!,
+    url: t.url ?? "",
+    cookieStoreId: t.cookieStoreId ?? "firefox-default",
+    index: t.index,
+    active: t.active,
+    openerTabId: t.openerTabId,
+  };
+}
 
 // Real BrowserPort over browser.*. Mechanical, logic-free — all decisions come from
 // resolve() inside the engine. The only Firefox-specific note: a blocking
@@ -70,5 +81,32 @@ export function createBrowserPort(): BrowserPort {
     sendExternalMessage(extensionId, message) {
       return browser.runtime.sendMessage(extensionId, message);
     },
+
+    onTabCreated(handler) {
+      browser.tabs.onCreated.addListener((t) => handler(mapTab(t)));
+    },
+
+    onTabRemoved(handler) {
+      browser.tabs.onRemoved.addListener((tabId) => handler(tabId));
+    },
+
+    async queryTabs(filter) {
+      return (await browser.tabs.query(filter)).map(mapTab);
+    },
+
+    async removeIdentity(cookieStoreId) {
+      try {
+        await browser.contextualIdentities.remove(cookieStoreId);
+      } catch {
+        /* already gone — fine */
+      }
+    },
   };
 }
+
+// Production clock: schedules on the extension's global timer (return value unused).
+export const realClock: Clock = {
+  setTimeout: (fn, ms) => {
+    globalThis.setTimeout(fn, ms);
+  },
+};
