@@ -4,5 +4,6 @@
 
 test-results/
 
-# Built CC extension background (esbuild output; produced at test launch)
+# Built CC extension bundles (esbuild output; produced at test launch)
 extensions/cc/background.js
+extensions/cc/choice.js

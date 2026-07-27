@@ -3,18 +3,21 @@ import { fileURLToPath } from "node:url";
 import * as path from "node:path";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
+const OUTDIR = path.resolve(HERE, "../extensions/cc");
 const ENTRY = path.resolve(HERE, "../src/extension/background.ts");
-const OUTFILE = path.resolve(HERE, "../extensions/cc/background.js");
+const CHOICE_ENTRY = path.resolve(HERE, "../src/extension/choice.ts");
+const OUTFILE = path.resolve(OUTDIR, "background.js");
 
 // Bundle the extension background (engine + real port + tldts + yaml) into one
-// classic script Firefox can load as an MV2 background. Returns the output path.
+// classic script Firefox can load as an MV2 background, plus the keyboard-driven choice
+// page script. Returns the background path (the harness installs the whole dir).
 export async function buildExtension(
   opts: { graceMs?: number; redirectorDelayMs?: number } = {},
 ): Promise<string> {
   await build({
-    entryPoints: [ENTRY],
+    entryPoints: [ENTRY, CHOICE_ENTRY],
     bundle: true,
-    outfile: OUTFILE,
+    outdir: OUTDIR,
     format: "iife",
     platform: "browser",
     target: "firefox115",
