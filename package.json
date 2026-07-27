@@ -12,8 +12,10 @@
     "yaml": "^2.5.0"
   },
   "devDependencies": {
+    "@types/firefox-webext-browser": "^143.0.0",
     "@types/node": "^26.1.1",
     "@types/selenium-webdriver": "^4.1.0",
+    "esbuild": "^0.28.1",
     "fast-check": "^3.22.0",
     "selenium-webdriver": "^4.25.0",
     "typescript": "^7.0.2",

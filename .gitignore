@@ -5,3 +5,6 @@
 tcp/
 
 test-results/
+
+# Built CC extension background (esbuild output; produced at test launch)
+extensions/cc/background.js
