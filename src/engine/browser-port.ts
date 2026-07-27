@@ -101,6 +101,27 @@ export function createBrowserPort(): BrowserPort {
         /* already gone — fine */
       }
     },
+
+    onBeforeSendHeaders(handler) {
+      browser.webRequest.onBeforeSendHeaders.addListener(
+        (d) =>
+          handler({
+            requestId: d.requestId, tabId: d.tabId, url: d.url, type: d.type,
+            requestHeaders: d.requestHeaders ?? [],
+          }).then((r) => r ?? {}), // void -> empty response (proceed)
+        { urls: ["<all_urls>"], types: ["main_frame"] },
+        ["blocking", "requestHeaders"]
+      );
+    },
+
+    async setCookie(details) {
+      await browser.cookies.set(details);
+    },
+
+    async getCookie(details) {
+      const c = await browser.cookies.get(details);
+      return c ? { name: c.name, value: c.value } : null;
+    },
   };
 }
 

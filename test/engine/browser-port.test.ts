@@ -13,6 +13,12 @@ function fakeBrowser() {
         },
         onBeforeRequest_last: null as unknown,
       },
+      onBeforeSendHeaders: {
+        addListener(fn: (d: unknown) => unknown, filter: unknown, extra: unknown) {
+          f.webRequest.onBeforeSendHeaders.onBeforeSendHeaders_last = { fn, filter, extra };
+        },
+        onBeforeSendHeaders_last: null as unknown,
+      },
     },
     tabs: {
       get: async (id: number) => {
@@ -45,6 +51,17 @@ function fakeBrowser() {
       },
       remove: async (csid: string) => { f.contextualIdentities.removed = csid; return { cookieStoreId: csid, name: "tmp1", color: "blue", icon: "circle" }; },
       removed: null as unknown,
+    },
+    cookies: {
+      set: async (d: Record<string, unknown>) => {
+        f.cookies._set = d;
+        return { name: d.name, value: d.value ?? "" };
+      },
+      get: async (d: { name: string; storeId: string }) => {
+        if (d.name === "absent") return null;
+        return { name: d.name, value: "V", storeId: d.storeId };
+      },
+      _set: null as unknown,
     },
     runtime: { sendMessage: async (_ext: string, msg: unknown) => ({ echoed: msg }) },
   };
@@ -102,6 +119,39 @@ describe("createBrowserPort", () => {
   it("sendExternalMessage delegates to runtime.sendMessage", async () => {
     const port = createBrowserPort();
     expect(await port.sendExternalMessage("@mac", { method: "getAssignment" })).toEqual({ echoed: { method: "getAssignment" } });
+  });
+
+  it("registers a blocking main_frame onBeforeSendHeaders listener and maps details", async () => {
+    const port = createBrowserPort();
+    let seen: unknown;
+    port.onBeforeSendHeaders(async (d) => { seen = d; return { requestHeaders: d.requestHeaders }; });
+
+    const reg = f.webRequest.onBeforeSendHeaders.onBeforeSendHeaders_last as { fn: (d: unknown) => Promise<unknown>; filter: unknown; extra: unknown };
+    expect(reg.filter).toEqual({ urls: ["<all_urls>"], types: ["main_frame"] });
+    expect(reg.extra).toEqual(["blocking", "requestHeaders"]);
+
+    const result = await reg.fn({ requestId: "7", tabId: 2, url: "https://a.test/", type: "main_frame", requestHeaders: [{ name: "Cookie", value: "a=1" }] });
+    expect(seen).toMatchObject({ requestId: "7", tabId: 2, url: "https://a.test/", type: "main_frame", requestHeaders: [{ name: "Cookie", value: "a=1" }] });
+    expect(result).toEqual({ requestHeaders: [{ name: "Cookie", value: "a=1" }] });
+  });
+
+  it("coerces a void onBeforeSendHeaders result to an empty response", async () => {
+    const port = createBrowserPort();
+    port.onBeforeSendHeaders(async () => undefined);
+    const reg = f.webRequest.onBeforeSendHeaders.onBeforeSendHeaders_last as { fn: (d: unknown) => Promise<unknown> };
+    expect(await reg.fn({ requestId: "1", tabId: 1, url: "https://a.test/", type: "main_frame", requestHeaders: [] })).toEqual({});
+  });
+
+  it("setCookie delegates to browser.cookies.set with the storeId", async () => {
+    const port = createBrowserPort();
+    await port.setCookie({ name: "s", url: "https://a.test/", value: "1", storeId: "firefox-container-2" });
+    expect(f.cookies._set).toMatchObject({ name: "s", url: "https://a.test/", value: "1", storeId: "firefox-container-2" });
+  });
+
+  it("getCookie maps a hit and returns null for a miss", async () => {
+    const port = createBrowserPort();
+    expect(await port.getCookie({ name: "s", url: "https://a.test/", storeId: "firefox-container-2" })).toEqual({ name: "s", value: "V" });
+    expect(await port.getCookie({ name: "absent", url: "https://a.test/", storeId: "firefox-container-2" })).toBeNull();
   });
 });
 
