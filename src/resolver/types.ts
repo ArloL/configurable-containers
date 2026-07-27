@@ -30,11 +30,19 @@ export interface CookieSpec {
   partitionKey?: { topLevelSite?: string };
 }
 
+// Overlay: a snippet to inject at document_start (the browser.contentScripts.register
+// js/runAt surface). resolve() ignores this; it is consumed by the script-injector, not
+// the router. See the scripts-overlay design spec §5.
+export interface ScriptSpec {
+  run: string; // required: the JS source to inject (inline `code`)
+  at?: "document_start" | "document_end" | "document_idle"; // default "document_start"
+}
+
 export interface Rule {
   match: Matcher[]; // normalized to a list (single -> [single])
   action: Action;
   cookies?: CookieSpec[]; // overlay; resolve() ignores it (consumed by the cookie-seeder)
-  // the `scripts` overlay is a later slice and will add its own field the same way
+  scripts?: ScriptSpec[]; // overlay; resolve() ignores it (consumed by the script-injector)
 }
 
 export interface Group {

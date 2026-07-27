@@ -51,7 +51,7 @@ describe("parseConfig — rule forms", () => {
     expect(c.rules[2].match).toEqual([hm("t.co"), hm("slack-redir.net")]);
   });
 
-  it("surfaces the cookies overlay and still drops the (unimplemented) scripts overlay", () => {
+  it("surfaces both the cookies and scripts overlays on one rule", () => {
     const c = parseConfig(
       `rules:\n  - match: youtube.com\n    open: Temporary\n` +
         `    cookies:\n      - { name: wide, url: "https://www.youtube.com/", value: "1" }\n` +
@@ -61,6 +61,7 @@ describe("parseConfig — rule forms", () => {
       match: [hm("youtube.com")],
       action: { kind: "open", containers: ["Temporary"] },
       cookies: [{ name: "wide", url: "https://www.youtube.com/", value: "1" }],
+      scripts: [{ at: "document_start", run: "noop()" }],
     });
   });
 
