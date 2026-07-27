@@ -63,4 +63,17 @@ export interface BrowserPort {
 
   // MAC coexistence handshake (F7).
   sendExternalMessage(extensionId: string, message: unknown): Promise<unknown>;
+
+  // F10 — temp-container disposal.
+  onTabCreated(handler: (tab: Tab) => void): void;
+  onTabRemoved(handler: (tabId: number) => void): void;
+  queryTabs(filter: { cookieStoreId?: string }): Promise<Tab[]>;
+  removeIdentity(cookieStoreId: string): Promise<void>;
+}
+
+// Injected timing seam so grace/GC delays are deterministic in tests. The disposer
+// only ever schedules (never cancels — keep-alive is the empty re-check), so a single
+// void-returning method is enough and avoids @types/node timer-handle friction.
+export interface Clock {
+  setTimeout(fn: () => void, ms: number): void;
 }

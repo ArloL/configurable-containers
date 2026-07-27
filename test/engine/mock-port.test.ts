@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createMockPort } from "./mock-port";
+import { createMockPort, createFakeClock } from "./mock-port";
 import type { WebRequestDetails } from "../../src/engine/port";
 
 function req(over: Partial<WebRequestDetails> = {}): WebRequestDetails {
@@ -49,5 +49,55 @@ describe("mock port harness", () => {
     expect(await mp.port.sendExternalMessage("@testpilot-containers", { method: "getAssignment", url: "https://free.test/" })).toBeNull();
     mp.setMacThrows(true);
     await expect(mp.port.sendExternalMessage("@testpilot-containers", { method: "getAssignment", url: "https://owned.test/" })).rejects.toThrow();
+  });
+});
+
+describe("mock port — disposal support", () => {
+  it("emitTabCreated adds a tab and fires onTabCreated; queryTabs filters by store", async () => {
+    const mp = createMockPort();
+    const seen: number[] = [];
+    mp.port.onTabCreated((t) => seen.push(t.id));
+    const t = await mp.emitTabCreated({ url: "https://a.test/", cookieStoreId: "firefox-container-1" });
+    expect(seen).toEqual([t.id]);
+    expect(await mp.port.queryTabs({ cookieStoreId: "firefox-container-1" })).toHaveLength(1);
+    expect(await mp.port.queryTabs({ cookieStoreId: "firefox-container-2" })).toHaveLength(0);
+    expect(await mp.port.queryTabs({})).toHaveLength(1);
+  });
+
+  it("emitTabRemoved removes the tab and fires onTabRemoved", async () => {
+    const mp = createMockPort();
+    const removed: number[] = [];
+    mp.port.onTabRemoved((id) => removed.push(id));
+    const t = await mp.emitTabCreated({ url: "https://a.test/", cookieStoreId: "firefox-default" });
+    await mp.emitTabRemoved(t.id);
+    expect(removed).toEqual([t.id]);
+    expect(await mp.port.queryTabs({})).toHaveLength(0);
+  });
+
+  it("removeIdentity deletes the identity and records the call", async () => {
+    const mp = createMockPort();
+    const ci = mp.addIdentity({ name: "tmp1" });
+    await mp.port.removeIdentity(ci.cookieStoreId);
+    expect(await mp.port.getIdentity(ci.cookieStoreId)).toBeNull();
+    expect(mp.calls.removeIdentity).toEqual([ci.cookieStoreId]);
+  });
+
+  it("fake clock fires timers only once their delay elapses", async () => {
+    const fc = createFakeClock();
+    const fired: string[] = [];
+    fc.clock.setTimeout(() => fired.push("a"), 100);
+    await fc.advance(99);
+    expect(fired).toEqual([]);
+    await fc.advance(1);
+    expect(fired).toEqual(["a"]);
+  });
+
+  it("fake clock fires re-scheduled timers within the same advance window", async () => {
+    const fc = createFakeClock();
+    const fired: number[] = [];
+    const tick = () => { fired.push(fired.length); if (fired.length < 3) fc.clock.setTimeout(tick, 10); };
+    fc.clock.setTimeout(tick, 10);
+    await fc.advance(100);
+    expect(fired).toEqual([0, 1, 2]);
   });
 });
