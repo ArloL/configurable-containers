@@ -1,0 +1,6 @@
+[submodule "mac"]
+	path = mac
+	url = https://github.com/mozilla/multi-account-containers
+[submodule "tcp"]
+	path = tcp
+	url = https://github.com/GodKratos/temporary-containers
