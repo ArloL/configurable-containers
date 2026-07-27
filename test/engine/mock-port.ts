@@ -164,6 +164,7 @@ export function createFakeClock(): { clock: Clock; advance(ms: number): Promise<
   return {
     clock,
     async advance(ms) {
+      await flushMicrotasks(); // let pending async work (e.g. the startup sweep) schedule its timers
       const target = now + ms;
       for (;;) {
         let next: [number, { dueAt: number; fn: () => void }] | null = null;
