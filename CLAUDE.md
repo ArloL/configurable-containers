@@ -20,9 +20,19 @@ browser.
 Layers (mirror TESTING.md): L1 `src/resolver/` (pure) · L2 `src/matcher/` · PSL
 `src/psl/` · config `src/config/` · L3 `src/engine/` (interception engine +
 disposer, tested against a mock `browser.*` + a fake clock) · L4 real Firefox
-(`harness/`, `test/e2e/`, Selenium/geckodriver). The engine and the disposer are
-**siblings**, both wired at the extension entry `src/extension/background.ts` — the
-disposer is not nested in `createEngine`.
+(`harness/`, `test/e2e/`, Selenium/geckodriver). The engine, disposer,
+cookie-seeder, script-injector, redirector-closer, and picker are all **siblings**,
+wired at the extension entry `src/extension/background.ts` — none is nested in
+`createEngine`. The choice screen / reopen-picker UI lives in `src/extension/choice.ts`
+(a separate esbuild entry point bundled to `extensions/cc/choice.js`, loaded by
+`choice.html`); the pure protocol it shares with `src/engine/picker.ts` is
+`src/extension/picker-protocol.ts`.
+
+`createEngine` returns `{ reopen }` — the F1-guarded reopen effect. The picker calls
+`engine.reopen` (injected) so its choice-driven reopen goes through the
+`freshlyReopened` guard; never reopen a tab by hand in the picker, and don't make
+`createEngine` return `void` again — the picker's correctness depends on reusing the
+engine's reopen, not duplicating it.
 
 ## Firefox extension constraints (learned through debugging)
 
@@ -57,6 +67,12 @@ disposer is not nested in `createEngine`.
   artifact and flake the disposal e2e. Don't re-enable parallelism.
 - esbuild constant-folds numbers in the bundle (`300000` → `3e5`); assert against
   esbuild's form, not the source literal.
+- **`commands.onCommand` can't be driven by Selenium.** Firefox fires keyboard-command
+  shortcuts at the browser-*chrome* level; Selenium's W3C actions deliver keys to web
+  *content*, so the reopen-picker command (`Ctrl+Shift+O`, manifest `commands`) is
+  L3-tested only. Its `test/e2e/choice.test.ts` case is `it.skip` for this reason —
+  don't "fix" the skip by enabling it or swapping drivers; the handler logic is covered
+  at L3 and the shared choice page + reopen are L4-proven by the choice-screen cases.
 
 ## e2e harness (`harness/`, `extensions/probe/`)
 
