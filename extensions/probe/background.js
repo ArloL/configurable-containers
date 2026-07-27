@@ -1,8 +1,19 @@
 const REPORT_PREFIX = "CSID:";
 
-// Surface a tab's cookieStoreId into document.title (CSID:<store>, unchanged) AND
-// its container name into a data attribute, so an external driver can read both.
-async function reportTab(tabId, cookieStoreId) {
+// Names of cookies that would be sent to `url` in `storeId` (getAll sees httpOnly too).
+async function cookieNames(url, storeId) {
+  try {
+    const cs = await browser.cookies.getAll({ url, storeId });
+    return cs.map((c) => c.name).join(",");
+  } catch (_e) {
+    return "";
+  }
+}
+
+// Surface a tab's cookieStoreId into document.title (CSID:<store>, unchanged) AND its
+// container name + cross-store cookie names into data attributes, so an external
+// driver can read both routing and F11-boundary observations.
+async function reportTab(tabId, cookieStoreId, url) {
   let name = "";
   try {
     name = (await browser.contextualIdentities.get(cookieStoreId)).name;
@@ -15,12 +26,16 @@ async function reportTab(tabId, cookieStoreId) {
   } catch (_e) {
     // ignore
   }
+  const here = await cookieNames(url, cookieStoreId);
+  const def = await cookieNames(url, "firefox-default");
   try {
     await browser.tabs.executeScript(tabId, {
       code:
         "document.title = " + JSON.stringify(REPORT_PREFIX + cookieStoreId) + ";" +
         "document.documentElement.setAttribute('data-cc-container', " + JSON.stringify(name) + ");" +
-        "document.documentElement.setAttribute('data-cc-containers', " + JSON.stringify(list) + ");",
+        "document.documentElement.setAttribute('data-cc-containers', " + JSON.stringify(list) + ");" +
+        "document.documentElement.setAttribute('data-cc-cookies-here', " + JSON.stringify(here) + ");" +
+        "document.documentElement.setAttribute('data-cc-cookies-default', " + JSON.stringify(def) + ");",
     });
   } catch (_e) {
     // about:, view-source:, moz-extension: pages cannot be injected — ignore.
@@ -29,7 +44,7 @@ async function reportTab(tabId, cookieStoreId) {
 
 browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status === "complete" && /^https?:/.test(tab.url || "")) {
-    reportTab(tabId, tab.cookieStoreId);
+    reportTab(tabId, tab.cookieStoreId, tab.url);
   }
 });
 

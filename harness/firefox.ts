@@ -113,6 +113,29 @@ export async function readContainerList(driver: WebDriver): Promise<string[]> {
   return raw ? raw.split(",") : [];
 }
 
+// The Cookie header the server received (F12 wire side), reflected into the body.
+export async function readSeenCookie(driver: WebDriver): Promise<string> {
+  return (await driver.executeScript(
+    "return document.body.getAttribute('data-seen-cookie') || '';"
+  )) as string;
+}
+
+// Cookie names visible in the tab's OWN store for its URL (probe getAll).
+export async function readCookieNamesHere(driver: WebDriver): Promise<string[]> {
+  const raw = (await driver.executeScript(
+    "return document.documentElement.getAttribute('data-cc-cookies-here') || '';"
+  )) as string;
+  return raw ? raw.split(",") : [];
+}
+
+// Cookie names visible in the DEFAULT store for the tab's URL — the F11 counter-check.
+export async function readCookieNamesDefault(driver: WebDriver): Promise<string[]> {
+  const raw = (await driver.executeScript(
+    "return document.documentElement.getAttribute('data-cc-cookies-default') || '';"
+  )) as string;
+  return raw ? raw.split(",") : [];
+}
+
 // Poll window handles (WITHOUT re-navigating them — CC does the reopening) until a
 // tab shows `url` in a non-default container; return its store + reported name.
 export async function awaitContainerTab(
