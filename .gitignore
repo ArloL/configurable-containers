@@ -2,8 +2,6 @@
 
 # Add custom entries after this line to be preserved during automated updates
 
-tcp/
-
 test-results/
 
 # Built CC extension background (esbuild output; produced at test launch)
