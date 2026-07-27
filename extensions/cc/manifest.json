@@ -19,5 +19,11 @@
     "scripts": [
       "background.js"
     ]
+  },
+  "commands": {
+    "reopen-picker": {
+      "suggested_key": { "default": "Ctrl+Shift+O" },
+      "description": "Reopen this tab in a container"
+    }
   }
 }

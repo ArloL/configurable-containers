@@ -59,7 +59,7 @@ export async function launch(opts: LaunchOptions = {}): Promise<Session> {
   options.setPreference("privacy.userContext.enabled", true);
   options.setPreference("xpinstall.signatures.required", false);
   // Resolve the test's fake domains straight to loopback (cross-platform, no DNS).
-  options.setPreference("network.dns.localDomains", "work.example,nomatch.example,redirect.example");
+  options.setPreference("network.dns.localDomains", "work.example,nomatch.example,redirect.example,figma.example,youtube.example");
 
   const firefoxBin = process.env.FIREFOX_BIN;
   if (firefoxBin) {
