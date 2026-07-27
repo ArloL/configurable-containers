@@ -39,8 +39,15 @@ function fakeBrowser() {
         addListener: (fn: (id: number) => void) => { f.tabs.onRemoved_fn = fn; },
         onRemoved_fn: null as unknown,
       },
+      onUpdated: {
+        addListener(fn: (id: number, info: unknown, tab: unknown) => void) {
+          f.tabs.onUpdated_fn = fn;
+        },
+        onUpdated_fn: null as unknown,
+      },
       onCreated_fn: null as unknown,
       onRemoved_fn: null as unknown,
+      onUpdated_fn: null as unknown,
     },
     contextualIdentities: {
       query: async (_d: object) => [{ cookieStoreId: "firefox-container-2", name: "Work", color: "blue", icon: "circle" }],
@@ -191,6 +198,22 @@ describe("createBrowserPort — disposal methods", () => {
     (f.tabs.onRemoved_fn as (id: number) => void)(5);
     expect(created).toEqual([5]);
     expect(removed).toEqual([5]);
+  });
+
+  it("onTabUpdated maps tab + changeInfo to the handler", () => {
+    const port = createBrowserPort();
+    const seen: { tab: unknown; info: unknown }[] = [];
+    port.onTabUpdated((tab, info) => { seen.push({ tab, info }); });
+
+    const fn = f.tabs.onUpdated_fn as (id: number, info: unknown, raw: unknown) => void;
+    fn(3, { status: "complete" }, { id: 3, url: "https://a.test/", cookieStoreId: "firefox-default", index: 0, active: true });
+
+    expect(seen).toEqual([
+      {
+        tab: { id: 3, url: "https://a.test/", cookieStoreId: "firefox-default", index: 0, active: true, openerTabId: undefined },
+        info: { status: "complete" },
+      },
+    ]);
   });
 
   it("queryTabs maps results; removeIdentity delegates", async () => {

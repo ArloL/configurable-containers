@@ -1,5 +1,5 @@
 import type {
-  BrowserPort, Clock, ContextualIdentity, CreateIdentityProps, CreateTabProps, RegisteredContentScript, Tab, WebRequestDetails,
+  BrowserPort, Clock, ContextualIdentity, CreateIdentityProps, CreateTabProps, RegisteredContentScript, Tab, TabUpdateInfo, WebRequestDetails,
 } from "./port";
 
 function mapTab(t: browser.tabs.Tab): Tab {
@@ -88,6 +88,13 @@ export function createBrowserPort(): BrowserPort {
 
     onTabRemoved(handler) {
       browser.tabs.onRemoved.addListener((tabId) => handler(tabId));
+    },
+
+    onTabUpdated(handler) {
+      browser.tabs.onUpdated.addListener((_id, info, tab) => {
+        const status = info.status === "loading" || info.status === "complete" ? info.status : undefined;
+        handler(mapTab(tab), { status });
+      });
     },
 
     async queryTabs(filter) {
