@@ -44,6 +44,12 @@ describe("parseConfig — real configurable-containers.config.yaml", () => {
     expect(containers(ruleForHost("youtube.com")!.action)).toContain("Temporary");
   });
 
+  it("parses the youtube cookie overlays from the real config", () => {
+    const cookies = ruleForHost("youtube.com")?.cookies;
+    expect(cookies?.map((c) => c.name)).toEqual(["wide", "SOCS"]);
+    expect(cookies?.[1]).toMatchObject({ name: "SOCS", secure: true, sameSite: "lax" });
+  });
+
   it("parses the google and microsoft groups", () => {
     const hasHost = (g: { match: unknown[] }, h: string) => g.match.some((m) => hostOf(m) === h);
     expect(config.groups.some((g) => hasHost(g, "google.com") && hasHost(g, "youtube.com"))).toBe(true);
