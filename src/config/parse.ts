@@ -2,7 +2,7 @@
 // See docs/superpowers/specs/2026-07-10-config-parser-design.md.
 import { parse, YAMLParseError } from "yaml";
 import { hostMatcher, type HostMatcher } from "../matcher/matcher";
-import type { Action, Config, Group, Matcher, Rule } from "../resolver/types";
+import type { Action, Config, CookieSpec, Group, Matcher, Rule } from "../resolver/types";
 
 export class ConfigError extends Error {
   readonly path?: string;
@@ -21,6 +21,11 @@ const ACTION_KEYS = ["open", "inherit", "ignore", "redirector"] as const;
 const ALLOWED_RULE_KEYS = new Set([
   "match", "open", "default", "inherit", "ignore", "redirector", "cookies", "scripts",
 ]);
+const ALLOWED_COOKIE_KEYS = new Set([
+  "name", "url", "value", "domain", "path", "secure", "httpOnly",
+  "sameSite", "expirationDate", "firstPartyDomain", "partitionKey",
+]);
+const SAME_SITE = new Set(["no_restriction", "lax", "strict"]);
 
 function isMapping(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -79,6 +84,66 @@ function parseOpen(raw: Record<string, unknown>, path: string): Action {
   return { kind: "open", containers };
 }
 
+function parseCookie(raw: unknown, path: string): CookieSpec {
+  if (!isMapping(raw)) throw new ConfigError(`${path} must be a mapping`, { path });
+  for (const k of Object.keys(raw)) {
+    if (!ALLOWED_COOKIE_KEYS.has(k)) throw new ConfigError(`unknown key "${k}" in ${path}`, { path });
+  }
+
+  const spec = {} as CookieSpec;
+
+  for (const key of ["name", "url"] as const) {
+    const v = raw[key];
+    if (typeof v !== "string" || v === "") {
+      throw new ConfigError(`${path}.${key} is required and must be a non-empty string`, { path: `${path}.${key}` });
+    }
+    spec[key] = v;
+  }
+
+  for (const key of ["value", "domain", "path", "firstPartyDomain"] as const) {
+    if (key in raw) {
+      const v = raw[key];
+      if (typeof v !== "string") throw new ConfigError(`${path}.${key} must be a string`, { path: `${path}.${key}` });
+      spec[key] = v;
+    }
+  }
+
+  for (const key of ["secure", "httpOnly"] as const) {
+    if (key in raw) {
+      const v = raw[key];
+      if (typeof v !== "boolean") throw new ConfigError(`${path}.${key} must be a boolean`, { path: `${path}.${key}` });
+      spec[key] = v;
+    }
+  }
+
+  if ("sameSite" in raw) {
+    const v = raw.sameSite;
+    if (typeof v !== "string" || !SAME_SITE.has(v)) {
+      throw new ConfigError(`${path}.sameSite must be one of no_restriction, lax, strict`, { path: `${path}.sameSite` });
+    }
+    spec.sameSite = v as CookieSpec["sameSite"];
+  }
+
+  if ("expirationDate" in raw) {
+    const v = raw.expirationDate;
+    if (typeof v !== "number") throw new ConfigError(`${path}.expirationDate must be a number`, { path: `${path}.expirationDate` });
+    spec.expirationDate = v;
+  }
+
+  if ("partitionKey" in raw) {
+    const v = raw.partitionKey;
+    if (!isMapping(v)) throw new ConfigError(`${path}.partitionKey must be an object`, { path: `${path}.partitionKey` });
+    spec.partitionKey = v as CookieSpec["partitionKey"];
+  }
+
+  return spec;
+}
+
+function parseCookies(raw: unknown, path: string): CookieSpec[] {
+  if (!Array.isArray(raw)) throw new ConfigError(`${path}.cookies must be a list`, { path: `${path}.cookies` });
+  return raw.map((entry, j) => parseCookie(entry, `${path}.cookies[${j}]`));
+}
+
 function parseRule(raw: unknown, i: number): Rule {
   const path = `rules[${i}]`;
   if (!isMapping(raw)) throw new ConfigError(`${path} must be a mapping`, { path });
@@ -128,6 +193,13 @@ function parseRule(raw: unknown, i: number): Rule {
       throw new ConfigError(`${path}.default "${def}" is not one of open: [${action.containers.join(", ")}]`, { path: `${path}.default` });
     }
     action = { ...action, default: def };
+  }
+
+  if ("cookies" in raw) {
+    if (action.kind === "ignore") {
+      throw new ConfigError(`${path}.cookies is not allowed on an "ignore" rule`, { path: `${path}.cookies` });
+    }
+    return { match: matchers, action, cookies: parseCookies(raw.cookies, path) };
   }
 
   return { match: matchers, action };

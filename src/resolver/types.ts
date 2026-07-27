@@ -12,10 +12,29 @@ export type Action =
   | { kind: "ignore" }
   | { kind: "redirector" };
 
+// Overlay: a cookie to seed into the tab's own container (the complete
+// browser.cookies.set surface minus storeId — the seeder always forces storeId to
+// the tab's own cookieStoreId; see the cookies-overlay design spec §5). resolve()
+// ignores this; it is consumed by the cookie-seeder, not the router.
+export interface CookieSpec {
+  name: string;
+  url: string;
+  value?: string;
+  domain?: string;
+  path?: string;
+  secure?: boolean;
+  httpOnly?: boolean;
+  sameSite?: "no_restriction" | "lax" | "strict";
+  expirationDate?: number;
+  firstPartyDomain?: string;
+  partitionKey?: { topLevelSite?: string };
+}
+
 export interface Rule {
   match: Matcher[]; // normalized to a list (single -> [single])
   action: Action;
-  // overlays (cookies/scripts) may exist on the real rule but resolve() ignores them
+  cookies?: CookieSpec[]; // overlay; resolve() ignores it (consumed by the cookie-seeder)
+  // the `scripts` overlay is a later slice and will add its own field the same way
 }
 
 export interface Group {

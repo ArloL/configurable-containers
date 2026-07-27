@@ -283,7 +283,7 @@ with:
     if (action.kind === "ignore") {
       throw new ConfigError(`${path}.cookies is not allowed on an "ignore" rule`, { path: `${path}.cookies` });
     }
-    return { match: matchers, action, cookies: parseCookies(raw, path) };
+    return { match: matchers, action, cookies: parseCookies(raw.cookies, path) };
   }
 
   return { match: matchers, action };

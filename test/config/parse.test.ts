@@ -51,12 +51,17 @@ describe("parseConfig — rule forms", () => {
     expect(c.rules[2].match).toEqual([hm("t.co"), hm("slack-redir.net")]);
   });
 
-  it("tolerates cookies/scripts overlays without surfacing them", () => {
+  it("surfaces the cookies overlay and still drops the (unimplemented) scripts overlay", () => {
     const c = parseConfig(
       `rules:\n  - match: youtube.com\n    open: Temporary\n` +
-        `    cookies:\n      - { name: wide, url: "https://www.youtube.com/", value: "1" }\n`,
+        `    cookies:\n      - { name: wide, url: "https://www.youtube.com/", value: "1" }\n` +
+        `    scripts:\n      - { at: document_start, run: "noop()" }\n`,
     );
-    expect(c.rules[0]).toEqual({ match: [hm("youtube.com")], action: { kind: "open", containers: ["Temporary"] } });
+    expect(c.rules[0]).toEqual({
+      match: [hm("youtube.com")],
+      action: { kind: "open", containers: ["Temporary"] },
+      cookies: [{ name: "wide", url: "https://www.youtube.com/", value: "1" }],
+    });
   });
 
   it("returns empty config for empty / comment-only input", () => {
