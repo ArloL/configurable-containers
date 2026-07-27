@@ -63,6 +63,14 @@ function fakeBrowser() {
       },
       _set: null as unknown,
     },
+    contentScripts: {
+      register: async (d: unknown) => {
+        f.contentScripts._registered = d;
+        return { unregister: async () => { f.contentScripts._unregistered = true; } };
+      },
+      _registered: null as unknown,
+      _unregistered: false,
+    },
     runtime: { sendMessage: async (_ext: string, msg: unknown) => ({ echoed: msg }) },
   };
 }
@@ -152,6 +160,23 @@ describe("createBrowserPort", () => {
     const port = createBrowserPort();
     expect(await port.getCookie({ name: "s", url: "https://a.test/", storeId: "firefox-container-2" })).toEqual({ name: "s", value: "V" });
     expect(await port.getCookie({ name: "absent", url: "https://a.test/", storeId: "firefox-container-2" })).toBeNull();
+  });
+
+  it("registerContentScript delegates to browser.contentScripts.register and returns a handle", async () => {
+    const port = createBrowserPort();
+    const handle = await port.registerContentScript({
+      matches: ["*://work.example/*"],
+      js: [{ code: "localStorage.setItem('cc_script','1');" }],
+      runAt: "document_start",
+    });
+    expect(f.contentScripts._registered).toMatchObject({
+      matches: ["*://work.example/*"],
+      js: [{ code: "localStorage.setItem('cc_script','1');" }],
+      runAt: "document_start",
+    });
+    expect(f.contentScripts._unregistered).toBe(false);
+    await handle.unregister();
+    expect(f.contentScripts._unregistered).toBe(true);
   });
 });
 

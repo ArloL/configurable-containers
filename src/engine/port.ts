@@ -56,6 +56,21 @@ export interface Cookie {
   value: string;
 }
 
+export type RunAt = "document_start" | "document_end" | "document_idle";
+
+// A deliberately narrow slice of Firefox's RegisteredContentScriptOptions: only the
+// fields the script-injector uses. cookieStoreId is OMITTED so the seam can't scope a
+// script to a container (F11: scripts run wherever the URL loads).
+export interface RegisterContentScriptDetails {
+  matches: string[];
+  js: { code: string }[];
+  runAt: RunAt;
+}
+
+export interface RegisteredContentScript {
+  unregister(): Promise<void>;
+}
+
 export interface Tab {
   id: number;
   url: string; // "" / about:blank for a fresh tab
@@ -123,6 +138,10 @@ export interface BrowserPort {
   ): void;
   setCookie(details: SetCookieDetails): Promise<void>;
   getCookie(details: GetCookieDetails): Promise<Cookie | null>;
+
+  // Scripts overlay — register a content script (inline code) at a runAt. The injector
+  // registers once at startup; Firefox injects at runAt for matching pages (F12).
+  registerContentScript(details: RegisterContentScriptDetails): Promise<RegisteredContentScript>;
 }
 
 // Injected timing seam so grace/GC delays are deterministic in tests. The disposer
