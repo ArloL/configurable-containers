@@ -1,33 +1,38 @@
 // Launch a HEADED Firefox with CC + probe for manual interactive testing.
 // Run: npx tsx harness/manual.ts
 //
-// This builds the CC extension (same build as the e2e tests), starts the local
-// test server, and opens a real Firefox window with CC + probe installed. The
-// fake domains (work.example, figma.example, youtube.example, etc.) resolve to
-// loopback so you can navigate to them directly.
+// This builds the CC extension with YOUR REAL config (configurable-containers.config.yaml),
+// starts a local test server (for the cookies overlay wire-side check), and opens a real
+// Firefox window with CC + probe installed. Live sites resolve normally — navigate to
+// github.com, youtube.com, notion.com, etc. and CC will route per your config.
+//
+// The probe writes CSID:<store> into the tab title so you can see which container
+// each tab landed in.
 //
 // Ctrl+C closes Firefox and the server.
 
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import * as path from "node:path";
 import { launch, type Session } from "./firefox";
 
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const CONFIG_PATH = path.resolve(HERE, "../configurable-containers.config.yaml");
+
 async function main() {
-  const session: Session = await launch({ extensions: ["probe", "cc"], headless: false });
+  const configYaml = readFileSync(CONFIG_PATH, "utf-8");
+  const session: Session = await launch({
+    extensions: ["probe", "cc"],
+    headless: false,
+    configYaml,
+    localDomains: null, // live sites resolve normally
+  });
 
-  const port = new URL(session.serverUrl).port;
-  const sites: Array<[string, string]> = [
-    ["work.example", "routes to Work (cookies + scripts overlay)"],
-    ["figma.example", "multi-open [Personal, Work], no default → choice screen"],
-    ["youtube.example", "default: Temporary → fresh tmp; reopen picker → Personal"],
-    ["redirect.example", "redirector rule (auto-closes after 2s if stranded)"],
-    ["nomatch.example", "unmatched → fresh tmp"],
-  ];
-
-  console.log("\n=== Configurable Containers — manual test session ===\n");
-  console.log(`Server:  ${session.serverUrl}`);
-  console.log("Try navigating to:");
-  for (const [host, desc] of sites) {
-    console.log(`  http://${host}:${port}/   — ${desc}`);
-  }
+  console.log("\n=== Configurable Containers — manual test session (live) ===\n");
+  console.log(`Config:  ${CONFIG_PATH}`);
+  console.log(`Server:  ${session.serverUrl}  (for cookies overlay wire-side checks)`);
+  console.log("\nThe probe writes CSID:<store> into the tab title so you can see the");
+  console.log("container assignment at a glance. Try navigating to any site in your config.");
   console.log("\nPress Ctrl+C to close Firefox and exit.\n");
 
   process.on("SIGINT", async () => {

@@ -1,18 +1,6 @@
-// Fixed config bundled into the L4 extension. Config-from-storage / the editor UI
-// are a later slice; this is enough to prove routing end-to-end in real Firefox.
-export const BUNDLED_CONFIG_YAML = `
-rules:
-  - match: work.example
-    open: Work
-    cookies:
-      - { name: seed, url: "http://work.example/", value: "1" }
-    scripts:
-      - { at: document_start, run: "localStorage.setItem('cc_script', '1');" }
-  - match: redirect.example
-    redirector: true
-  - match: figma.example
-    open: [Personal, Work]
-  - match: youtube.example
-    open: [Temporary, Personal]
-    default: Temporary
-`;
+// The config YAML is injected at build time by esbuild via __CC_CONFIG_YAML__
+// (see harness/build-extension.ts). Config-from-storage / the editor UI are a
+// later slice; for now the config is baked in at build time — the test harness
+// injects the test config, the manual launcher injects the user's real config.
+declare const __CC_CONFIG_YAML__: string;
+export const BUNDLED_CONFIG_YAML: string = __CC_CONFIG_YAML__;
