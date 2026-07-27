@@ -54,6 +54,11 @@ export function createEngine(opts: EngineOptions): void {
   const { port, config, deps, onChoice } = opts;
   const registry = createRegistry(port, opts.tmpSuffix ?? defaultSuffix());
   const handled = new Set<string>();
+  // Tab ids of tabs we just created by reopening. Their FIRST navigation must be
+  // left alone: in a real browser onBeforeRequest fires before the new tab's url
+  // commits, so it still reads as about:blank and resolve() cannot tell it is
+  // already correctly contained — without this guard it would reopen forever (F1).
+  const freshlyReopened = new Set<number>();
 
   port.onBeforeRequest(async (d) => {
     // (0) Scope: only top-level http(s) navigations.
@@ -63,6 +68,12 @@ export function createEngine(opts: EngineOptions): void {
     // (1) F1 loop guard — re-fires of a request we already acted on.
     const key = d.requestId + "+" + d.url;
     if (handled.has(key)) return { cancel: true };
+
+    // (1b) F1 loop guard — the first nav of a tab we just reopened into.
+    if (freshlyReopened.has(d.tabId)) {
+      freshlyReopened.delete(d.tabId);
+      return;
+    }
 
     // (2) Assemble NavContext.
     const tab = await port.getTab(d.tabId);
@@ -89,13 +100,14 @@ export function createEngine(opts: EngineOptions): void {
         handled.add(key); // guard BEFORE the async effects
         try {
           const store = await registry.toStoreId(decision.into);
-          await port.createTab({
+          const created = await port.createTab({
             url: d.url,
             cookieStoreId: store,
             index: tab.index,
             active: tab.active,
             openerTabId: tab.openerTabId,
           });
+          freshlyReopened.add(created.id); // leave its first nav alone (see 1b)
           await port.removeTab(tab.id);
         } catch (e) {
           handled.delete(key); // fail open — allow a retry
