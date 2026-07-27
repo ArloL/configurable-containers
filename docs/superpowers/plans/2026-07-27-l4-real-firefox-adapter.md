@@ -417,10 +417,14 @@ Create `extensions/cc/manifest.json`:
   "name": "configurable-containers",
   "version": "0.0.1",
   "browser_specific_settings": { "gecko": { "id": "cc@configurable-containers.test" } },
-  "permissions": ["webRequest", "webRequestBlocking", "tabs", "contextualIdentities", "<all_urls>"],
+  "permissions": ["webRequest", "webRequestBlocking", "cookies", "tabs", "contextualIdentities", "<all_urls>"],
   "background": { "scripts": ["background.js"] }
 }
 ```
+
+> **`cookies` is required:** Firefox throws `No permission for cookieStoreId` on
+> `tabs.create({ cookieStoreId })` without it, so every reopen fails. (Discovered
+> during L4 — see the design spec §9.)
 
 - [ ] **Step 2: Write the failing test**
 
