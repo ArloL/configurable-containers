@@ -136,6 +136,22 @@ export async function readCookieNamesDefault(driver: WebDriver): Promise<string[
   return raw ? raw.split(",") : [];
 }
 
+// The localStorage.cc_script value the page's own first script observed — "1" iff CC's
+// document_start script ran before the page's scripts (F12 timing proof).
+export async function readScriptAtStart(driver: WebDriver): Promise<string> {
+  return (await driver.executeScript(
+    "return document.documentElement.getAttribute('data-cc-script-at-start') || '';"
+  )) as string;
+}
+
+// Generic localStorage read in the current tab (containers partition localStorage, so
+// this reads the current tab's own container partition).
+export async function readLocalStorage(driver: WebDriver, key: string): Promise<string | null> {
+  return (await driver.executeScript(
+    `return localStorage.getItem(${JSON.stringify(key)});`
+  )) as string | null;
+}
+
 // Poll window handles (WITHOUT re-navigating them — CC does the reopening) until a
 // tab shows `url` in a non-default container; return its store + reported name.
 export async function awaitContainerTab(
