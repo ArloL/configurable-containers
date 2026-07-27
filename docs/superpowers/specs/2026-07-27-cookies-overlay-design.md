@@ -44,8 +44,6 @@ action resolved to (`open` / `inherit` / `redirector` / auto-name), **except `ig
   (`userScripts` at `document_start`), so it is designed and built separately.
 - **Match patterns / regex in `match`** — the parser still accepts bare hostnames only
   (unchanged); a `cookies` rule's `match` is bare-host like every other rule today.
-- **`firstPartyDomain` / first-party isolation** — TCP threads it through; our cookie
-  list doesn't use it. `CookieSpec` omits it (can be added later without a redesign).
 - **Absent-only seeding** — rejected in favour of TC parity; see §4.
 
 ## 2. Architecture & model
@@ -154,13 +152,20 @@ seeding as part of this slice.
 
 ## 5. Config parser & types
 
-- **`CookieSpec`** (new; mirrors the `browser.cookies.set` surface we use):
+- **`CookieSpec`** (new; the **complete** `browser.cookies.set` detail surface, minus
+  `storeId`):
   - `name: string` — **required**
   - `url: string` — **required** (scopes the cookie: domain + path + scheme)
   - `value?: string` — defaults to `""`
+  - `domain?: string`, `path?: string`
   - `secure?: boolean`, `httpOnly?: boolean`
   - `sameSite?: "no_restriction" | "lax" | "strict"`
-  - `expirationDate?: number`, `path?: string`, `domain?: string`
+  - `expirationDate?: number` (seconds since epoch; session cookie when omitted)
+  - `firstPartyDomain?: string` (first-party isolation)
+  - `partitionKey?: { topLevelSite?: string }` (partitioned/CHIPS cookies)
+  - **`storeId` is deliberately *not* a field.** The seeder always sets it to the tab's
+    own `cookieStoreId`; exposing it would let config write across the container
+    boundary, which is exactly the F11 invariant this overlay must preserve.
 - **`Rule.cookies?: CookieSpec[]`** — the resolver keeps ignoring it (its type comment
   already notes overlays exist on the real rule but `resolve()` ignores them). A future
   `scripts` slice adds its own `Rule.scripts?` field the same way.
@@ -168,8 +173,9 @@ seeding as part of this slice.
   validates each entry, raising `ConfigError` with a path on:
   - `cookies` not a list, or an entry that isn't a mapping;
   - missing/empty/non-string `name` or `url`;
-  - wrong-typed optional fields (`value`/`path`/`domain` non-string, `secure`/`httpOnly`
-    non-bool, `sameSite` outside the allowed set, `expirationDate` non-number);
+  - wrong-typed optional fields (`value`/`path`/`domain`/`firstPartyDomain` non-string,
+    `secure`/`httpOnly` non-bool, `sameSite` outside the allowed set, `expirationDate`
+    non-number, `partitionKey` not an object);
   - unknown keys inside a cookie entry;
   - **`cookies` present on an `ignore` rule** — CONFIG.md forbids overlays on `ignore`.
 
