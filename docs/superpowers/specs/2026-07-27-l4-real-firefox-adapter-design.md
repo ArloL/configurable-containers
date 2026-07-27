@@ -181,10 +181,16 @@ runtime, where the real `browser.*` exists.
   "name": "configurable-containers",
   "version": "0.0.1",
   "browser_specific_settings": { "gecko": { "id": "cc@configurable-containers.test" } },
-  "permissions": ["webRequest", "webRequestBlocking", "tabs", "contextualIdentities", "<all_urls>"],
+  "permissions": ["webRequest", "webRequestBlocking", "cookies", "tabs", "contextualIdentities", "<all_urls>"],
   "background": { "scripts": ["background.js"] }
 }
 ```
+
+**`cookies` is required, not optional:** Firefox rejects `tabs.create({ cookieStoreId })`
+into a container with `Error: No permission for cookieStoreId: …` unless the
+extension holds the `cookies` permission. Without it every reopen throws, the
+engine fail-opens, and nothing is routed. (The probe has `cookies` for the same
+reason.)
 
 `src/extension/config.ts` — the bundled fixed config, a YAML string run through the
 real parser (so L4 exercises parser → matcher → resolver → engine end-to-end):
@@ -356,3 +362,39 @@ the observation mechanism for everything above it.
 L4/L5 "web-ext + Playwright" line is stale (the driver is Selenium/geckodriver).
 Since this slice is the first real L4, updating that row is a natural tag-along but
 not required here.
+
+## 9. Findings from real Firefox (what the mocks missed)
+
+L4 did its job — running the mock-tested engine in real Firefox 153 (release,
+unsigned temporary install) surfaced two defects the L3 mocks could not:
+
+1. **Missing `cookies` permission** (§4) — `tabs.create({ cookieStoreId })` throws
+   `No permission for cookieStoreId` without it. Fix: add `cookies` to the manifest.
+   The mock port never enforced this, so L3 was blind to it.
+
+2. **F1 reopen loop — the reopened tab re-reopens forever.** When CC creates the new
+   container tab, its `onBeforeRequest` fires **before the tab's `url` commits**, so
+   the tab still reads as `about:blank`. `buildNavContext` mapped that to
+   `current = null`, `resolve()` could not tell the tab was *already* in the target
+   container, and it reopened again — spawning/closing tabs endlessly. The structural
+   F2 "already-contained → stay" guard the L3 spine relied on never triggered because
+   it keys off `current`, which was null. The L3 mocks missed this because the mock
+   `createTab` set the new tab's `url` to the target immediately; real event ordering
+   does not.
+
+   **Fix (engine):** track the tab id of every tab we create by reopening, and leave
+   its **first** navigation alone (`freshlyReopened` set + a one-shot guard in the
+   handler). This is the tab-scoped F1 guard the spine deferred as "the
+   different-requestId-same-tab case"; the reopen-into-a-new-tab path makes it
+   mandatory, not optional. Covered by a new L3 mock test that models the
+   blank-url reopened tab.
+
+Note this required editing `src/engine/engine.ts` — the slice's original assumption
+that the engine would not change was wrong. That is the expected value of L4: the
+deterministic levels prove logic, the real browser proves the logic survives real
+event ordering.
+
+**Not needed:** the extension loads and uses blocking `webRequest` on **release**
+Firefox via unsigned temporary install — no Firefox Developer/Nightly/ESR build,
+signing, or pre-seeded profile is required. (An earlier mis-bisection pointed at
+`webRequest`/signing; it was the `cookies` gap plus the reopen loop.)
