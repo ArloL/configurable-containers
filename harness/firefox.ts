@@ -14,6 +14,11 @@ const EXT_DIRS: Record<"probe" | "cc", string> = {
   cc: path.resolve(HERE, "../extensions/cc"),
 };
 
+// Default fake domains resolved to loopback for e2e tests.
+const DEFAULT_LOCAL_DOMAINS = [
+  "work.example", "nomatch.example", "redirect.example", "figma.example", "youtube.example",
+];
+
 export interface Session {
   driver: WebDriver;
   serverUrl: string;
@@ -25,6 +30,8 @@ export interface LaunchOptions {
   ccGraceMs?: number; // grace passed to the cc build (default: production 300000)
   ccRedirectorDelayMs?: number; // redirector-close delay (default: production 2000)
   headless?: boolean; // default true; set false for manual/interactive testing
+  configYaml?: string; // override the bundled config (manual launcher passes the real one)
+  localDomains?: string[] | null; // domains resolved to loopback; default = test domains, null = none
 }
 
 // Zip an unpacked extension directory into a temporary .xpi (geckodriver's
@@ -39,7 +46,7 @@ function zipDir(dir: string): { xpiPath: string; cleanup: () => void } {
 // Build (cc only) then zip the given extension into an installable .xpi.
 async function buildXpiFor(
   ext: "probe" | "cc",
-  opts: { graceMs?: number; redirectorDelayMs?: number },
+  opts: { graceMs?: number; redirectorDelayMs?: number; configYaml?: string },
 ): Promise<{ xpiPath: string; cleanup: () => void }> {
   if (ext === "cc") await buildExtension(opts);
   return zipDir(EXT_DIRS[ext]);
@@ -51,7 +58,13 @@ export async function launch(opts: LaunchOptions = {}): Promise<Session> {
 
   const xpis: { xpiPath: string; cleanup: () => void }[] = [];
   for (const ext of extensions) {
-    xpis.push(await buildXpiFor(ext, { graceMs: opts.ccGraceMs, redirectorDelayMs: opts.ccRedirectorDelayMs }));
+    xpis.push(
+      await buildXpiFor(ext, {
+        graceMs: opts.ccGraceMs,
+        redirectorDelayMs: opts.ccRedirectorDelayMs,
+        configYaml: opts.configYaml,
+      }),
+    );
   }
   const cleanupXpis = () => xpis.forEach((x) => x.cleanup());
 
@@ -60,7 +73,11 @@ export async function launch(opts: LaunchOptions = {}): Promise<Session> {
   options.setPreference("privacy.userContext.enabled", true);
   options.setPreference("xpinstall.signatures.required", false);
   // Resolve the test's fake domains straight to loopback (cross-platform, no DNS).
-  options.setPreference("network.dns.localDomains", "work.example,nomatch.example,redirect.example,figma.example,youtube.example");
+  // Skipped when localDomains is null (live-site manual testing).
+  const domains = opts.localDomains !== undefined ? opts.localDomains : DEFAULT_LOCAL_DOMAINS;
+  if (domains && domains.length > 0) {
+    options.setPreference("network.dns.localDomains", domains.join(","));
+  }
 
   const firefoxBin = process.env.FIREFOX_BIN;
   if (firefoxBin) {
