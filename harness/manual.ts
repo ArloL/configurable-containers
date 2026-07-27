@@ -22,7 +22,7 @@ const CONFIG_PATH = path.resolve(HERE, "../configurable-containers.config.yaml")
 async function main() {
   const configYaml = readFileSync(CONFIG_PATH, "utf-8");
   const session: Session = await launch({
-    extensions: ["probe", "cc"],
+    extensions: ["cc"],
     headless: false,
     configYaml,
     localDomains: null, // live sites resolve normally
@@ -30,9 +30,7 @@ async function main() {
 
   console.log("\n=== Configurable Containers — manual test session (live) ===\n");
   console.log(`Config:  ${CONFIG_PATH}`);
-  console.log(`Server:  ${session.serverUrl}  (for cookies overlay wire-side checks)`);
-  console.log("\nThe probe writes CSID:<store> into the tab title so you can see the");
-  console.log("container assignment at a glance. Try navigating to any site in your config.");
+  console.log("\nTry navigating to any site in your config; CC will route per the config.");
   console.log("\nPress Ctrl+C to close Firefox and exit.\n");
 
   process.on("SIGINT", async () => {
