@@ -2,7 +2,22 @@
   "manifest_version": 2,
   "name": "configurable-containers",
   "version": "0.0.1",
-  "browser_specific_settings": { "gecko": { "id": "cc@configurable-containers.test" } },
-  "permissions": ["webRequest", "webRequestBlocking", "tabs", "contextualIdentities", "<all_urls>"],
-  "background": { "scripts": ["background.js"] }
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "cc@configurable-containers.test"
+    }
+  },
+  "permissions": [
+    "webRequest",
+    "webRequestBlocking",
+    "cookies",
+    "tabs",
+    "contextualIdentities",
+    "<all_urls>"
+  ],
+  "background": {
+    "scripts": [
+      "background.js"
+    ]
+  }
 }
