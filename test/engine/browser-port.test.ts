@@ -21,6 +21,20 @@ function fakeBrowser() {
       },
       create: async (props: Record<string, unknown>) => ({ id: 77, url: props.url, cookieStoreId: props.cookieStoreId, index: props.index ?? 0, active: props.active ?? true, openerTabId: props.openerTabId }),
       remove: async (_id: number) => {},
+      query: async (info: { cookieStoreId?: string }) =>
+        info.cookieStoreId === "firefox-container-2"
+          ? [{ id: 3, url: "https://x.test/", cookieStoreId: "firefox-container-2", index: 4, active: true }]
+          : [],
+      onCreated: {
+        addListener: (fn: (t: unknown) => void) => { f.tabs.onCreated_fn = fn; },
+        onCreated_fn: null as unknown,
+      },
+      onRemoved: {
+        addListener: (fn: (id: number) => void) => { f.tabs.onRemoved_fn = fn; },
+        onRemoved_fn: null as unknown,
+      },
+      onCreated_fn: null as unknown,
+      onRemoved_fn: null as unknown,
     },
     contextualIdentities: {
       query: async (_d: object) => [{ cookieStoreId: "firefox-container-2", name: "Work", color: "blue", icon: "circle" }],
@@ -29,6 +43,8 @@ function fakeBrowser() {
         if (csid === "firefox-default") throw new Error("no identity");
         return { cookieStoreId: csid, name: "Work", color: "blue", icon: "circle" };
       },
+      remove: async (csid: string) => { f.contextualIdentities.removed = csid; return { cookieStoreId: csid, name: "tmp1", color: "blue", icon: "circle" }; },
+      removed: null as unknown,
     },
     runtime: { sendMessage: async (_ext: string, msg: unknown) => ({ echoed: msg }) },
   };
@@ -86,5 +102,27 @@ describe("createBrowserPort", () => {
   it("sendExternalMessage delegates to runtime.sendMessage", async () => {
     const port = createBrowserPort();
     expect(await port.sendExternalMessage("@mac", { method: "getAssignment" })).toEqual({ echoed: { method: "getAssignment" } });
+  });
+});
+
+describe("createBrowserPort — disposal methods", () => {
+  it("onTabCreated forwards a mapped tab; onTabRemoved forwards the id", async () => {
+    const port = createBrowserPort();
+    const created: number[] = [];
+    const removed: number[] = [];
+    port.onTabCreated((t) => created.push(t.id));
+    port.onTabRemoved((id) => removed.push(id));
+    (f.tabs.onCreated_fn as (t: unknown) => void)({ id: 5, url: "https://a/", cookieStoreId: "firefox-default", index: 0, active: true });
+    (f.tabs.onRemoved_fn as (id: number) => void)(5);
+    expect(created).toEqual([5]);
+    expect(removed).toEqual([5]);
+  });
+
+  it("queryTabs maps results; removeIdentity delegates", async () => {
+    const port = createBrowserPort();
+    expect(await port.queryTabs({ cookieStoreId: "firefox-container-2" })).toHaveLength(1);
+    expect(await port.queryTabs({ cookieStoreId: "firefox-container-9" })).toHaveLength(0);
+    await port.removeIdentity("firefox-container-2");
+    expect(f.contextualIdentities.removed).toBe("firefox-container-2");
   });
 });
