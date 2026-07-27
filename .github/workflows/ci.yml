@@ -29,7 +29,9 @@ jobs:
         with:
           firefox-version: latest
 
-      - run: ${{ steps.firefox.outputs.firefox-path }} --version
+      - env:
+          FIREFOX_BIN: ${{ steps.firefox.outputs.firefox-path }}
+        run: '"$FIREFOX_BIN" --version'
 
       - run: npm ci
 
@@ -38,9 +40,9 @@ jobs:
       # Selenium Manager auto-provisions geckodriver at runtime (network needed).
       # FIREFOX_BIN points the harness at the Firefox installed above.
       - name: Run tests (headless Firefox via Selenium)
-        run: npm test
         env:
           FIREFOX_BIN: ${{ steps.firefox.outputs.firefox-path }}
+        run: npm test
 
   required-status-check:
     name: ci.required-status-check
