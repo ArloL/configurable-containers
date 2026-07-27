@@ -134,6 +134,28 @@ export function createBrowserPort(): BrowserPort {
       const reg = await browser.contentScripts.register(details);
       return { unregister: () => reg.unregister() };
     },
+
+    async updateTab(tabId, props) {
+      await browser.tabs.update(tabId, { url: props.url });
+    },
+
+    onMessage(handler) {
+      browser.runtime.onMessage.addListener((msg) => handler(msg) as never);
+    },
+
+    onCommand(handler) {
+      browser.commands.onCommand.addListener((name) => handler(name));
+    },
+
+    async getActiveTab(): Promise<Tab | null> {
+      const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+      const t = tabs[0];
+      return t ? mapTab(t) : null;
+    },
+
+    getURL(path) {
+      return browser.runtime.getURL(path);
+    },
   };
 }
 
