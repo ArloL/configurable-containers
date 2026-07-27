@@ -1,0 +1,90 @@
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { createBrowserPort } from "../../src/engine/browser-port";
+import type { WebRequestDetails } from "../../src/engine/port";
+
+// A hand-rolled fake of the browser.* surface the adapter touches. Installed as the
+// global `browser` for the duration of each test.
+function fakeBrowser() {
+  return {
+    webRequest: {
+      onBeforeRequest: {
+        addListener(fn: (d: unknown) => unknown, filter: unknown, extra: unknown) {
+          f.webRequest.onBeforeRequest.onBeforeRequest_last = { fn, filter, extra };
+        },
+        onBeforeRequest_last: null as unknown,
+      },
+    },
+    tabs: {
+      get: async (id: number) => {
+        if (id === 404) throw new Error("no such tab");
+        return { id, url: "https://x.test/", cookieStoreId: "firefox-container-2", index: 4, active: true, openerTabId: 9 };
+      },
+      create: async (props: Record<string, unknown>) => ({ id: 77, url: props.url, cookieStoreId: props.cookieStoreId, index: props.index ?? 0, active: props.active ?? true, openerTabId: props.openerTabId }),
+      remove: async (_id: number) => {},
+    },
+    contextualIdentities: {
+      query: async (_d: object) => [{ cookieStoreId: "firefox-container-2", name: "Work", color: "blue", icon: "circle" }],
+      create: async (p: { name: string; color: string; icon: string }) => ({ cookieStoreId: "firefox-container-9", ...p }),
+      get: async (csid: string) => {
+        if (csid === "firefox-default") throw new Error("no identity");
+        return { cookieStoreId: csid, name: "Work", color: "blue", icon: "circle" };
+      },
+    },
+    runtime: { sendMessage: async (_ext: string, msg: unknown) => ({ echoed: msg }) },
+  };
+}
+let f: ReturnType<typeof fakeBrowser>;
+
+beforeEach(() => {
+  f = fakeBrowser();
+  (globalThis as unknown as { browser: unknown }).browser = f;
+});
+afterEach(() => {
+  delete (globalThis as unknown as { browser?: unknown }).browser;
+});
+
+describe("createBrowserPort", () => {
+  it("registers a blocking main_frame onBeforeRequest listener and forwards mapped details", async () => {
+    const seen: WebRequestDetails[] = [];
+    const port = createBrowserPort();
+    port.onBeforeRequest(async (d) => { seen.push(d); return { cancel: true }; });
+
+    const reg = f.webRequest.onBeforeRequest.onBeforeRequest_last as { fn: (d: unknown) => Promise<unknown>; filter: unknown; extra: unknown };
+    expect(reg.filter).toEqual({ urls: ["<all_urls>"], types: ["main_frame"] });
+    expect(reg.extra).toEqual(["blocking"]);
+
+    const result = await reg.fn({ requestId: "5", tabId: 3, url: "https://a.test/", type: "main_frame", method: "GET" });
+    expect(seen[0]).toMatchObject({ requestId: "5", tabId: 3, url: "https://a.test/", type: "main_frame", method: "GET" });
+    expect(result).toEqual({ cancel: true });
+  });
+
+  it("coerces a void handler result to an empty (non-blocking) response", async () => {
+    const port = createBrowserPort();
+    port.onBeforeRequest(async () => undefined);
+    const reg = f.webRequest.onBeforeRequest.onBeforeRequest_last as { fn: (d: unknown) => Promise<unknown> };
+    expect(await reg.fn({ requestId: "1", tabId: 1, url: "https://a.test/", type: "main_frame", method: "GET" })).toEqual({});
+  });
+
+  it("getTab maps fields (incl. openerTabId) and returns null when the tab is gone", async () => {
+    const port = createBrowserPort();
+    expect(await port.getTab(3)).toEqual({ id: 3, url: "https://x.test/", cookieStoreId: "firefox-container-2", index: 4, active: true, openerTabId: 9 });
+    expect(await port.getTab(404)).toBeNull();
+  });
+
+  it("getIdentity returns null for the default store (get throws) and maps a real container", async () => {
+    const port = createBrowserPort();
+    expect(await port.getIdentity("firefox-default")).toBeNull();
+    expect(await port.getIdentity("firefox-container-2")).toEqual({ cookieStoreId: "firefox-container-2", name: "Work", color: "blue", icon: "circle" });
+  });
+
+  it("createTab passes props through and maps the result", async () => {
+    const port = createBrowserPort();
+    const t = await port.createTab({ url: "https://a.test/", cookieStoreId: "firefox-container-9", index: 2, active: false, openerTabId: 5 });
+    expect(t).toEqual({ id: 77, url: "https://a.test/", cookieStoreId: "firefox-container-9", index: 2, active: false, openerTabId: 5 });
+  });
+
+  it("sendExternalMessage delegates to runtime.sendMessage", async () => {
+    const port = createBrowserPort();
+    expect(await port.sendExternalMessage("@mac", { method: "getAssignment" })).toEqual({ echoed: { method: "getAssignment" } });
+  });
+});
