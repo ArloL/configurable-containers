@@ -1,5 +1,5 @@
 import type {
-  BrowserPort, Clock, ContextualIdentity, CreateIdentityProps, CreateTabProps, Tab, WebRequestDetails,
+  BrowserPort, Clock, ContextualIdentity, CreateIdentityProps, CreateTabProps, RegisteredContentScript, Tab, WebRequestDetails,
 } from "./port";
 
 function mapTab(t: browser.tabs.Tab): Tab {
@@ -121,6 +121,11 @@ export function createBrowserPort(): BrowserPort {
     async getCookie(details) {
       const c = await browser.cookies.get(details);
       return c ? { name: c.name, value: c.value } : null;
+    },
+
+    async registerContentScript(details): Promise<RegisteredContentScript> {
+      const reg = await browser.contentScripts.register(details);
+      return { unregister: () => reg.unregister() };
     },
   };
 }

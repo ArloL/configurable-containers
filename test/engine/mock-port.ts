@@ -9,6 +9,8 @@ import type {
   CreateTabProps,
   GetCookieDetails,
   HeadersDetails,
+  RegisterContentScriptDetails,
+  RegisteredContentScript,
   SetCookieDetails,
   Tab,
   WebRequestDetails,
@@ -31,6 +33,7 @@ export interface MockPort {
     removeIdentity: string[];
     setCookie: SetCookieDetails[];
   };
+  registeredScripts: RegisterContentScriptDetails[];
   addTab(props: { url: string; cookieStoreId: string; index?: number; active?: boolean; openerTabId?: number }): Tab;
   addIdentity(props: { name: string; color?: string; icon?: string }): ContextualIdentity;
   emitTabCreated(props: { url: string; cookieStoreId: string; index?: number; active?: boolean; openerTabId?: number }): Promise<Tab>;
@@ -63,6 +66,7 @@ export function createMockPort(): MockPort {
   let onTabRemovedH: ((tabId: number) => void) | null = null;
   let headersHandler: ((d: HeadersDetails) => Promise<BlockingHeadersResponse | void>) | null = null;
   const cookieStore = new Map<string, Map<string, Cookie>>(); // storeId -> name -> cookie
+  const registeredScripts: RegisterContentScriptDetails[] = [];
 
   function makeTab(props: { url: string; cookieStoreId: string; index?: number; active?: boolean; openerTabId?: number }): Tab {
     const id = ++tabId;
@@ -145,6 +149,10 @@ export function createMockPort(): MockPort {
     async getCookie(details: GetCookieDetails) {
       return cookieStore.get(details.storeId)?.get(details.name) ?? null;
     },
+    async registerContentScript(details: RegisterContentScriptDetails): Promise<RegisteredContentScript> {
+      registeredScripts.push(details);
+      return { unregister: async () => { /* no-op for tests */ } };
+    },
   };
 
   return {
@@ -177,6 +185,7 @@ export function createMockPort(): MockPort {
       return headersHandler(d);
     },
     getStoredCookie: (storeId, name) => cookieStore.get(storeId)?.get(name) ?? null,
+    registeredScripts,
   };
 }
 
