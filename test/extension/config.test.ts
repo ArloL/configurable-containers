@@ -15,4 +15,10 @@ describe("bundled extension config", () => {
     const config = parseConfig(BUNDLED_CONFIG_YAML);
     expect(matchRule("https://nomatch.example/", config.rules)).toBeNull();
   });
+
+  it("carries the seed cookie overlay on the work.example rule", () => {
+    const config = parseConfig(BUNDLED_CONFIG_YAML);
+    const rule = matchRule("https://work.example/", config.rules);
+    expect(rule!.cookies).toEqual([{ name: "seed", url: "http://work.example/", value: "1" }]);
+  });
 });
