@@ -33,6 +33,7 @@ export interface MockPort {
     createIdentity: CreateIdentityProps[];
     removeIdentity: string[];
     setCookie: SetCookieDetails[];
+    updates: { tabId: number; url: string }[];
   };
   registeredScripts: RegisterContentScriptDetails[];
   addTab(props: { url: string; cookieStoreId: string; index?: number; active?: boolean; openerTabId?: number }): Tab;
@@ -45,6 +46,9 @@ export interface MockPort {
   setCreateTabThrows(on: boolean): void;
   fireHeaders(d: HeadersDetails): Promise<BlockingHeadersResponse | void>;
   getStoredCookie(storeId: string, name: string): Cookie | null;
+  emitMessage(msg: unknown): Promise<unknown>;
+  emitCommand(name: string): Promise<void>;
+  setActiveTab(tab: Tab): void;
 }
 
 export function createMockPort(): MockPort {
@@ -57,6 +61,7 @@ export function createMockPort(): MockPort {
     createIdentity: [] as CreateIdentityProps[],
     removeIdentity: [] as string[],
     setCookie: [] as SetCookieDetails[],
+    updates: [] as { tabId: number; url: string }[],
   };
 
   let tabId = 0;
@@ -68,6 +73,9 @@ export function createMockPort(): MockPort {
   let onTabRemovedH: ((tabId: number) => void) | null = null;
   let onTabUpdatedH: ((tab: Tab, info: TabUpdateInfo) => void) | null = null;
   let headersHandler: ((d: HeadersDetails) => Promise<BlockingHeadersResponse | void>) | null = null;
+  let messageHandler: ((msg: unknown) => unknown | Promise<unknown>) | null = null;
+  let commandHandler: ((name: string) => void) | null = null;
+  let activeTab: Tab | null = null;
   const cookieStore = new Map<string, Map<string, Cookie>>(); // storeId -> name -> cookie
   const registeredScripts: RegisterContentScriptDetails[] = [];
 
@@ -159,6 +167,23 @@ export function createMockPort(): MockPort {
       registeredScripts.push(details);
       return { unregister: async () => { /* no-op for tests */ } };
     },
+    async updateTab(tabId, props) {
+      calls.updates.push({ tabId, url: props.url });
+      const t = tabs.get(tabId);
+      if (t) tabs.set(tabId, { ...t, url: props.url });
+    },
+    onMessage(h) {
+      messageHandler = h;
+    },
+    onCommand(h) {
+      commandHandler = h;
+    },
+    async getActiveTab() {
+      return activeTab;
+    },
+    getURL(path) {
+      return `moz-extension://test/${path}`;
+    },
   };
 
   return {
@@ -198,6 +223,17 @@ export function createMockPort(): MockPort {
     },
     getStoredCookie: (storeId, name) => cookieStore.get(storeId)?.get(name) ?? null,
     registeredScripts,
+    async emitMessage(msg) {
+      if (!messageHandler) throw new Error("no onMessage handler registered");
+      return messageHandler(msg);
+    },
+    async emitCommand(name) {
+      commandHandler?.(name);
+      await flushMicrotasks();
+    },
+    setActiveTab(tab) {
+      activeTab = tab;
+    },
   };
 }
 

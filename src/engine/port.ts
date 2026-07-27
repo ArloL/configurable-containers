@@ -148,6 +148,22 @@ export interface BrowserPort {
   // Scripts overlay — register a content script (inline code) at a runAt. The injector
   // registers once at startup; Firefox injects at runAt for matching pages (F12).
   registerContentScript(details: RegisterContentScriptDetails): Promise<RegisteredContentScript>;
+
+  // Choice screen / reopen picker — navigate the triggering tab to the choice page.
+  updateTab(tabId: number, props: { url: string }): Promise<void>;
+
+  // Choice page → background: the selection message. Returns the handler's result so the
+  // choice page gets a response ({ok:true}/{ok:false}) for fail-open.
+  onMessage(handler: (msg: unknown) => unknown | Promise<unknown>): void;
+
+  // Reopen picker keyboard command (manifest "commands").
+  onCommand(handler: (name: string) => void): void;
+
+  // The active tab in the current window (for the reopen picker). Null if none.
+  getActiveTab(): Promise<Tab | null>;
+
+  // The full moz-extension:// URL for a bundled resource (e.g. "choice.html").
+  getURL(path: string): string;
 }
 
 // Injected timing seam so grace/GC delays are deterministic in tests. The disposer
