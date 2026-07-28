@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import fc from "fast-check";
-import { createMockPort } from "./mock-port";
+import { aFakeBrowser } from "./mock-port";
 import { createEngine } from "../../src/engine/engine";
 import { matchRule, matchGroup, hostMatcher } from "../../src/matcher/matcher";
 import { sameSite } from "../../src/psl/same-site";
@@ -9,9 +9,9 @@ import type { WebRequestDetails } from "../../src/engine/port";
 
 const deps: Deps = { matchRule, matchGroup, sameSite };
 const HOSTS = ["a.test", "b.test", "c.example"] as const;
-const noop = () => {};
+const ignoreChoices = () => {};
 
-function counter(): () => string {
+function sequentialTmpSuffixes(): () => string {
   let n = 0;
   return () => String(++n);
 }
@@ -38,12 +38,12 @@ const arbConfig: fc.Arbitrary<Config> = fc
 const arbUrl = fc.constantFrom(...HOSTS.map((h) => `https://${h}/`));
 
 function freshMockWithTab() {
-  const mp = createMockPort();
-  const tab = mp.addTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
-  return { mp, tab };
+  const browser = aFakeBrowser();
+  const tab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
+  return { browser, tab };
 }
 
-function req(over: Partial<WebRequestDetails> = {}): WebRequestDetails {
+function aNavigationTo(over: Partial<WebRequestDetails> = {}): WebRequestDetails {
   return { requestId: "1", tabId: 1, url: "https://a.test/", type: "main_frame", method: "GET", ...over };
 }
 
@@ -51,10 +51,10 @@ describe("engine — property-based invariants", () => {
   it("bounded effect: any single fired nav opens at most one tab (F1)", async () => {
     await fc.assert(
       fc.asyncProperty(arbConfig, arbUrl, async (config, url) => {
-        const { mp, tab } = freshMockWithTab();
-        createEngine({ port: mp.port, config, deps, onChoice: noop, tmpSuffix: counter() });
-        await mp.fire(req({ tabId: tab.id, url }));
-        expect(mp.calls.createTab.length).toBeLessThanOrEqual(1);
+        const { browser, tab } = freshMockWithTab();
+        createEngine({ port: browser.port, config, deps, onChoice: ignoreChoices, tmpSuffix: sequentialTmpSuffixes() });
+        await browser.navigates(aNavigationTo({ tabId: tab.id, url }));
+        expect(browser.openedTabs.length).toBeLessThanOrEqual(1);
       })
     );
   });
@@ -62,14 +62,14 @@ describe("engine — property-based invariants", () => {
   it("target fidelity: a reopened tab lands in the container resolve() chose", async () => {
     await fc.assert(
       fc.asyncProperty(arbConfig, arbUrl, async (config, url) => {
-        const { mp, tab } = freshMockWithTab();
-        createEngine({ port: mp.port, config, deps, onChoice: noop, tmpSuffix: counter() });
-        const res = await mp.fire(req({ tabId: tab.id, url }));
-        if (res && res.cancel && mp.calls.createTab.length === 1) {
+        const { browser, tab } = freshMockWithTab();
+        createEngine({ port: browser.port, config, deps, onChoice: ignoreChoices, tmpSuffix: sequentialTmpSuffixes() });
+        const blockingResponse = await browser.navigates(aNavigationTo({ tabId: tab.id, url }));
+        if (blockingResponse && blockingResponse.cancel && browser.openedTabs.length === 1) {
           // Whatever container we opened must exist as a real store the registry
           // recognizes (default, a named permanent, or a tmp throwaway).
-          const store = mp.calls.createTab[0].cookieStoreId;
-          const known = store === "firefox-default" || (await mp.port.getIdentity(store)) !== null;
+          const store = browser.openedTabs[0].cookieStoreId;
+          const known = store === "firefox-default" || (await browser.port.getIdentity(store)) !== null;
           expect(known).toBe(true);
         }
       })
@@ -79,12 +79,12 @@ describe("engine — property-based invariants", () => {
   it("defer totality: if MAC owns the URL, no tab is ever opened or removed (F7)", async () => {
     await fc.assert(
       fc.asyncProperty(arbConfig, arbUrl, async (config, url) => {
-        const { mp, tab } = freshMockWithTab();
-        mp.setMacAssignment(url, { userContextId: 1 }); // MAC owns every fired URL
-        createEngine({ port: mp.port, config, deps, onChoice: noop, tmpSuffix: counter() });
-        await mp.fire(req({ tabId: tab.id, url }));
-        expect(mp.calls.createTab).toHaveLength(0);
-        expect(mp.calls.removeTab).toHaveLength(0);
+        const { browser, tab } = freshMockWithTab();
+        browser.macAssigns(url, { userContextId: 1 }); // MAC owns every fired URL
+        createEngine({ port: browser.port, config, deps, onChoice: ignoreChoices, tmpSuffix: sequentialTmpSuffixes() });
+        await browser.navigates(aNavigationTo({ tabId: tab.id, url }));
+        expect(browser.openedTabs).toHaveLength(0);
+        expect(browser.closedTabIds).toHaveLength(0);
       })
     );
   });

@@ -25,50 +25,64 @@ const flushMicrotasks = (): Promise<void> => new Promise((r) => setTimeout(r, 0)
 
 export interface MockPort {
   port: BrowserPort;
-  fire(d: WebRequestDetails): Promise<BlockingResponse | void>;
-  tabs: Map<number, Tab>;
-  identities: Map<string, ContextualIdentity>;
-  calls: {
-    createTab: CreateTabProps[];
-    removeTab: number[];
-    createIdentity: CreateIdentityProps[];
-    removeIdentity: string[];
-    setCookie: SetCookieDetails[];
-    updates: { tabId: number; url: string }[];
-    notify: NotificationSpec[];
-  };
+
+  /** Fires webRequest.onBeforeRequest and returns the blocking response. */
+  navigates(d: WebRequestDetails): Promise<BlockingResponse | void>;
+  /** Fires webRequest.onBeforeSendHeaders and returns the header edits. */
+  sendsHeaders(d: HeadersDetails): Promise<BlockingHeadersResponse | void>;
+
+  openTabs: Map<number, Tab>;
+  containers: Map<string, ContextualIdentity>;
+
+  // What the extension did, in the order it did it.
+  openedTabs: CreateTabProps[];
+  closedTabIds: number[];
+  createdContainers: CreateIdentityProps[];
+  removedContainers: string[];
+  seededCookies: SetCookieDetails[];
+  navigatedTabs: { tabId: number; url: string }[];
+  notifications: NotificationSpec[];
   registeredScripts: RegisterContentScriptDetails[];
+
   // The engine floats its notification rather than awaiting it (a navigation must not
-  // wait on a toast), so a test asserting on calls.notify must settle first.
-  flush(): Promise<void>;
-  addTab(props: { url: string; cookieStoreId: string; index?: number; active?: boolean; openerTabId?: number }): Tab;
-  addIdentity(props: { name: string; color?: string; icon?: string }): ContextualIdentity;
-  emitTabCreated(props: { url: string; cookieStoreId: string; index?: number; active?: boolean; openerTabId?: number }): Promise<Tab>;
-  emitTabRemoved(tabId: number): Promise<void>;
-  emitTabUpdated(tab: Tab, info: TabUpdateInfo): Promise<void>;
-  setMacAssignment(url: string, value: unknown): void;
-  setMacThrows(on: boolean): void;
-  setCreateTabThrows(on: boolean): void;
-  fireHeaders(d: HeadersDetails): Promise<BlockingHeadersResponse | void>;
-  getStoredCookie(storeId: string, name: string): Cookie | null;
-  emitMessage(msg: unknown): Promise<unknown>;
-  emitCommand(name: string): Promise<void>;
-  setActiveTab(tab: Tab): void;
+  // wait on a toast), so a test asserting on notifications must settle first.
+  settle(): Promise<void>;
+
+  /** A tab that is already open. Fires nothing. */
+  existingTab(props: { url: string; cookieStoreId: string; index?: number; active?: boolean; openerTabId?: number }): Tab;
+  /** A container that already exists. Fires nothing. */
+  addContainerNamed(props: { name: string; color?: string; icon?: string }): ContextualIdentity;
+
+  /** Fires browser.tabs.onCreated, as a real tabs.create does. */
+  opensTab(props: { url: string; cookieStoreId: string; index?: number; active?: boolean; openerTabId?: number }): Promise<Tab>;
+  /** Fires browser.tabs.onRemoved. */
+  closesTab(tab: Tab): Promise<void>;
+  /** Fires browser.tabs.onUpdated. */
+  updatesTab(tab: Tab, info: TabUpdateInfo): Promise<void>;
+  /** Fires browser.runtime.onMessage and returns the handler's reply. */
+  receivesMessage(msg: unknown): Promise<unknown>;
+  /** Fires browser.commands.onCommand. */
+  receivesCommand(name: string): Promise<void>;
+
+  // Arranged conditions.
+  macAssigns(url: string, value: unknown): void;
+  macIsAbsent(on: boolean): void;
+  tabCreationFails(on: boolean): void;
+  activeTabIs(tab: Tab): void;
+  cookieIn(storeId: string, name: string): Cookie | null;
 }
 
-export function createMockPort(): MockPort {
-  const tabs = new Map<number, Tab>();
-  const identities = new Map<string, ContextualIdentity>();
+export function aFakeBrowser(): MockPort {
+  const openTabs = new Map<number, Tab>();
+  const containers = new Map<string, ContextualIdentity>();
   const macMap = new Map<string, unknown>();
-  const calls = {
-    createTab: [] as CreateTabProps[],
-    removeTab: [] as number[],
-    createIdentity: [] as CreateIdentityProps[],
-    removeIdentity: [] as string[],
-    setCookie: [] as SetCookieDetails[],
-    updates: [] as { tabId: number; url: string }[],
-    notify: [] as NotificationSpec[],
-  };
+  const openedTabs: CreateTabProps[] = [];
+  const closedTabIds: number[] = [];
+  const createdContainers: CreateIdentityProps[] = [];
+  const removedContainers: string[] = [];
+  const seededCookies: SetCookieDetails[] = [];
+  const navigatedTabs: { tabId: number; url: string }[] = [];
+  const notifications: NotificationSpec[] = [];
 
   let tabId = 0;
   let containerId = 0;
@@ -97,14 +111,14 @@ export function createMockPort(): MockPort {
       active: props.active ?? true,
       openerTabId: props.openerTabId,
     };
-    tabs.set(id, tab);
+    openTabs.set(id, tab);
     return tab;
   }
 
   function makeIdentity(props: CreateIdentityProps): ContextualIdentity {
     const cookieStoreId = `firefox-container-${++containerId}`;
     const ci: ContextualIdentity = { cookieStoreId, name: props.name, color: props.color, icon: props.icon };
-    identities.set(cookieStoreId, ci);
+    containers.set(cookieStoreId, ci);
     return ci;
   }
 
@@ -113,10 +127,10 @@ export function createMockPort(): MockPort {
       handler = h;
     },
     async getTab(id) {
-      return tabs.get(id) ?? null;
+      return openTabs.get(id) ?? null;
     },
     async createTab(props) {
-      calls.createTab.push(props);
+      openedTabs.push(props);
       if (createTabThrows) throw new Error("createTab failed");
       // Fidelity guard: Firefox refuses privileged about: URLs from an extension
       // ("Illegal URL: about:newtab"). about:blank is the one exception. A mock that
@@ -130,18 +144,18 @@ export function createMockPort(): MockPort {
       return tab;
     },
     async removeTab(id) {
-      calls.removeTab.push(id);
-      tabs.delete(id);
+      closedTabIds.push(id);
+      openTabs.delete(id);
     },
     async queryIdentities() {
-      return [...identities.values()];
+      return [...containers.values()];
     },
     async createIdentity(props) {
-      calls.createIdentity.push(props);
+      createdContainers.push(props);
       return makeIdentity(props);
     },
     async getIdentity(cookieStoreId) {
-      return identities.get(cookieStoreId) ?? null;
+      return containers.get(cookieStoreId) ?? null;
     },
     async sendExternalMessage(extId, message) {
       if (macThrows) throw new Error("MAC not installed");
@@ -161,18 +175,18 @@ export function createMockPort(): MockPort {
       onTabUpdatedH = h;
     },
     async queryTabs(filter) {
-      const all = [...tabs.values()];
+      const all = [...openTabs.values()];
       return filter.cookieStoreId ? all.filter((t) => t.cookieStoreId === filter.cookieStoreId) : all;
     },
     async removeIdentity(cookieStoreId) {
-      calls.removeIdentity.push(cookieStoreId);
-      identities.delete(cookieStoreId);
+      removedContainers.push(cookieStoreId);
+      containers.delete(cookieStoreId);
     },
     onBeforeSendHeaders(h) {
       headersHandler = h;
     },
     async setCookie(details) {
-      calls.setCookie.push(details);
+      seededCookies.push(details);
       const jar = cookieStore.get(details.storeId) ?? new Map<string, Cookie>();
       jar.set(details.name, { name: details.name, value: details.value ?? "" });
       cookieStore.set(details.storeId, jar);
@@ -185,9 +199,9 @@ export function createMockPort(): MockPort {
       return { unregister: async () => { /* no-op for tests */ } };
     },
     async updateTab(tabId, props) {
-      calls.updates.push({ tabId, url: props.url });
-      const t = tabs.get(tabId);
-      if (t) tabs.set(tabId, { ...t, url: props.url });
+      navigatedTabs.push({ tabId, url: props.url });
+      const existing = openTabs.get(tabId);
+      if (existing) openTabs.set(tabId, { ...existing, url: props.url });
     },
     onMessage(h) {
       messageHandler = h;
@@ -202,63 +216,69 @@ export function createMockPort(): MockPort {
       return `moz-extension://test/${path}`;
     },
     async notify(n) {
-      calls.notify.push(n);
+      notifications.push(n);
     },
   };
 
   return {
     port,
-    async fire(d) {
+    async navigates(d) {
       if (!handler) throw new Error("no onBeforeRequest handler registered");
       return handler(d);
     },
-    tabs,
-    identities,
-    calls,
-    addTab: makeTab,
-    addIdentity: (props) => makeIdentity({ name: props.name, color: props.color ?? "blue", icon: props.icon ?? "circle" }),
-    async emitTabCreated(props) {
+    async sendsHeaders(d) {
+      if (!headersHandler) throw new Error("no onBeforeSendHeaders handler registered");
+      return headersHandler(d);
+    },
+    openTabs,
+    containers,
+    openedTabs,
+    closedTabIds,
+    createdContainers,
+    removedContainers,
+    seededCookies,
+    navigatedTabs,
+    notifications,
+    registeredScripts,
+    existingTab: makeTab,
+    addContainerNamed: (props) => makeIdentity({ name: props.name, color: props.color ?? "blue", icon: props.icon ?? "circle" }),
+    async opensTab(props) {
       const tab = makeTab(props);
       onTabCreatedH?.(tab);
       await flushMicrotasks();
       return tab;
     },
-    async emitTabRemoved(id) {
-      tabs.delete(id);
-      onTabRemovedH?.(id);
+    async closesTab(tab) {
+      openTabs.delete(tab.id);
+      onTabRemovedH?.(tab.id);
       await flushMicrotasks();
     },
-    async emitTabUpdated(tab, info) {
-      // Reflect the updated tab into the mock's tabs map so getTab sees the new URL.
-      tabs.set(tab.id, tab);
+    async updatesTab(tab, info) {
+      // Reflect the updated tab into the mock's map so getTab sees the new URL.
+      openTabs.set(tab.id, tab);
       onTabUpdatedH?.(tab, info);
       await flushMicrotasks();
     },
-    setMacAssignment: (url, value) => void macMap.set(url, value),
-    setMacThrows: (on) => void (macThrows = on),
-    setCreateTabThrows: (on) => void (createTabThrows = on),
-    async fireHeaders(d) {
-      if (!headersHandler) throw new Error("no onBeforeSendHeaders handler registered");
-      return headersHandler(d);
-    },
-    getStoredCookie: (storeId, name) => cookieStore.get(storeId)?.get(name) ?? null,
-    registeredScripts,
-    async emitMessage(msg) {
+    macAssigns: (url, value) => void macMap.set(url, value),
+    macIsAbsent: (on) => void (macThrows = on),
+    tabCreationFails: (on) => void (createTabThrows = on),
+    cookieIn: (storeId, name) => cookieStore.get(storeId)?.get(name) ?? null,
+    async receivesMessage(msg) {
       if (!messageHandler) throw new Error("no onMessage handler registered");
       return messageHandler(msg);
     },
-    async emitCommand(name) {
+    async receivesCommand(name) {
       commandHandler?.(name);
       await flushMicrotasks();
     },
-    setActiveTab(tab) {
+    activeTabIs(tab) {
       activeTab = tab;
     },
-    flush: flushMicrotasks,
+    settle: flushMicrotasks,
   };
 }
 
-export function createFakeClock(): { clock: Clock; advance(ms: number): Promise<void>; pending(): number } {
+export function aFakeClock(): { clock: Clock; advance(ms: number): Promise<void>; pending(): number } {
   let now = 0;
   let seq = 0;
   const timers = new Map<number, { dueAt: number; fn: () => void }>();
