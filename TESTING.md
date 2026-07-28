@@ -190,9 +190,24 @@ create/dispose, real redirects.
   (b) destination reopened into a **permanent** container — likewise closed (the
   case `inherit` alone leaves behind); (c) destination that navigates in-place and
   stays put — the tab is **not** closed. The shim hop never spawns a throwaway.
-- **Fast-disposal build** — a test-only preference sets the disposal delay to
-  seconds so real timers are exercised without 15-minute waits; a separate
-  nightly job runs one real-delay case to guard against the fake clock lying.
+- **Fast-disposal build** — `launch({ ccGraceMs })` bundles CC with a wound-down
+  grace (500ms in `test/e2e/disposal.test.ts`), so real timers are exercised without
+  five-minute waits.
+- **Real-delay disposal (F10), nightly** — `test/e2e/disposal.realtime.test.ts` takes
+  the grace CC actually ships (`PRODUCTION_GRACE_MS`, imported from the builder so it
+  cannot drift from the bundle) and watches one throwaway across it: still there a
+  minute after its last tab closed, gone by the grace. It is the only case that can
+  fail when a long background-page timer is throttled, coalesced or dropped — a fake
+  clock cannot lie about a duration it invents, and 500ms is too short to be treated
+  that way. Excluded from `npm test` by filename (`*.realtime.test.ts`) and run by
+  `npm run test:realtime` via `vitest.realtime.config.ts`; excluded rather than
+  skipped, so `npm test` stays a suite that skips nothing.
+
+  Observation is `listContainers` — a `containers` probe command over
+  `contextualIdentities.query`, added because `data-cc-containers` is a snapshot
+  written when a document loaded. Watching a container *disappear* through that
+  attribute means re-navigating a tab on every poll; over five minutes the polling
+  would be more traffic than the case under test.
 
 ## L5 — Acceptance: the tests are the spec
 
@@ -314,11 +329,22 @@ and open an issue on regression rather than blocking a PR (they're guard rails,
 not gatekeepers). Artifacts (screenshots, `web-ext` logs, fast-check seeds) are
 uploaded on every failure for deterministic repro.
 
+**Built so far**, against that sketch:
+
+- `.github/workflows/ci.yml` — one `test` job on every push: `typecheck`, `lint:ext`
+  (addons-linter, what AMO runs server-side), then `npm test` end to end. The
+  sketch's static/unit/build/integration split is not worth its overhead at this
+  size; the Firefox `latest`/`esr` matrix is not built.
+- `.github/workflows/nightly.yml` — `disposal-realtime`, described above, plus a
+  `report-regression` job that opens **one** issue for a failing streak and comments
+  on it thereafter. Scheduled runs go unwatched, so a red night has to come and find
+  us; a second nightly job is where `mutation` lands when Stryker arrives.
+
 ## What CI still can't catch (be honest)
 
-- **Real 15-minute disposal under service-worker suspension** — the nightly
-  real-delay case exercises the timer but not Firefox actually evicting the
-  background context for minutes. Residual risk on F8/F10; mitigation is the L3
+- **Real disposal under service-worker suspension** — the nightly real-delay case
+  exercises the five-minute timer but not Firefox actually evicting the background
+  context for minutes. Residual risk on F8/F10; mitigation is the L3
   restart-injection harness plus manual dogfooding.
 - **Real IdP quirks** — the mock IdP covers code + SAML-POST shapes, not every
   vendor's nonstandard flow. F9 in the wild needs the author's real logins.
