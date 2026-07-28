@@ -46,6 +46,11 @@ jobs:
           VERSION: ${{ steps.version.outputs.new_version }}
         run: npm run package -- "$VERSION"
 
+      # addons-linter is what AMO runs server-side; failing here beats failing after
+      # a version number has been burned, since AMO never forgets one.
+      - name: Lint the packaged extension
+        run: npx web-ext lint --source-dir dist/cc
+
       # AMO requires reviewable source whenever the shipped JS is bundled, and
       # background.js is an esbuild bundle.
       - name: Build the source archive

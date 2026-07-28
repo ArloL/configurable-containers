@@ -4,7 +4,10 @@
   "version": "0.0.1",
   "browser_specific_settings": {
     "gecko": {
-      "id": "configurable-containers@k5d.de"
+      "id": "configurable-containers@k5d.de",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
     }
   },
   "permissions": [

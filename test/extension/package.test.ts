@@ -14,6 +14,10 @@ describe("packageExtension", () => {
       const manifest = JSON.parse(readFileSync(path.join(stageDir, "manifest.json"), "utf8"));
       expect(manifest.version).toBe("2607.0.101");
       expect(manifest.browser_specific_settings.gecko.id).toBe("configurable-containers@k5d.de");
+      // addons-linter warns without this, and it will become a hard requirement.
+      // "none" is the honest answer: CC transmits nothing and stores only the config.
+      expect(manifest.browser_specific_settings.gecko.data_collection_permissions)
+        .toEqual({ required: ["none"] });
       expect(existsSync(path.join(stageDir, "background.js"))).toBe(true);
       expect(existsSync(path.join(stageDir, "options.js"))).toBe(true);
       expect(existsSync(path.join(stageDir, "options.html"))).toBe(true);

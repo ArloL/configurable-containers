@@ -8,6 +8,7 @@
     "typecheck": "tsc --noEmit",
     "manual": "tsx harness/manual.ts",
     "package": "tsx scripts/package.ts",
+    "lint:ext": "tsx scripts/package.ts && web-ext lint --source-dir dist/cc",
     "submit": "web-ext sign --source-dir dist/cc --artifacts-dir dist --channel listed --api-key \"$WEB_EXT_API_KEY\" --api-secret \"$WEB_EXT_API_SECRET\""
   },
   "dependencies": {
