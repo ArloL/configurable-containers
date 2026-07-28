@@ -330,6 +330,7 @@ export interface ProbeTab {
   url: string;
   cookieStoreId: string;
   index: number; // position in its window — what "opened beside it" is asserted against
+  windowId: number; // which window — what "the popup survived" is asserted against
   container: string;
 }
 

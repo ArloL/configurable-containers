@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { aFakeBrowser, aFakeClock } from "./mock-port";
+import { aFakeBrowser, aFakeClock, DEFAULT_WINDOW_ID } from "./mock-port";
 import { createRedirectorCloser } from "../../src/engine/redirector-closer";
 import { parseConfig } from "../../src/config/parse";
 import { matchRule } from "../../src/matcher/matcher";
@@ -16,7 +16,7 @@ rules:
 `);
 
 function makeTab(over: Partial<Tab> = {}): Tab {
-  return { id: 1, url: "https://t.co/abc", cookieStoreId: "firefox-default", index: 0, active: true, ...over };
+  return { id: 1, url: "https://t.co/abc", cookieStoreId: "firefox-default", index: 0, active: true, windowId: DEFAULT_WINDOW_ID, ...over };
 }
 
 describe("redirector-closer", () => {

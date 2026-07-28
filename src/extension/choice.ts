@@ -1,27 +1,26 @@
-// The keyboard-driven choice page. Stateless: the background encodes
-// {tabId,url,options} into the URL hash; this script decodes, renders the options with
-// keyboard hints, and reports a selection via runtime.sendMessage. On {ok:true} the
-// background's reopen closes this tab; on {ok:false} (or no handler) it navigates back to
-// the url (fail-open). Esc also navigates back. See the choice-screen design spec §4.
+// The keyboard-driven choice page. Stateless: the background encodes {url,options} into
+// the URL hash; this script decodes, renders the options with keyboard hints, and reports
+// a selection via runtime.sendMessage. On {ok:true} the background's reopen consumes this
+// tab. See the choice-screen design spec §4.
+//
+// This page lives in a tab of its own, beside the page the user was on, so Esc means
+// CANCEL — close this tab and leave that page alone. It deliberately never navigates
+// itself to the payload url: that url resolved to a choice in the first place, so loading
+// it here would just be answered with another choice page. (It also kept the hash payload
+// — which is attacker-reachable via a crafted moz-extension://<id>/choice.html#… link — on
+// a path to `location.href`, where a javascript: url would have run privileged. The
+// background re-checks the url it receives for the same reason.)
 
 import { decodePayload, choiceKeys, type PickMessage, type PickResponse } from "./picker-protocol";
 
 const payload = decodePayload(location.hash.slice(1));
 const keys = choiceKeys(payload.options.length);
 
-// Only navigate to http(s) URLs — the hash payload is attacker-controllable (a crafted
-// moz-extension://<id>/choice.html#... link could otherwise inject a javascript: URL,
-// executing script in the extension's privileged context, or redirect to an arbitrary
-// scheme). Mirrors the engine's own onBeforeRequest http(s) guard.
-function safeNavigate(href: string): void {
-  let u: URL;
-  try {
-    u = new URL(href);
-  } catch {
-    return;
-  }
-  if (u.protocol !== "http:" && u.protocol !== "https:") return;
-  location.href = u.href;
+const status = document.getElementById("cc-status")!;
+
+async function closeSelf(): Promise<void> {
+  const self = await browser.tabs.getCurrent();
+  if (self?.id != null) await browser.tabs.remove(self.id);
 }
 
 document.getElementById("cc-dest")!.textContent = "Opening: " + payload.url;
@@ -37,25 +36,29 @@ payload.options.forEach((container, i) => {
   list.appendChild(li);
 });
 
+// The reopen could not be performed. Say so and leave the options live rather than
+// loading the url here: this tab is not the user's page, and the choice still stands.
+function reportFailed(container: string): void {
+  status.hidden = false;
+  status.textContent = `Could not open ${container}. Pick again, or press Esc to cancel.`;
+}
+
 async function pick(container: string): Promise<void> {
-  const status = document.getElementById("cc-status")!;
   status.hidden = false;
   status.textContent = "Opening " + container + "…";
-  const msg: PickMessage = { type: "cc-pick", tabId: payload.tabId, url: payload.url, container };
+  const msg: PickMessage = { type: "cc-pick", url: payload.url, container };
   try {
     const res = (await browser.runtime.sendMessage(msg)) as PickResponse | undefined;
-    if (res && !res.ok) {
-      safeNavigate(payload.url); // reopen failed — fail open back to the url
-    }
-    // else: the background's reopen closed this tab; nothing to do
+    if (res && !res.ok) reportFailed(container);
+    // else: the background's reopen consumed this tab; nothing to do
   } catch {
-    safeNavigate(payload.url); // no handler / background gone — fail open
+    reportFailed(container); // no handler / background gone
   }
 }
 
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
-    safeNavigate(payload.url);
+    void closeSelf();
     return;
   }
   const li = list.querySelector<HTMLElement>(`[data-key="${e.key}"]`);

@@ -90,6 +90,11 @@ export interface Tab {
   index: number; // preserved across a reopen
   active: boolean; // preserved across a reopen
   openerTabId?: number; // set when opened from another tab
+  // The window the tab lives in — preserved across a reopen. Without it every
+  // reopen lands in the last focused NORMAL window: a window.open popup (which is
+  // pre-commit, so it is replaced rather than kept) loses its window and closes,
+  // and a tab reopened in any unfocused window teleports to the focused one.
+  windowId: number;
 }
 
 export interface ContextualIdentity {
@@ -103,6 +108,12 @@ export interface BlockingResponse {
   cancel?: boolean;
 }
 
+// Who sent a runtime message. `tabId` is absent when the sender is not a tab (another
+// extension page, a background context) — the picker declines those.
+export interface MessageSender {
+  tabId?: number;
+}
+
 export interface CreateTabProps {
   // Omit to open the browser's own new-tab page. Required for auto-temp: Firefox
   // rejects `tabs.create({ url: "about:newtab" })` with "Illegal URL" — extensions
@@ -112,6 +123,9 @@ export interface CreateTabProps {
   openerTabId?: number;
   index?: number;
   active?: boolean;
+  // Omit for "the current window" (tabs.create's own default). Every reopen passes
+  // the source tab's window so the new tab replaces it where it actually was.
+  windowId?: number;
 }
 
 export interface CreateIdentityProps {
@@ -159,12 +173,11 @@ export interface BrowserPort {
   // registers once at startup; Firefox injects at runAt for matching pages (F12).
   registerContentScript(details: RegisterContentScriptDetails): Promise<RegisteredContentScript>;
 
-  // Choice screen / reopen picker — navigate the triggering tab to the choice page.
-  updateTab(tabId: number, props: { url: string }): Promise<void>;
-
   // Choice page → background: the selection message. Returns the handler's result so the
-  // choice page gets a response ({ok:true}/{ok:false}) for fail-open.
-  onMessage(handler: (msg: unknown) => unknown | Promise<unknown>): void;
+  // choice page gets a response ({ok:true}/{ok:false}) for fail-open. The sender says
+  // which tab spoke, which is how the picker knows the choice tab to consume — the page
+  // cannot name a tab it is not.
+  onMessage(handler: (msg: unknown, sender: MessageSender) => unknown | Promise<unknown>): void;
 
   // Reopen picker keyboard command (manifest "commands").
   onCommand(handler: (name: string) => void): void;

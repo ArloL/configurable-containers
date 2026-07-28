@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { aFakeBrowser } from "./mock-port";
+import { aFakeBrowser, DEFAULT_WINDOW_ID } from "./mock-port";
 import { createPicker } from "../../src/engine/picker";
 import { decodePayload } from "../../src/extension/picker-protocol";
 import { parseConfig } from "../../src/config/parse";
@@ -20,6 +20,8 @@ rules:
     open: Work
 `);
 
+const CHOICE_PAGE = "moz-extension://test/choice.html";
+
 function fakeReopen(): {
   reopen: (tab: Tab, url: string, t: Target) => Promise<void>;
   calls: Array<{ tabId: number; url: string; target: Target }>;
@@ -33,84 +35,156 @@ function fakeReopen(): {
   };
 }
 
-function decodeChoiceUrl(url: string) {
-  return decodePayload(url.split("#")[1]);
+function decodeChoiceUrl(url: string | undefined) {
+  return decodePayload(url!.split("#")[1]);
 }
 
 describe("picker — choice screen (onChoice flow)", () => {
-  it("showChoice navigates the triggering tab to the choice page with the encoded payload", async () => {
+  it("shows the choice in a tab of its own, leaving the page the user was on intact", async () => {
+    const browser = aFakeBrowser();
+    const readingSomething = browser.existingTab({ url: "https://kottke.example/", cookieStoreId: "firefox-default", index: 3, active: true });
+    const picker = createPicker({ port: browser.port, config, deps, reopen: fakeReopen().reopen });
+
+    await picker.showChoice(readingSomething.id, "https://figma.example/", ["Personal", "Work"]);
+
+    // The choice page is a NEW tab beside it — the article is still open, and nothing
+    // navigated the user's own tab anywhere.
+    expect(browser.openedTabs).toHaveLength(1);
+    expect(browser.openedTabs[0].url).toContain(CHOICE_PAGE + "#");
+    expect(browser.openedTabs[0].index).toBe(readingSomething.index + 1);
+    expect(browser.openedTabs[0].openerTabId).toBe(readingSomething.id);
+    expect(browser.closedTabIds).toEqual([]);
+    expect(browser.openTabs.get(readingSomething.id)?.url).toBe("https://kottke.example/");
+  });
+
+  it("replaces a triggering tab that has nothing to lose, so no empty tab is stranded", async () => {
+    const browser = aFakeBrowser();
+    // What a middle-clicked / target=_blank link is: pre-commit, in its opener's container.
+    const middleClicked = browser.existingTab({ url: "about:blank", cookieStoreId: "firefox-default", index: 4, openerTabId: 99 });
+    const picker = createPicker({ port: browser.port, config, deps, reopen: fakeReopen().reopen });
+
+    await picker.showChoice(middleClicked.id, "https://figma.example/", ["Personal", "Work"]);
+
+    expect(browser.openedTabs[0].index).toBe(middleClicked.index);
+    expect(browser.openedTabs[0].openerTabId).toBe(99);
+    expect(browser.closedTabIds).toEqual([middleClicked.id]);
+  });
+
+  it("opens the choice in the window its triggering tab is in", async () => {
+    const browser = aFakeBrowser();
+    const inAnotherWindow = browser.existingTab({ url: "https://kottke.example/", cookieStoreId: "firefox-default", windowId: 7 });
+    const picker = createPicker({ port: browser.port, config, deps, reopen: fakeReopen().reopen });
+
+    await picker.showChoice(inAnotherWindow.id, "https://figma.example/", ["Personal", "Work"]);
+
+    expect(browser.openedTabs[0].windowId).toBe(7);
+  });
+
+  it("carries the destination and the eligible containers to the page, and no tab id", async () => {
     const browser = aFakeBrowser();
     const tab = browser.existingTab({ url: "https://figma.example/", cookieStoreId: "firefox-default" });
-    const fr = fakeReopen();
-    const picker = createPicker({ port: browser.port, config, deps, reopen: fr.reopen });
+    const picker = createPicker({ port: browser.port, config, deps, reopen: fakeReopen().reopen });
+
     await picker.showChoice(tab.id, "https://figma.example/", ["Personal", "Work"]);
 
-    expect(browser.navigatedTabs).toHaveLength(1);
-    expect(browser.navigatedTabs[0].tabId).toBe(tab.id);
-    expect(browser.navigatedTabs[0].url).toContain("moz-extension://test/choice.html#");
-    expect(decodeChoiceUrl(browser.navigatedTabs[0].url)).toEqual({
-      tabId: tab.id,
+    expect(decodeChoiceUrl(browser.openedTabs[0].url)).toEqual({
       url: "https://figma.example/",
       options: ["Personal", "Work"],
     });
   });
 
-  it("onMessage cc-pick reopens into the chosen permanent container and returns {ok:true}", async () => {
+  it("shows nothing when the triggering tab has raced away", async () => {
     const browser = aFakeBrowser();
-    const tab = browser.existingTab({ url: "https://figma.example/", cookieStoreId: "firefox-default", index: 2, active: true });
+    const picker = createPicker({ port: browser.port, config, deps, reopen: fakeReopen().reopen });
+
+    await picker.showChoice(999, "https://figma.example/", ["Personal", "Work"]);
+
+    expect(browser.openedTabs).toEqual([]);
+  });
+});
+
+describe("picker — a selection (cc-pick)", () => {
+  it("reopens the tab that spoke into the chosen container, and returns {ok:true}", async () => {
+    const browser = aFakeBrowser();
+    const choiceTab = browser.existingTab({ url: CHOICE_PAGE + "#x", cookieStoreId: "firefox-default" });
     const fr = fakeReopen();
     createPicker({ port: browser.port, config, deps, reopen: fr.reopen });
 
-    const blockingResponse = await browser.receivesMessage({ type: "cc-pick", tabId: tab.id, url: "https://figma.example/", container: "Work" });
+    const reply = await browser.receivesMessage({ type: "cc-pick", url: "https://figma.example/", container: "Work" }, choiceTab);
 
-    expect(blockingResponse).toEqual({ ok: true });
-    expect(fr.calls).toEqual([{ tabId: tab.id, url: "https://figma.example/", target: { kind: "permanent", name: "Work" } }]);
+    expect(reply).toEqual({ ok: true });
+    expect(fr.calls).toEqual([{ tabId: choiceTab.id, url: "https://figma.example/", target: { kind: "permanent", name: "Work" } }]);
   });
 
-  it("onMessage cc-pick maps 'Temporary' to a {kind:'temporary'} target", async () => {
+  it("maps 'Temporary' to a fresh-throwaway target", async () => {
     const browser = aFakeBrowser();
-    const tab = browser.existingTab({ url: "https://youtube.example/", cookieStoreId: "firefox-default" });
+    const choiceTab = browser.existingTab({ url: CHOICE_PAGE + "#x", cookieStoreId: "firefox-default" });
     const fr = fakeReopen();
     createPicker({ port: browser.port, config, deps, reopen: fr.reopen });
 
-    await browser.receivesMessage({ type: "cc-pick", tabId: tab.id, url: "https://youtube.example/", container: "Temporary" });
+    await browser.receivesMessage({ type: "cc-pick", url: "https://youtube.example/", container: "Temporary" }, choiceTab);
 
     expect(fr.calls[0].target).toEqual({ kind: "temporary" });
   });
 
-  it("onMessage returns {ok:false} when reopen throws (fail-open signal to the page)", async () => {
+  it("declines a sender that is not a tab — the page cannot name a tab it is not", async () => {
     const browser = aFakeBrowser();
-    const tab = browser.existingTab({ url: "https://figma.example/", cookieStoreId: "firefox-default" });
+    const fr = fakeReopen();
+    createPicker({ port: browser.port, config, deps, reopen: fr.reopen });
+
+    const reply = await browser.receivesMessage({ type: "cc-pick", url: "https://figma.example/", container: "Work" });
+
+    expect(reply).toEqual({ ok: false });
+    expect(fr.calls).toEqual([]);
+  });
+
+  it("declines a url that is not http(s) — the hash payload it came from is attacker-reachable", async () => {
+    const browser = aFakeBrowser();
+    const choiceTab = browser.existingTab({ url: CHOICE_PAGE + "#x", cookieStoreId: "firefox-default" });
+    const fr = fakeReopen();
+    createPicker({ port: browser.port, config, deps, reopen: fr.reopen });
+
+    const reply = await browser.receivesMessage({ type: "cc-pick", url: "javascript:alert(1)", container: "Work" }, choiceTab);
+
+    expect(reply).toEqual({ ok: false });
+    expect(fr.calls).toEqual([]);
+  });
+
+  it("returns {ok:false} when the reopen throws, so the page can say so", async () => {
+    const browser = aFakeBrowser();
+    const choiceTab = browser.existingTab({ url: CHOICE_PAGE + "#x", cookieStoreId: "firefox-default" });
     const fr = fakeReopen();
     fr.reopen = async () => {
       throw new Error("boom");
     };
     createPicker({ port: browser.port, config, deps, reopen: fr.reopen });
 
-    const blockingResponse = await browser.receivesMessage({ type: "cc-pick", tabId: tab.id, url: "https://figma.example/", container: "Work" });
+    const reply = await browser.receivesMessage({ type: "cc-pick", url: "https://figma.example/", container: "Work" }, choiceTab);
 
-    expect(blockingResponse).toEqual({ ok: false });
+    expect(reply).toEqual({ ok: false });
   });
 
-  it("onMessage returns {ok:false} when the tab has raced away (getTab null)", async () => {
+  it("returns {ok:false} when the sending tab has raced away", async () => {
     const browser = aFakeBrowser();
+    const choiceTab = browser.existingTab({ url: CHOICE_PAGE + "#x", cookieStoreId: "firefox-default" });
     createPicker({ port: browser.port, config, deps, reopen: fakeReopen().reopen });
+    await browser.port.removeTab(choiceTab.id);
 
-    const blockingResponse = await browser.receivesMessage({ type: "cc-pick", tabId: 999, url: "https://figma.example/", container: "Work" });
+    const reply = await browser.receivesMessage({ type: "cc-pick", url: "https://figma.example/", container: "Work" }, choiceTab);
 
-    expect(blockingResponse).toEqual({ ok: false });
+    expect(reply).toEqual({ ok: false });
   });
 
-  it("onMessage ignores unrelated messages (returns undefined)", async () => {
+  it("ignores unrelated messages (returns undefined)", async () => {
     const browser = aFakeBrowser();
     createPicker({ port: browser.port, config, deps, reopen: fakeReopen().reopen });
-    const blockingResponse = await browser.receivesMessage({ type: "something-else" });
-    expect(blockingResponse).toBeUndefined();
+    const reply = await browser.receivesMessage({ type: "something-else" });
+    expect(reply).toBeUndefined();
   });
 });
 
 describe("picker — reopen picker (command flow)", () => {
-  it("onCommand reopen-picker shows the choice page with the active tab's matching rule containers", async () => {
+  it("offers the active tab's rule containers, without disturbing the page it is on", async () => {
     const browser = aFakeBrowser();
     const tab = browser.existingTab({ url: "http://figma.example:1234/", cookieStoreId: "firefox-default", active: true });
     browser.activeTabIs(tab);
@@ -118,16 +192,16 @@ describe("picker — reopen picker (command flow)", () => {
 
     await browser.receivesCommand("reopen-picker");
 
-    expect(browser.navigatedTabs).toHaveLength(1);
-    expect(browser.navigatedTabs[0].tabId).toBe(tab.id);
-    expect(decodeChoiceUrl(browser.navigatedTabs[0].url)).toEqual({
-      tabId: tab.id,
+    expect(browser.openedTabs).toHaveLength(1);
+    expect(browser.openedTabs[0].windowId).toBe(DEFAULT_WINDOW_ID);
+    expect(browser.closedTabIds).toEqual([]);
+    expect(decodeChoiceUrl(browser.openedTabs[0].url)).toEqual({
       url: "http://figma.example:1234/",
       options: ["Personal", "Work"],
     });
   });
 
-  it("onCommand reopen-picker with a single-open rule does nothing (nothing to choose)", async () => {
+  it("does nothing for a single-open rule (nothing to choose)", async () => {
     const browser = aFakeBrowser();
     const tab = browser.existingTab({ url: "http://work.example:1234/", cookieStoreId: "firefox-default" });
     browser.activeTabIs(tab);
@@ -135,10 +209,10 @@ describe("picker — reopen picker (command flow)", () => {
 
     await browser.receivesCommand("reopen-picker");
 
-    expect(browser.navigatedTabs).toEqual([]);
+    expect(browser.openedTabs).toEqual([]);
   });
 
-  it("onCommand reopen-picker with no matching rule does nothing (undecided unmatched case)", async () => {
+  it("does nothing when no rule matches (the undecided unmatched case)", async () => {
     const browser = aFakeBrowser();
     const tab = browser.existingTab({ url: "http://nomatch.example:1234/", cookieStoreId: "firefox-default" });
     browser.activeTabIs(tab);
@@ -146,22 +220,22 @@ describe("picker — reopen picker (command flow)", () => {
 
     await browser.receivesCommand("reopen-picker");
 
-    expect(browser.navigatedTabs).toEqual([]);
+    expect(browser.openedTabs).toEqual([]);
   });
 
-  it("onCommand reopen-picker with no active tab does nothing", async () => {
+  it("does nothing when there is no active tab", async () => {
     const browser = aFakeBrowser();
     createPicker({ port: browser.port, config, deps, reopen: fakeReopen().reopen });
     await browser.receivesCommand("reopen-picker");
-    expect(browser.navigatedTabs).toEqual([]);
+    expect(browser.openedTabs).toEqual([]);
   });
 
-  it("onCommand ignores an unknown command name", async () => {
+  it("ignores an unknown command name", async () => {
     const browser = aFakeBrowser();
     const tab = browser.existingTab({ url: "http://figma.example:1234/", cookieStoreId: "firefox-default" });
     browser.activeTabIs(tab);
     createPicker({ port: browser.port, config, deps, reopen: fakeReopen().reopen });
     await browser.receivesCommand("something-else");
-    expect(browser.navigatedTabs).toEqual([]);
+    expect(browser.openedTabs).toEqual([]);
   });
 });

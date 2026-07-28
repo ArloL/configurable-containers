@@ -127,6 +127,16 @@ describe("auto-temp — onCreated path", () => {
     expect(browser.openedTabs[0].openerTabId).toBe(99);
   });
 
+  it("containerizes a new tab in the window it was opened in", async () => {
+    const { browser } = setup();
+    createAutoTemp({ port: browser.port });
+
+    await browser.opensTab({ url: "about:newtab", cookieStoreId: "firefox-default", windowId: 7 });
+
+    // Ctrl+T in a second window must not move that tab to the first.
+    expect(browser.openedTabs[0].windowId).toBe(7);
+  });
+
   it("uses a shared suffix when provided", async () => {
     const { browser } = setup();
     const suffixes: string[] = [];

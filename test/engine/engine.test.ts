@@ -59,6 +59,32 @@ describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
     expect(browser.closedTabIds).toEqual([sourceTab.id]);
   });
 
+  it("opens the container tab in the window the source tab is in, not the focused one", async () => {
+    const browser = aFakeBrowser();
+    const inAnotherWindow = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default", windowId: 7 });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, tmpSuffix: sequentialTmpSuffixes() });
+
+    await browser.navigates(aNavigationTo({ tabId: inAnotherWindow.id }));
+
+    // Omitting the window sends the tab to the last focused NORMAL window instead.
+    expect(browser.openedTabs[0].windowId).toBe(7);
+  });
+
+  it("keeps a window.open popup alive: its replacement opens in the popup's own window", async () => {
+    const browser = aFakeBrowser();
+    // A share-button popup — window.open(url, "…", "width=640,height=480"). Its tab is
+    // pre-commit, so it takes the replace branch; without a window the replacement
+    // landed in the last focused normal window and removing the original closed the
+    // popup, taking the navigation with it.
+    const popup = browser.existingTab({ url: "about:blank", cookieStoreId: "firefox-default", windowId: 42, openerTabId: 7 });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, tmpSuffix: sequentialTmpSuffixes() });
+
+    await browser.navigates(aNavigationTo({ tabId: popup.id }));
+
+    expect(browser.openedTabs[0].windowId).toBe(42);
+    expect(browser.closedTabIds).toEqual([popup.id]);
+  });
+
   it("replaces an auto-temp tab sitting on about:newtab", async () => {
     const browser = aFakeBrowser();
     const tmp1 = browser.addContainerNamed({ name: "tmp1" });

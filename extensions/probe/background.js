@@ -97,6 +97,7 @@ browser.runtime.onMessage.addListener(async (msg) => {
     for (const ci of await browser.contextualIdentities.query({})) names[ci.cookieStoreId] = ci.name;
     return tabs.map((t) => ({
       id: t.id, url: t.url, cookieStoreId: t.cookieStoreId, index: t.index,
+      windowId: t.windowId,
       container: names[t.cookieStoreId] || "",
     }));
   }

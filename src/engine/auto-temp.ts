@@ -54,6 +54,7 @@ export function createAutoTemp(opts: AutoTempOptions): void {
       // new-tab page, which is what we want anyway. TCP does the same (it passes
       // url only when it matches /^https?:/).
       cookieStoreId: ci.cookieStoreId,
+      windowId: tab.windowId, // a new tab in a second window must not jump to the first
       index: tab.index,
       active: tab.active,
       openerTabId: tab.openerTabId,

@@ -1,6 +1,7 @@
 import type { Config, Deps, Target } from "../resolver/types";
 import { TEMPORARY } from "../resolver/types";
 import type { BrowserPort, Tab } from "./port";
+import { supersede } from "./supersede";
 import { encodePayload, type PickMessage, type PickResponse } from "../extension/picker-protocol";
 
 export interface PickerOptions {
@@ -11,7 +12,7 @@ export interface PickerOptions {
 }
 
 export interface Picker {
-  // Navigate the triggering tab to the choice page. Called by the engine's onChoice
+  // Open the choice page for the triggering tab. Called by the engine's onChoice
   // (automatic) and by the reopen-picker command (manual).
   showChoice(tabId: number, url: string, options: string[]): Promise<void>;
 }
@@ -30,15 +31,34 @@ function containerToTarget(container: string): Target {
 export function createPicker(opts: PickerOptions): Picker {
   const { port, config, deps, reopen } = opts;
 
+  // The choice page opens in a tab OF ITS OWN, beside the triggering tab. Navigating the
+  // triggering tab there instead — as this did — destroyed the page the user was on
+  // before they had chosen anything, which is exactly the loss `supersede` exists to
+  // avoid for single-container rules. The two paths now share that rule: a triggering tab
+  // that is on a page is kept, one with nothing to lose (a pre-commit middle-clicked
+  // link) is replaced, so no empty tab is stranded either way.
+  //
+  // Picking then supersedes the CHOICE tab, which is never on an http(s) page and so is
+  // always replaced — landing the container tab at the same index, in the same window,
+  // with the same opener a single-container reopen would have produced.
   async function showChoice(tabId: number, url: string, options: string[]): Promise<void> {
-    const choiceUrl = port.getURL("choice.html") + "#" + encodePayload({ tabId, url, options });
-    await port.updateTab(tabId, { url: choiceUrl });
+    const tab = await port.getTab(tabId);
+    if (!tab) return; // tab raced away — nothing to route
+    const choiceUrl = port.getURL("choice.html") + "#" + encodePayload({ url, options });
+    await supersede(port, tab, { url: choiceUrl, cookieStoreId: tab.cookieStoreId });
   }
 
-  port.onMessage(async (msg) => {
+  port.onMessage(async (msg, sender) => {
     const m = msg as PickMessage;
     if (m?.type !== "cc-pick") return undefined;
-    const tab = await port.getTab(m.tabId);
+    // The tab to consume is the one that spoke, not one the message names: the hash
+    // payload a choice page renders from is attacker-reachable (a crafted
+    // moz-extension://<id>/choice.html#… link), and so is anything derived from it.
+    if (sender.tabId == null) return { ok: false } satisfies PickResponse;
+    // Same reason the choice page only ever navigated to http(s): the url travels on to
+    // port.createTab, and a javascript:/data: url there would run in a privileged origin.
+    if (!/^https?:/.test(m.url)) return { ok: false } satisfies PickResponse;
+    const tab = await port.getTab(sender.tabId);
     if (!tab) return { ok: false } satisfies PickResponse;
     try {
       await reopen(tab, m.url, containerToTarget(m.container));

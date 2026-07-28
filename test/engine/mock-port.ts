@@ -9,6 +9,7 @@ import type {
   CreateTabProps,
   GetCookieDetails,
   HeadersDetails,
+  MessageSender,
   NotificationSpec,
   RegisterContentScriptDetails,
   RegisteredContentScript,
@@ -19,6 +20,20 @@ import type {
 } from "../../src/engine/port";
 
 const MAC_ID = "@testpilot-containers";
+
+// The window a tab belongs to unless a test says otherwise — Firefox's "current window".
+export const DEFAULT_WINDOW_ID = 1;
+
+// What a test says to conjure a tab. windowId is opt-in: only the cases about windows
+// mention one.
+export interface TabProps {
+  url?: string;
+  cookieStoreId: string;
+  index?: number;
+  active?: boolean;
+  openerTabId?: number;
+  windowId?: number;
+}
 
 // Resolve after pending microtasks so floated async callbacks (maybeQueue/tryRemove) settle.
 const flushMicrotasks = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
@@ -40,7 +55,6 @@ export interface MockPort {
   createdContainers: CreateIdentityProps[];
   removedContainers: string[];
   seededCookies: SetCookieDetails[];
-  navigatedTabs: { tabId: number; url: string }[];
   notifications: NotificationSpec[];
   registeredScripts: RegisterContentScriptDetails[];
 
@@ -49,18 +63,21 @@ export interface MockPort {
   settle(): Promise<void>;
 
   /** A tab that is already open. Fires nothing. */
-  existingTab(props: { url: string; cookieStoreId: string; index?: number; active?: boolean; openerTabId?: number }): Tab;
+  existingTab(props: TabProps & { url: string }): Tab;
   /** A container that already exists. Fires nothing. */
   addContainerNamed(props: { name: string; color?: string; icon?: string }): ContextualIdentity;
 
   /** Fires browser.tabs.onCreated, as a real tabs.create does. */
-  opensTab(props: { url: string; cookieStoreId: string; index?: number; active?: boolean; openerTabId?: number }): Promise<Tab>;
+  opensTab(props: TabProps & { url: string }): Promise<Tab>;
   /** Fires browser.tabs.onRemoved. */
   closesTab(tab: Tab): Promise<void>;
   /** Fires browser.tabs.onUpdated. */
   updatesTab(tab: Tab, info: TabUpdateInfo): Promise<void>;
-  /** Fires browser.runtime.onMessage and returns the handler's reply. */
-  receivesMessage(msg: unknown): Promise<unknown>;
+  /**
+   * Fires browser.runtime.onMessage and returns the handler's reply. `from` is the tab
+   * the message came from; omit it for a sender that is not a tab.
+   */
+  receivesMessage(msg: unknown, from?: Tab): Promise<unknown>;
   /** Fires browser.commands.onCommand. */
   receivesCommand(name: string): Promise<void>;
 
@@ -81,7 +98,6 @@ export function aFakeBrowser(): MockPort {
   const createdContainers: CreateIdentityProps[] = [];
   const removedContainers: string[] = [];
   const seededCookies: SetCookieDetails[] = [];
-  const navigatedTabs: { tabId: number; url: string }[] = [];
   const notifications: NotificationSpec[] = [];
 
   let tabId = 0;
@@ -93,13 +109,13 @@ export function aFakeBrowser(): MockPort {
   let onTabRemovedH: ((tabId: number) => void) | null = null;
   let onTabUpdatedH: ((tab: Tab, info: TabUpdateInfo) => void) | null = null;
   let headersHandler: ((d: HeadersDetails) => Promise<BlockingHeadersResponse | void>) | null = null;
-  let messageHandler: ((msg: unknown) => unknown | Promise<unknown>) | null = null;
+  let messageHandler: ((msg: unknown, sender: MessageSender) => unknown | Promise<unknown>) | null = null;
   let commandHandler: ((name: string) => void) | null = null;
   let activeTab: Tab | null = null;
   const cookieStore = new Map<string, Map<string, Cookie>>(); // storeId -> name -> cookie
   const registeredScripts: RegisterContentScriptDetails[] = [];
 
-  function makeTab(props: { url?: string; cookieStoreId: string; index?: number; active?: boolean; openerTabId?: number }): Tab {
+  function makeTab(props: TabProps): Tab {
     const id = ++tabId;
     const tab: Tab = {
       id,
@@ -110,6 +126,10 @@ export function aFakeBrowser(): MockPort {
       index: props.index ?? id,
       active: props.active ?? true,
       openerTabId: props.openerTabId,
+      // Firefox always reports a window; a test that doesn't care gets the one window.
+      // A tab created WITHOUT a windowId lands in the current window — which is what
+      // the popup bug was: the reopen omitted it and the replacement left the popup.
+      windowId: props.windowId ?? DEFAULT_WINDOW_ID,
     };
     openTabs.set(id, tab);
     return tab;
@@ -198,11 +218,6 @@ export function aFakeBrowser(): MockPort {
       registeredScripts.push(details);
       return { unregister: async () => { /* no-op for tests */ } };
     },
-    async updateTab(tabId, props) {
-      navigatedTabs.push({ tabId, url: props.url });
-      const existing = openTabs.get(tabId);
-      if (existing) openTabs.set(tabId, { ...existing, url: props.url });
-    },
     onMessage(h) {
       messageHandler = h;
     },
@@ -237,7 +252,6 @@ export function aFakeBrowser(): MockPort {
     createdContainers,
     removedContainers,
     seededCookies,
-    navigatedTabs,
     notifications,
     registeredScripts,
     existingTab: makeTab,
@@ -263,9 +277,9 @@ export function aFakeBrowser(): MockPort {
     macIsAbsent: (on) => void (macThrows = on),
     tabCreationFails: (on) => void (createTabThrows = on),
     cookieIn: (storeId, name) => cookieStore.get(storeId)?.get(name) ?? null,
-    async receivesMessage(msg) {
+    async receivesMessage(msg, from) {
       if (!messageHandler) throw new Error("no onMessage handler registered");
-      return messageHandler(msg);
+      return messageHandler(msg, { tabId: from?.id });
     },
     async receivesCommand(name) {
       commandHandler?.(name);

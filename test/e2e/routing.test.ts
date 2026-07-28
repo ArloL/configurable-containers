@@ -170,3 +170,51 @@ describe("routing — a link opened in a new tab (real Firefox, CC + probe)", ()
     );
   });
 });
+
+describe("routing — a window.open popup (real Firefox, CC + probe)", () => {
+  let firefox: Session;
+  let serverPort: string;
+
+  beforeAll(async () => {
+    firefox = await launch({ extensions: ["probe", "cc"] });
+    serverPort = new URL(firefox.serverUrl).port;
+  });
+
+  afterAll(async () => {
+    await firefox?.close();
+  });
+
+  it("routes it without destroying the popup window it was given", async () => {
+    const shareTargetUrl = `http://work.example:${serverPort}/`;
+    const articleUrl = `http://nomatch.example:${serverPort}/?popup=1&link=${encodeURIComponent(shareTargetUrl)}`;
+    await firefox.driver.switchTo().newWindow("tab");
+    try {
+      await firefox.driver.get(articleUrl);
+    } catch {
+      // CC reopened the blank tab away — expected.
+    }
+    await awaitContainerTab(firefox.driver, articleUrl);
+    const articleTab = (await listTabs(firefox.driver)).find((tab) => tab.url === articleUrl)!;
+
+    // A share button: window.open(url, "share", "width=640,height=480"). Firefox gives
+    // it a window of its own, whose tab is pre-commit and so takes the REPLACE branch of
+    // a reopen. The replacement used to be created with no window at all, which lands it
+    // in the last focused normal window — removing the original then closed the popup and
+    // took the navigation with it. The driver stays parked on the article: window.open
+    // does not navigate this tab, so its command relay survives.
+    await firefox.driver.findElement(By.id("go")).click();
+
+    const deadline = Date.now() + 15_000;
+    let tabs = await listTabs(firefox.driver);
+    while (Date.now() < deadline && !tabs.some((tab) => tab.url.startsWith(shareTargetUrl))) {
+      await firefox.driver.sleep(300);
+      tabs = await listTabs(firefox.driver);
+    }
+
+    const routedShareTab = tabs.find((tab) => tab.url.startsWith(shareTargetUrl));
+    expect(routedShareTab, "the share popup must still reach its container").toBeDefined();
+    expect(routedShareTab!.container).toBe("Work");
+    // The decisive bit: it is in the popup's window, not the one the article is in.
+    expect(routedShareTab!.windowId).not.toBe(articleTab.windowId);
+  });
+});

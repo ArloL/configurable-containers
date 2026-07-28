@@ -2,9 +2,10 @@
 // browser, no DOM — so the encode/decode/key logic is unit-testable at L1. See
 // docs/superpowers/specs/2026-07-27-choice-screen-design.md §3–§4.
 
+// No tabId: the background takes the tab from the message SENDER, so the page cannot
+// name a tab it is not (the hash a choice page decodes is attacker-reachable).
 export interface PickMessage {
   type: "cc-pick";
-  tabId: number;
   url: string;
   container: string;
 }
@@ -14,7 +15,6 @@ export interface PickResponse {
 }
 
 export interface ChoicePayload {
-  tabId: number;
   url: string;
   options: string[];
 }
