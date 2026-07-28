@@ -69,15 +69,17 @@ Verified against a real rebuild — see "Reproducibility check" below.
 ```text
 BUILD INSTRUCTIONS
 
-Needs Node 22+. From the root of the source archive:
+Needs Node 22+.
 
+    git clone https://github.com/ArloL/configurable-containers
+    cd configurable-containers
+    git checkout v<version>
     npm ci
     BUILD_TIMESTAMP=<value> npm run package -- <version>
 
 <version> is the version in the submitted manifest.json. <value> is in that
-version's release notes at
-https://github.com/ArloL/configurable-containers/releases — zip stores mtimes, so
-it is the one input the source cannot determine.
+release's notes at https://github.com/ArloL/configurable-containers/releases —
+zip stores mtimes, so it is the one input the source cannot determine.
 
 The result, dist/configurable-containers-<version>.xpi, matches the submitted file
 byte for byte, so comparing checksums is enough.
@@ -118,16 +120,16 @@ Manifest declares data_collection_permissions: { required: ["none"] }.
 
 ### Reproducibility check
 
-Re-run before a submission if the build changes. It is what the claim above rests on.
+Re-run before a submission if the build changes — it is what the claim above rests on.
+Mirrors what a reviewer does: a clean clone, built and compared.
 
 ```sh
-TS=1785200000   # any fixed value; the release uses its build time
-git archive --format=zip --output /tmp/src.zip HEAD
-mkdir -p /tmp/repro && unzip -q /tmp/src.zip -d /tmp/repro
+TS=1785200000   # any fixed value
+git clone --quiet . /tmp/repro
 ( cd /tmp/repro && npm ci && BUILD_TIMESTAMP=$TS npm run package -- 2607.0.101 )
 BUILD_TIMESTAMP=$TS npm run package -- 2607.0.101
 cmp dist/configurable-containers-2607.0.101.xpi \
-    /tmp/repro/dist/configurable-containers-2607.0.101.xpi && echo "identical"
+    /tmp/repro/dist/configurable-containers-2607.0.101.xpi && echo identical
 ```
 
 `test/extension/package.test.ts` guards the same properties without the network round
