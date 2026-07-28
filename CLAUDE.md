@@ -99,12 +99,32 @@ engine's reopen, not duplicating it.
   artifact and flake the disposal e2e. Don't re-enable parallelism.
 - esbuild constant-folds numbers in the bundle (`300000` → `3e5`); assert against
   esbuild's form, not the source literal.
+- **Revert-verify every new regression test: confirm it FAILS with the fix backed out.**
+  This suite has shipped false greens twice over — three e2e tests that passed with
+  auto-temp entirely broken (they reached a `tmp` container via the engine instead),
+  and L3 tests that asserted the bug itself. Both looked fine. Back the fix out, watch
+  the test go red, restore it — and restore from an editor edit or a copy, **not**
+  `git checkout`, which silently discards uncommitted work.
+- **`test/engine/mock-port.ts` fidelity is load-bearing.** When L3 is green but real
+  Firefox misbehaves, suspect the mock accepts something Firefox rejects. It now fires
+  `onTabCreated` from `createTab` (as Firefox does, which is what makes a listener
+  re-enter its own handler) and throws on privileged `about:` URLs. Never relax those
+  to make a test pass.
+- **The auto-temp ↔ resolver coupling has no test in `test/resolver/` alone.**
+  `disposablePath` keeps a throwaway only on same-site/same-group, so it must special-case
+  a `current.url` that is not http(s) — an auto-temp tab sits on `about:newtab`, and
+  without that check the user's *first* navigation is thrown into a second temp
+  container (`tmp1` → `tmp2`). The e2e that catches a regression lives in
+  `test/e2e/auto-temp.test.ts`, not the resolver tests.
 - **WebDriver cannot make a new-tab page — use the probe.** `switchTo().newWindow("tab")`
   produces `about:blank` (which auto-temp ignores by design), and `driver.get("about:newtab")`
   fails with *"Navigation to about:newtab is not allowed in this context"*. So the probe
-  exposes `newTab` (`browser.tabs.create({})` — exactly what Ctrl+T does) and `tabs`
-  (a `browser.tabs.query` dump), reached from a test via `openRealNewTab` / `listTabs` /
-  `probeCommand` in `harness/firefox.ts`. The relay is a `cc-probe-cmd` DOM event the
+  exposes `newTab` (`browser.tabs.create({})` — exactly what Ctrl+T does), `tabs`
+  (a `browser.tabs.query` dump) and `nav` (navigate a tab **by id** — WebDriver drives
+  only the tab it is switched to and cannot map a handle to a tab id, so an
+  `about:newtab` tab is otherwise unaddressable), reached from a test via
+  `openRealNewTab` / `listTabs` / `navigateTab` / `probeCommand` in
+  `harness/firefox.ts`. The relay is a `cc-probe-cmd` DOM event the
   probe listens for in its injected script, so **the driver must be parked on a
   probe-reported http(s) page** before issuing one. `listTabs` is also the only way to
   observe a new-tab page's container at all — `about:` pages take no content script, so
