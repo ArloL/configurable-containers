@@ -1,41 +1,116 @@
 # Configurable Containers — your routing config.
 #
-# Anything that matches no rule opens in a fresh temporary container, so an empty
-# config is a working config: every site is isolated, nothing is remembered.
-# Add rules for the sites you want a lasting, named container for.
+# Anything that matches no rule opens in a fresh temporary container, so this file
+# is already a working config: every site is isolated, nothing is remembered.
+# The rules below don't route anything into a named container — they only mark the
+# handful of hosts where isolating would BREAK something. Add your own rules under
+# "Your rules" at the bottom.
 #
 # Full reference: https://github.com/ArloL/configurable-containers/blob/main/CONFIG.md
 #
-# Uncomment and edit. Saving reloads the extension.
+# Saving reloads the extension.
 
-# rules:
-#   # The common case: one line. github.com opens in a container named "github.com".
-#   - match: github.com
-#
-#   # A curated name instead of the domain.
-#   - match: mail.google.com
-#     open: Google
-#
-#   # Several domains sharing one container.
-#   - match: [github.com, githubusercontent.com]
-#     open: Code
-#
-#   # Offer a choice: a screen appears, and "Personal" is preselected. Use the
-#   # reserved name "Temporary" for a throwaway.
-#   - match: youtube.com
-#     open: [Personal, Temporary]
-#     default: Personal
-#
-#   # Leave a site entirely alone — CC never touches its tabs.
-#   - match: addons.mozilla.org
-#     ignore: true
-#
-#   # A link shim: don't isolate the hop, and close the tab if it strands there.
-#   - match: t.co
-#     redirector: true
+rules:
+
+  # ---------------------------------------------------------------------------
+  # Exemptions. First match wins, so these stay ABOVE your own rules: an SSO host
+  # like accounts.spotify.com must win over a spotify.com rule you add later, or
+  # the login lands in the wrong container and fails.
+  # ---------------------------------------------------------------------------
+
+  # SSO / identity providers: stay in whichever container started the login.
+  #
+  # This is what makes "Sign in with …" work at all. Without it the auth hop counts
+  # as a cross-site navigation and gets a FRESH throwaway, so the provider can't see
+  # the session it just created. It does not widen exposure: if a site in a throwaway
+  # sends you to accounts.google.com, the login page runs in THAT throwaway and still
+  # can't reach the Google cookies in your other containers.
+  #
+  # A bare host also covers its subdomains, which is why one okta.com line is enough
+  # to cover every customer's <tenant>.okta.com.
+  - match: accounts.google.com
+    inherit: true
+  - match: login.microsoftonline.com
+    inherit: true
+  - match: login.live.com
+    inherit: true
+  - match: appleid.apple.com
+    inherit: true
+  - match: okta.com
+    inherit: true
+  - match: okta-emea.com
+    inherit: true
+  - match: auth0.com
+    inherit: true
+  - match: onelogin.com
+    inherit: true
+  - match: pingone.com
+    inherit: true
+  - match: duosecurity.com
+    inherit: true
+  - match: login.salesforce.com
+    inherit: true
+  - match: id.atlassian.com
+    inherit: true
+  - match: login.yahoo.com
+    inherit: true
+  - match: accounts.spotify.com
+    inherit: true
+  - match: challenge.spotify.com
+    inherit: true
+  # A card payment's "verify with your bank" step is the same situation: it must stay
+  # in the container that started the checkout. Those hosts are issuer-specific, so
+  # none ship here — add yours the same way if a payment ever bounces you to a blank
+  # page or an endless verification loop.
+
+  # Link shims: transient hops that exist only to bounce you somewhere else. Not
+  # isolated (so the hop doesn't burn a container), and the tab closes itself if it
+  # strands you on the shim after redirecting.
+  - match:
+    - t.co
+    - outgoing.prod.mozaws.net
+    - slack-redir.net
+    - away.vk.com
+    - l.facebook.com
+    - lm.facebook.com
+    - l.instagram.com
+    - l.messenger.com
+    - out.reddit.com
+    - href.li
+    redirector: true
+
+  # Left completely alone — no routing, no isolation, no side-effects. Firefox's own
+  # add-on and account pages break in confusing ways when moved between containers.
+  - match: addons.mozilla.org
+    ignore: true
+  - match: accounts.firefox.com
+    ignore: true
+
+  # ---------------------------------------------------------------------------
+  # Your rules. This is where routing actually happens. Delete the "# " in front of
+  # a line to switch it on — what's left is already indented correctly.
+  # ---------------------------------------------------------------------------
+
+  # # The common case: one line. github.com opens in a container named "github.com".
+  # - match: github.com
+
+  # # A curated name instead of the domain.
+  # - match: mail.google.com
+  #   open: Google
+
+  # # Several domains sharing one container.
+  # - match: [github.com, githubusercontent.com]
+  #   open: Code
+
+  # # Offer a choice: a screen appears, and "Personal" is preselected. Use the
+  # # reserved name "Temporary" for a throwaway.
+  # - match: youtube.com
+  #   open: [Personal, Temporary]
+  #   default: Personal
 
 # Isolation-continuity groups: sites in one group stay in the SAME throwaway as you
 # move between them, while crossing to anything outside it spins up a clean one.
 # Each group is a plain list of hostnames — no "match:" key here, unlike a rule.
 # groups:
 #   - [example.com, example.org]
+
