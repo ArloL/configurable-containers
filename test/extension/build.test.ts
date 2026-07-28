@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { buildExtension } from "../../harness/build-extension";
 
 describe("extension bundle", () => {
@@ -26,5 +27,14 @@ describe("extension bundle", () => {
     const outfile = await buildExtension();
     // esbuild prints 300000 in its shortest form (3e5); accept either.
     expect(readFileSync(outfile, "utf8")).toMatch(/graceMs:\s*(300000|3e5)\b/);
+  });
+
+  it("emits the options page bundle alongside the background", async () => {
+    await buildExtension();
+    const optionsJs = fileURLToPath(new URL("../../extensions/cc/options.js", import.meta.url));
+    expect(existsSync(optionsJs)).toBe(true);
+    const code = readFileSync(optionsJs, "utf8");
+    expect(code).toContain("parseConfig"); // validation is bundled into the page
+    expect(code).toContain("configYaml"); // the storage key
   });
 });

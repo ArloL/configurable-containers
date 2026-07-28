@@ -4,13 +4,14 @@
   "version": "0.0.1",
   "browser_specific_settings": {
     "gecko": {
-      "id": "cc@configurable-containers.test"
+      "id": "configurable-containers@k5d.de"
     }
   },
   "permissions": [
     "webRequest",
     "webRequestBlocking",
     "cookies",
+    "storage",
     "tabs",
     "contextualIdentities",
     "<all_urls>"
@@ -19,6 +20,10 @@
     "scripts": [
       "background.js"
     ]
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
   },
   "commands": {
     "reopen-picker": {
