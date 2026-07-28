@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { startServer } from "../../harness/server";
+import { startServer, REDIRECT_TARGET_HOST } from "../../harness/server";
 
 describe("startServer", () => {
   it("serves an http page with a title and closes cleanly", async () => {
@@ -23,6 +23,20 @@ describe("startServer", () => {
       const res = await fetch(server.url, { headers: { cookie: "seed=1" } });
       const body = await res.text();
       expect(body).toContain('data-seen-cookie="seed=1"');
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("302s /redirect to its one fixed cross-host destination", async () => {
+    const server = await startServer();
+    try {
+      const port = new URL(server.url).port;
+      const res = await fetch(`${server.url}redirect`, { redirect: "manual" });
+
+      expect(res.status).toBe(302);
+      // Fixed, not taken from the request: nothing a caller sends reaches Location.
+      expect(res.headers.get("location")).toBe(`http://${REDIRECT_TARGET_HOST}:${port}/`);
     } finally {
       await server.close();
     }
