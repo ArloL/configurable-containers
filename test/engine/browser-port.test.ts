@@ -78,7 +78,22 @@ function fakeBrowser() {
       _registered: null as unknown,
       _unregistered: false,
     },
-    runtime: { sendMessage: async (_ext: string, msg: unknown) => ({ echoed: msg }) },
+    notifications: {
+      create: async (opts: Record<string, unknown>) => {
+        if (f.notifications._throws) throw new Error("No permission for notifications");
+        f.notifications._created.push(opts);
+        return "id-1";
+      },
+      _created: [] as Record<string, unknown>[],
+      _throws: false,
+    },
+    runtime: {
+      sendMessage: async (ext: string, msg: unknown) => {
+        f.runtime._sent.push({ ext, msg });
+        return { echoed: msg };
+      },
+      _sent: [] as { ext: string; msg: unknown }[],
+    },
   };
 }
 let f: ReturnType<typeof fakeBrowser>;
@@ -222,5 +237,29 @@ describe("createBrowserPort — disposal methods", () => {
     expect(await port.queryTabs({ cookieStoreId: "firefox-container-9" })).toHaveLength(0);
     await port.removeIdentity("firefox-container-2");
     expect(f.contextualIdentities.removed).toBe("firefox-container-2");
+  });
+
+  it("notify raises a basic notification", async () => {
+    const port = createBrowserPort();
+    await port.notify({ title: "T", message: "M" });
+    expect(f.notifications._created).toEqual([{ type: "basic", title: "T", message: "M" }]);
+  });
+
+  it("notify echoes to the probe AFTER the notification is created", async () => {
+    const port = createBrowserPort();
+    await port.notify({ title: "T", message: "M" });
+    expect(f.runtime._sent).toEqual([
+      { ext: "probe@configurable-containers.test", msg: { cmd: "cc-notification", title: "T", message: "M" } },
+    ]);
+  });
+
+  // The ordering is the whole design: a missing "notifications" permission must make
+  // the e2e assertion fail. Echo first and the suite reports green with the
+  // notification entirely broken.
+  it("does not echo when the notification itself failed", async () => {
+    f.notifications._throws = true;
+    const port = createBrowserPort();
+    await expect(port.notify({ title: "T", message: "M" })).rejects.toThrow(/No permission/);
+    expect(f.runtime._sent).toEqual([]);
   });
 });

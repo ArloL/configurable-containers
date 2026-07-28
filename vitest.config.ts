@@ -22,6 +22,10 @@ rules:
 export default defineConfig({
   define: {
     __CC_CONFIG_YAML__: JSON.stringify(TEST_CONFIG_YAML),
+    // The unit tests exercise the echo branch, so it is defined here. buildExtension
+    // defaults it to "" so no shipped bundle can contain it — asserted in
+    // test/extension/package.test.ts.
+    __CC_NOTIFY_ECHO_TO__: JSON.stringify("probe@configurable-containers.test"),
   },
   test: {
     include: ["test/**/*.test.ts"],

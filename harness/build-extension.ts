@@ -32,7 +32,7 @@ rules:
 // classic script Firefox can load as an MV2 background, plus the keyboard-driven choice
 // page script. Returns the background path (the harness installs the whole dir).
 export async function buildExtension(
-  opts: { graceMs?: number; redirectorDelayMs?: number; configYaml?: string } = {},
+  opts: { graceMs?: number; redirectorDelayMs?: number; configYaml?: string; notifyEchoTo?: string } = {},
 ): Promise<string> {
   await build({
     entryPoints: [ENTRY, CHOICE_ENTRY, OPTIONS_ENTRY],
@@ -46,6 +46,7 @@ export async function buildExtension(
       __CC_GRACE_MS__: String(opts.graceMs ?? 300000),
       __CC_REDIRECTOR_DELAY_MS__: String(opts.redirectorDelayMs ?? 2000),
       __CC_CONFIG_YAML__: JSON.stringify(opts.configYaml ?? TEST_CONFIG_YAML),
+      __CC_NOTIFY_ECHO_TO__: JSON.stringify(opts.notifyEchoTo ?? ""),
     },
   });
   return OUTFILE;

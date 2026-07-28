@@ -9,6 +9,7 @@ import type {
   CreateTabProps,
   GetCookieDetails,
   HeadersDetails,
+  NotificationSpec,
   RegisterContentScriptDetails,
   RegisteredContentScript,
   SetCookieDetails,
@@ -34,8 +35,12 @@ export interface MockPort {
     removeIdentity: string[];
     setCookie: SetCookieDetails[];
     updates: { tabId: number; url: string }[];
+    notify: NotificationSpec[];
   };
   registeredScripts: RegisterContentScriptDetails[];
+  // The engine floats its notification rather than awaiting it (a navigation must not
+  // wait on a toast), so a test asserting on calls.notify must settle first.
+  flush(): Promise<void>;
   addTab(props: { url: string; cookieStoreId: string; index?: number; active?: boolean; openerTabId?: number }): Tab;
   addIdentity(props: { name: string; color?: string; icon?: string }): ContextualIdentity;
   emitTabCreated(props: { url: string; cookieStoreId: string; index?: number; active?: boolean; openerTabId?: number }): Promise<Tab>;
@@ -62,6 +67,7 @@ export function createMockPort(): MockPort {
     removeIdentity: [] as string[],
     setCookie: [] as SetCookieDetails[],
     updates: [] as { tabId: number; url: string }[],
+    notify: [] as NotificationSpec[],
   };
 
   let tabId = 0;
@@ -195,6 +201,9 @@ export function createMockPort(): MockPort {
     getURL(path) {
       return `moz-extension://test/${path}`;
     },
+    async notify(n) {
+      calls.notify.push(n);
+    },
   };
 
   return {
@@ -245,6 +254,7 @@ export function createMockPort(): MockPort {
     setActiveTab(tab) {
       activeTab = tab;
     },
+    flush: flushMicrotasks,
   };
 }
 

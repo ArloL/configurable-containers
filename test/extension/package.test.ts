@@ -45,6 +45,21 @@ describe("packageExtension", () => {
     }
   });
 
+  it("ships no echo target, so the packaged build cannot talk to the test probe", async () => {
+    const outDir = mkdtempSync(path.join(tmpdir(), "cc-pkg-"));
+    try {
+      const { stageDir } = await packageExtension({ version: "2607.0.103", outDir });
+      const bundle = readFileSync(path.join(stageDir, "background.js"), "utf8");
+      // The echo can only reach the probe by naming it, so its absence is the whole
+      // property. The `cc-notification` literal itself remains, inside a branch esbuild
+      // folded to `if (false)`: the build does not minify, so dead statements survive.
+      expect(bundle).not.toContain("probe@configurable-containers.test");
+      expect(bundle).toContain("if (false)");
+    } finally {
+      rmSync(outDir, { recursive: true, force: true });
+    }
+  });
+
   it("leaves the tracked manifest untouched", async () => {
     const tracked = fileURLToPath(new URL("../../extensions/cc/manifest.json", import.meta.url));
     const before = readFileSync(tracked, "utf8");
