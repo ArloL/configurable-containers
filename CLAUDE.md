@@ -206,6 +206,13 @@ engine's reopen, not duplicating it.
 
 - `npm test` runs everything (unit **and** e2e) under Vitest; `npm run typecheck`
   for tsc. `tsconfig.json` typechecks `test/` too, so test code must type-clean.
+- **`*.realtime.test.ts` is the one thing `npm test` does not run** — excluded in
+  `vitest.config.ts`, run by `npm run test:realtime` (nightly workflow) through
+  `vitest.realtime.config.ts`. These wait out *production* timers, so a case there must
+  **not** pass `ccGraceMs` to `launch` — the whole point is that the bundle carries the
+  shipped constant and that a five-minute background-page timer really fires. Both
+  configs take their esbuild defines from `vitest.shared.ts`; keep it that way, or a
+  test's meaning starts depending on which config ran it.
 - **e2e launches a real system Firefox via Selenium/geckodriver.** CI installs
   Firefox and sets `FIREFOX_BIN`; Selenium Manager provisions geckodriver. `npm test`
   skips nothing — expect Firefox windows to open.
