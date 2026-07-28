@@ -43,7 +43,33 @@ flows from breaking along the way.
 How domains map to containers is defined in a single user configuration. See
 [CONFIG.md](CONFIG.md) for the design.
 
+## Install
+
+Configurable Containers is published on addons.mozilla.org. Install it from its
+listing page; Firefox keeps it updated.
+
+On first run it seeds a commented example config that routes nothing — every site
+opens in a fresh temporary container until you add rules. Edit the config in the
+add-on's preferences (about:addons → Configurable Containers → Preferences), which
+opens a full-tab text editor. Saving reloads the extension.
+
+## Building from source
+
+Requires Node 22 and a system Firefox for the end-to-end tests.
+
+```
+npm ci
+npm run typecheck
+npm test        # unit + e2e; launches real Firefox via Selenium
+npm run package # -> dist/configurable-containers-<version>.xpi
+```
+
+`npm run package` bundles `src/extension/background.ts` and the two page scripts with
+esbuild and stages them, with `extensions/cc/manifest.json`, into `dist/cc/`. Releases
+are cut by `.github/workflows/release.yaml`, which stamps the version from a CalVer tag
+and submits to AMO.
+
 ## Status
 
-Early exploration — a personal tool first. Built on Firefox's container APIs for
-now, with the door left open to other browsers later.
+Published, and still shaped by the author's daily use. Built on Firefox's container
+APIs, with the door left open to other browsers later.
