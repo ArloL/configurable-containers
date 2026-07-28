@@ -220,16 +220,17 @@ same spec-can't-drift guarantee, without the DSL.
 | F6 inherit neutrality      | ✅ |    |    |    | ✅ | ✅ |
 | F7 race / MAC              |    |    | ✅ | ✅ |    |    |
 | F8 MV3 restart             |    |    | ✅ |    |    |    |
-| F9 redirect binding        |    |    |    | ✅ | ✅ |    |
+| F9 redirect binding        |    |    | ✅ | ✅ | ✅ |    |
 | F10 disposal timing        |    |    | ✅ | ✅ |    |    |
 | F11 cookie boundary        | ✅ |    |    | ✅ | ✅ |    |
 | F12 side-effect timing     |    |    | ✅ | ✅ | ✅ |    |
 
-Every class except F9 has at least one deterministic owner (L1–L3) *and*, where
-the browser is the source of truth (F1, F2, F7, F9, F10, F11, F12), a
-real-Firefox confirmation. F9 is the exception by nature: POST bodies and
-redirect bindings don't exist in a pure resolver, so it is owned entirely by the
-real-Firefox levels (L4 fixtures + L5 scenarios).
+Every class now has at least one deterministic owner (L1–L3) *and*, where the
+browser is the source of truth (F1, F2, F7, F9, F10, F11, F12), a real-Firefox
+confirmation. F9 was the long-standing exception: POST bodies and redirect
+bindings don't exist in a pure resolver. It gained an L3 owner when the decision
+*not* to reopen a non-GET navigation moved into the engine, where a mock port can
+drive it.
 
 ## GitHub Actions pipeline
 

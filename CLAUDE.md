@@ -121,6 +121,37 @@ engine's reopen, not duplicating it.
   cases. `test/e2e/routing.test.ts` clicks a real `target=_blank` link for this (the
   harness server renders one with `?link=`); a scripted `tabs.create` does not
   reproduce container inheritance.
+- **A navigation that carries a body is never reopened** (`d.method !== "GET"`, at step
+  3b of `onBeforeRequest`). `port.createTab` issues a GET, so reopening a POST drops the
+  body — a SAML assertion, a 3DS return. The guard sits *before* `macOwns` (no reason to
+  message MAC about a navigation we will not act on) and *before* `handled.add`, so the
+  path adds no state and is fail-open. It is in the engine rather than the resolver on
+  purpose: the routing answer is still correct, the *effect* is what cannot be performed
+  losslessly, so a future POST-replay becomes a change to how the engine executes an
+  unchanged decision. Same-site POSTs never reach it (`disposablePath` already returns
+  `stay`) — that is the case TCP needs an explicit check for
+  (`tcp/src/background/isolation.ts:328`) and MAC has no answer to at all.
+- **The notification echo must be sent AFTER `notifications.create` resolves**
+  (`src/engine/browser-port.ts`). A desktop notification is in no DOM, so L4 observes it
+  by having CC's test build forward it to the probe — `__CC_NOTIFY_ECHO_TO__`, an esbuild
+  define that is `""` in every shipped build. Echo *before* the create and a missing
+  `notifications` permission still yields a green e2e with the notification entirely
+  broken: **verified by doing it** — the e2e passed, and only the 5ms
+  `browser-port.test.ts` ordering case caught it. `test/extension/package.test.ts`
+  separately asserts the probe's id never reaches a packaged bundle. Note esbuild folds
+  the condition but does **not** delete the branch (no `minify`), so the shipped bundle
+  legitimately contains `if (false)` around a `cc-notification` literal.
+- **An F9 e2e must start from a COMMITTED page.** Driving `/authorize` from a fresh tab
+  has CC reopen that tab first, and the 302 is then another hop of a navigation
+  `reopenedNav` already owns — the callback lands in the throwaway, no container switch
+  happens, and a test asserting "the code survived" proves nothing. Both cases in
+  `test/e2e/redirect-binding.test.ts` click a same-site link out of an already-loaded
+  page. Two further traps there: the probe's command relay lives in the page's document,
+  so `listTabs` **must not** be called until the navigation settles or its reply is lost
+  to the 8s timeout; and if the POST guard regresses, CC cancels that navigation and the
+  tab is wedged — every WebDriver call against it blocks, so the failure is a bare
+  timeout. That timeout is the regression signature, not flake, and nothing test-side
+  can improve it.
 - Temporary containers are identified **by the `tmp` name prefix** (`TMP_PREFIX` in
   `src/engine/registry.ts`), not a stored set — durable across a background restart.
   The disposer removes only `tmp…` containers; it never touches permanent/user ones.

@@ -219,6 +219,21 @@ explicitly. In the author's data this is a real list: `accounts.google.com`,
 `login.microsoftonline.com`, `credorax.net`, `payment.unzer.com`, and other 3DS
 processors.
 
+### A form submission is never moved between containers
+
+A navigation that carries a body — a form POST, such as a SAML assertion posted back
+to an app, or a 3DS processor returning to a shop — is **never reopened**. Moving a tab
+means opening a new one, and that can only issue a GET, so the body would be dropped
+silently: the login just fails, or the payment never confirms.
+
+So CC leaves it in the container it started in and raises a notification naming the
+container the rules asked for. The routing rule genuinely does not apply to that one
+navigation, which is why it is announced rather than passed over.
+
+For an SSO chain this is a signal to add `inherit: true` to the identity provider. The
+IdP then sits in the app's own container, the assertion posts back to that same
+container, and there is no boundary to cross in the first place.
+
 ## Groups (isolation continuity)
 
 `groups` is a **separate top-level list**, parallel to `rules`. A group is a set

@@ -27,6 +27,22 @@ single-container rules (CLAUDE.md, "A reopen KEEPS a source tab that is on a
 page"). The two paths should agree; that means showing the choice somewhere
 other than the user's own tab.
 
+## Notification volume on declined POSTs (2026-07-28)
+
+Every cross-site form POST that would change container now raises a notification,
+deduplicated per host per background session. Payment-gateway returns are the common
+case, and there staying put is the *desirable* outcome — so the toast may prove to be
+noise. The narrower trigger (notify only when the denied target was a **permanent**
+container, i.e. a rule that went unapplied) is a one-line change at the same site in
+`src/engine/engine.ts`. Revisit after real use.
+
+Not done here either: **replaying** the POST into the target container via a generated
+auto-submitting form page. It is the only option that would actually route the
+assertion, and neither Temporary Containers nor Multi-Account Containers attempts it.
+It needs the `requestBody` webRequest opt-in, urlencoded and multipart handling, and a
+`moz-extension:` page forging a cross-origin POST. See
+`docs/superpowers/specs/2026-07-28-f9-redirect-binding-design.md` §1.
+
 ## `overrides` in package.json (2026-07-28)
 
 `adm-zip` and `shell-quote` are forced past what their own dependents declare

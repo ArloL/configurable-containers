@@ -253,18 +253,20 @@ Scenario: A seeded cookie is written per container, never copied across
 ```gherkin
 Scenario: An OAuth code flow (GET redirect) survives a reopen
   Given a login that completes via a GET redirect carrying a code parameter
-  And the redirect target matches a rule that reopens the tab into another container
-  When the reopen happens
+  And the redirect target matches a rule that opens it in another container
+  When the redirect is reopened into that container
   Then the code parameter is preserved in the reopened tab's URL
-  And the login completes
 
-Scenario: A SAML POST binding is never dropped silently
-  Given an IdP that returns its assertion via a POST-binding form
-  And the POST target matches a rule that reopens the tab into another container
-  When the reopen happens
-  Then either the assertion survives the container switch
-  Or an explicit, visible error explains that the switch dropped the POST body
-  # Handled or loud — never a silent GET that loses the assertion
+Scenario: A POST that would change container is left where it is, loudly
+  Given an identity provider that returns its assertion via a POST-binding form
+  And the POST target matches a rule that opens it in another container
+  When the POST is submitted
+  Then CC does not reopen the tab, because a reopen would drop the form data
+  And the assertion arrives intact at its destination
+  And the destination loads in the container the submission came from
+  And a notification names the host, the container it stayed in, and the container
+      the rule asked for
+  # Fix for an SSO chain: give the IdP `inherit: true`, and no switch is needed
 ```
 
 ## Feature: Inherit and SSO
