@@ -15,6 +15,10 @@ describe("redirector auto-close (real Firefox, CC + probe)", () => {
   });
 
   async function navFreshTab(url: string): Promise<void> {
+    // The previous case leaves the driver on a tab CC closed, and newWindow needs a
+    // live context ("Browsing context has been discarded") — re-anchor first.
+    const handles = await session.driver.getAllWindowHandles();
+    await session.driver.switchTo().window(handles[handles.length - 1]);
     await session.driver.switchTo().newWindow("tab");
     try {
       await session.driver.get(url);
