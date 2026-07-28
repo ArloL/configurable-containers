@@ -1,4 +1,5 @@
 import { createEngine } from "../engine/engine";
+import { createAutoTemp } from "../engine/auto-temp";
 import { createDisposer } from "../engine/disposer";
 import { createCookieSeeder } from "../engine/cookie-seeder";
 import { createScriptInjector } from "../engine/script-injector";
@@ -17,6 +18,10 @@ declare const __CC_REDIRECTOR_DELAY_MS__: number;
 const port = createBrowserPort();
 const config = parseConfig(BUNDLED_CONFIG_YAML);
 
+// Shared temp-container suffix counter so engine reopen + auto-temp never collide.
+let n = 0;
+const tmpSuffix = () => String(++n);
+
 // `picker` is referenced inside onChoice (which fires only at navigation time, after
 // construction), so the forward-reference is safe. Hoisted with `let` to satisfy the
 // linter and make the dependency direction explicit.
@@ -25,11 +30,14 @@ const engine = createEngine({
   port,
   config,
   deps: { matchRule, matchGroup, sameSite },
+  tmpSuffix,
   onChoice: (options, nav) => {
     void picker.showChoice(nav.tabId, nav.url, options);
   },
 });
 picker = createPicker({ port, config, deps: { matchRule }, reopen: engine.reopen });
+
+createAutoTemp({ port, tmpSuffix });
 
 createDisposer({ port, clock: realClock, graceMs: __CC_GRACE_MS__ });
 

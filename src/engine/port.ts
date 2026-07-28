@@ -97,7 +97,10 @@ export interface BlockingResponse {
 }
 
 export interface CreateTabProps {
-  url: string;
+  // Omit to open the browser's own new-tab page. Required for auto-temp: Firefox
+  // rejects `tabs.create({ url: "about:newtab" })` with "Illegal URL" — extensions
+  // may not name that page explicitly, only get it by passing no url at all.
+  url?: string;
   cookieStoreId: string;
   openerTabId?: number;
   index?: number;
