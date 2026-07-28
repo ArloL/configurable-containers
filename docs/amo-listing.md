@@ -110,11 +110,6 @@ src/engine/script-injector.ts passes that string to contentScripts.register().
 The code comes only from their own storage.local config, never the network. No
 eval, no new Function, no remotely loaded code. The shipped default has no
 "scripts" entries.
-
-PRIVACY
-
-Collects and transmits nothing — no analytics, no network requests of its own.
-Manifest declares data_collection_permissions: { required: ["none"] }.
 ```
 
 ### Reproducibility check
