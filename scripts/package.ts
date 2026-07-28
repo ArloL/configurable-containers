@@ -1,10 +1,10 @@
 // Build a distributable XPI. Stages extensions/cc/ into dist/cc/ and stamps the
 // version THERE, so manifest.json stays a placeholder in the tracked tree and a
 // local run never dirties git. Run: npx tsx scripts/package.ts [version]
-import { cpSync, mkdirSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
-import { execFileSync } from "node:child_process";
+import { cpSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import * as path from "node:path";
+import { zipSync } from "fflate";
 import { buildExtension } from "../harness/build-extension";
 import { parseConfig } from "../src/config/parse";
 
@@ -13,12 +13,14 @@ const SRC_DIR = path.resolve(HERE, "../extensions/cc");
 const DEFAULT_SEED = path.resolve(HERE, "../src/config/default.yaml");
 const DEFAULT_OUT = path.resolve(HERE, "../dist");
 
-// A zip entry records its file's mtime, so two builds of identical content otherwise
-// differ. 1980-01-01 is the earliest instant the format's DOS timestamp can express.
-// zip writes that timestamp in LOCAL time, so the archive is only reproducible if the
-// builder's timezone is pinned too — see TZ below. Measured: without it, a CEST machine
-// and a UTC machine differ by 12 bytes, and a US machine matches UTC only because zip
-// silently clamps at the 1980 floor.
+// A zip entry records an mtime, so two builds of identical content otherwise differ.
+// 1980-01-01 is the earliest instant the format's DOS timestamp can express.
+//
+// The archive is built with fflate rather than the system `zip`, which buys three
+// things: the deflate implementation is pinned by package-lock.json instead of being
+// whatever zlib the builder happens to have, entry order and mtimes are set explicitly
+// rather than inherited from the filesystem, and there is no dependency on a `zip`
+// binary being installed at all.
 const ZIP_EPOCH = new Date(Date.UTC(1980, 0, 1));
 
 // Reproducibility needs the entry timestamp to be FIXED, not to be any particular
@@ -34,17 +36,28 @@ export function zipTimestamp(env: NodeJS.ProcessEnv = process.env): Date {
   if (Number.isNaN(when.getTime())) {
     throw new Error(`BUILD_TIMESTAMP is not a unix epoch or a parsable date: ${raw}`);
   }
-  // zip clamps anything earlier to the DOS floor, which would silently discard the
-  // value and make the build unreproducible against the timestamp actually requested.
+  // The DOS timestamp counts years from 1980 and cannot represent anything earlier;
+  // an earlier value would wrap rather than round-trip, so reject it outright.
   if (when < ZIP_EPOCH) {
-    throw new Error(`BUILD_TIMESTAMP is before 1980-01-01 and zip cannot store it: ${raw}`);
+    throw new Error(`BUILD_TIMESTAMP is before 1980-01-01 and a zip cannot store it: ${raw}`);
   }
   return when;
 }
 
-// Staged paths relative to `dir`, files only, sorted. `zip -r .` walks in directory
-// order, which is the filesystem's business and not stable across machines; passing an
-// explicit sorted list fixes the entry order instead.
+// A zip's DOS timestamp has no timezone, and fflate fills it with LOCAL getters
+// (getFullYear/getHours/… — see fflate's zip writer). Passing a UTC instant straight
+// through would therefore bake the builder's timezone into the archive: measured,
+// Berlin, Tokyo and UTC each produced a different file. This returns the instant whose
+// LOCAL components spell `utc`'s UTC components, so every machine writes the same bytes.
+export function asDosLocal(utc: Date): Date {
+  const once = new Date(utc.getTime() + utc.getTimezoneOffset() * 60_000);
+  // The shift can itself cross a DST boundary and change the offset; re-derive from the
+  // shifted instant so the components still land where intended.
+  return new Date(utc.getTime() + once.getTimezoneOffset() * 60_000);
+}
+
+// Staged paths relative to `dir`, files only, sorted. Directory order is the
+// filesystem's business and not stable across machines; sorting fixes entry order.
 function stagedFiles(dir: string, prefix = ""): string[] {
   return readdirSync(dir, { withFileTypes: true })
     .flatMap((e) =>
@@ -89,16 +102,15 @@ export async function packageExtension(
   const xpiPath = path.join(outDir, `configurable-containers-${opts.version}.xpi`);
   rmSync(xpiPath, { force: true });
 
-  // Reproducible archive: fixed entry order, fixed mtimes, and -X to drop the uid/gid
-  // and extended-timestamp extra fields. Same inputs then give byte-identical bytes,
-  // so a reviewer can checksum the .xpi instead of unpacking it to compare.
-  const files = stagedFiles(stageDir);
-  const mtime = zipTimestamp();
-  for (const rel of files) utimesSync(path.join(stageDir, rel), mtime, mtime);
-  execFileSync("zip", ["-X", "-D", "-q", xpiPath, ...files], {
-    cwd: stageDir,
-    env: { ...process.env, TZ: "UTC" },
-  });
+  // Reproducible archive: entries added in sorted order, every one carrying the same
+  // explicit mtime. Same inputs give byte-identical output, so a reviewer can checksum
+  // the .xpi instead of unpacking it to compare.
+  const mtime = asDosLocal(zipTimestamp());
+  const entries: Record<string, [Uint8Array, { mtime: Date }]> = {};
+  for (const rel of stagedFiles(stageDir)) {
+    entries[rel] = [readFileSync(path.join(stageDir, rel)), { mtime }];
+  }
+  writeFileSync(xpiPath, zipSync(entries, { level: 9 }));
 
   return { xpiPath, stageDir };
 }

@@ -1,10 +1,10 @@
 import { Builder, type WebDriver } from "selenium-webdriver";
 import firefox from "selenium-webdriver/firefox.js";
 import { fileURLToPath } from "node:url";
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
+import { zipSync } from "fflate";
 import { startServer, type TestServer } from "./server";
 import { buildExtension } from "./build-extension";
 
@@ -50,11 +50,24 @@ export interface LaunchOptions {
 }
 
 // Zip an unpacked extension directory into a temporary .xpi (geckodriver's
-// installAddon wants a file, not a directory).
+// installAddon wants a file, not a directory). Uses fflate for the same reason
+// scripts/package.ts does — no dependency on a `zip` binary being installed.
 function zipDir(dir: string): { xpiPath: string; cleanup: () => void } {
   const out = mkdtempSync(path.join(tmpdir(), "cc-e2e-xpi-"));
   const xpiPath = path.join(out, "addon.xpi");
-  execFileSync("zip", ["-r", "-FS", xpiPath, ".", "-x", ".*"], { cwd: dir });
+
+  const entries: Record<string, Uint8Array> = {};
+  const walk = (from: string, prefix = "") => {
+    for (const e of readdirSync(from, { withFileTypes: true })) {
+      if (e.name.startsWith(".")) continue; // matches the old `-x .*`
+      const full = path.join(from, e.name);
+      if (e.isDirectory()) walk(full, `${prefix}${e.name}/`);
+      else entries[`${prefix}${e.name}`] = readFileSync(full);
+    }
+  };
+  walk(dir);
+
+  writeFileSync(xpiPath, zipSync(entries, { level: 9 }));
   return { xpiPath, cleanup: () => rmSync(out, { recursive: true, force: true }) };
 }
 

@@ -6,6 +6,24 @@ import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { packageExtension, zipTimestamp } from "../../scripts/package";
 
+// Decode the DOS timestamp out of the archive's first local file header (which always
+// starts at offset 0): 2 bytes of time at offset 10, 2 of date at 12.
+//
+// Deliberately not `unzip -l`, whose date rendering is platform-specific — macOS prints
+// 07-28-2026, Linux prints 2026-07-28. A test pinned to one of those passes locally and
+// fails in CI, which is exactly what happened.
+function firstEntryDosTimestamp(xpiPath: string): string {
+  const buf = readFileSync(xpiPath);
+  expect(buf.readUInt32LE(0)).toBe(0x04034b50); // PK\x03\x04, a local file header
+  const time = buf.readUInt16LE(10);
+  const date = buf.readUInt16LE(12);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${1980 + ((date >> 9) & 0x7f)}-${pad((date >> 5) & 0x0f)}-${pad(date & 0x1f)} ` +
+    `${pad((time >> 11) & 0x1f)}:${pad((time >> 5) & 0x3f)}:${pad((time & 0x1f) * 2)}`
+  );
+}
+
 describe("packageExtension", () => {
   it("stages the extension with the given version and produces an xpi", async () => {
     const outDir = mkdtempSync(path.join(tmpdir(), "cc-pkg-"));
@@ -49,11 +67,7 @@ describe("packageExtension", () => {
     try {
       process.env.BUILD_TIMESTAMP = "1785200000"; // 2026-07-28T00:53:20Z
       const { xpiPath } = await packageExtension({ version: "2607.0.104", outDir });
-      const entries = execFileSync("unzip", ["-lqq", xpiPath], { encoding: "utf8" })
-        .trim()
-        .split("\n");
-      expect(entries.length).toBeGreaterThan(0);
-      for (const entry of entries) expect(entry).toContain("07-28-2026 00:53");
+      expect(firstEntryDosTimestamp(xpiPath)).toBe("2026-07-28 00:53:20");
     } finally {
       if (originalTs === undefined) delete process.env.BUILD_TIMESTAMP;
       else process.env.BUILD_TIMESTAMP = originalTs;
