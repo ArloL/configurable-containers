@@ -26,6 +26,10 @@ async function main() {
     headless: false,
     configYaml,
     localDomains: null, // live sites resolve normally
+    // Marionette otherwise opens the session at about:blank, which auto-temp ignores;
+    // a real user's Firefox starts on the new-tab page, so start there too and the
+    // auto-temp startup sweep greets you with a tmp container like it would at home.
+    startupUrl: "about:newtab",
   });
 
   console.log("\n=== Configurable Containers — manual test session (live) ===\n");

@@ -31,6 +31,15 @@ async function reportTab(tabId, cookieStoreId, url) {
   try {
     await browser.tabs.executeScript(tabId, {
       code:
+        // Command relay: the driver dispatches a `cc-probe-cmd` DOM event on the page;
+        // this content script forwards it to the probe background (which has the
+        // privileged APIs) and writes the reply into data-cc-result for the driver
+        // to poll. Lets tests do things WebDriver can't, e.g. open a real new tab.
+        "document.addEventListener('cc-probe-cmd', (e) => {" +
+        "  browser.runtime.sendMessage(e.detail).then((r) => {" +
+        "    document.documentElement.setAttribute('data-cc-result', JSON.stringify(r));" +
+        "  });" +
+        "});" +
         "document.title = " + JSON.stringify(REPORT_PREFIX + cookieStoreId) + ";" +
         "document.documentElement.setAttribute('data-cc-container', " + JSON.stringify(name) + ");" +
         "document.documentElement.setAttribute('data-cc-containers', " + JSON.stringify(list) + ");" +
@@ -41,6 +50,28 @@ async function reportTab(tabId, cookieStoreId, url) {
     // about:, view-source:, moz-extension: pages cannot be injected — ignore.
   }
 }
+
+// Driver commands, relayed from the injected content script above.
+//   newTab  — `browser.tabs.create({})`, i.e. exactly what Ctrl/Cmd+T does: a tab
+//             at the new-tab page in the default container. WebDriver's
+//             `switchTo().newWindow("tab")` cannot do this (it makes about:blank).
+//   tabs    — dump every tab's id/url/cookieStoreId/container name.
+browser.runtime.onMessage.addListener(async (msg) => {
+  if (msg && msg.cmd === "newTab") {
+    const t = await browser.tabs.create({});
+    return { id: t.id, url: t.url, cookieStoreId: t.cookieStoreId };
+  }
+  if (msg && msg.cmd === "tabs") {
+    const tabs = await browser.tabs.query({});
+    const names = {};
+    for (const ci of await browser.contextualIdentities.query({})) names[ci.cookieStoreId] = ci.name;
+    return tabs.map((t) => ({
+      id: t.id, url: t.url, cookieStoreId: t.cookieStoreId,
+      container: names[t.cookieStoreId] || "",
+    }));
+  }
+  return null;
+});
 
 browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status === "complete" && /^https?:/.test(tab.url || "")) {
