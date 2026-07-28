@@ -3,9 +3,9 @@
 A Firefox WebExtension that routes each site into the right container from one
 user config. Orientation lives elsewhere: `README.md` (goals), `CONFIG.md` (config
 format + feature list F1–F12), `TESTING.md` (the test pyramid), and
-`docs/superpowers/specs/` + `plans/` (per-slice design of record). This file only
-records what the code and those docs *don't* say — the things a cold start gets
-wrong.
+`docs/superpowers/specs/` + `plans/` (per-slice design of record). `FOLLOWUPS.md`
+lists what was deliberately left needing a re-check. This file only records what
+the code and those docs *don't* say — the things a cold start gets wrong.
 
 ## Where logic lives — don't misplace it
 
