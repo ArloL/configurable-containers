@@ -78,8 +78,7 @@ Needs Node 22+.
     BUILD_TIMESTAMP=<value> npm run package -- <version>
 
 <version> is the version in the submitted manifest.json. <value> is in that
-release's notes at https://github.com/ArloL/configurable-containers/releases —
-zip stores mtimes, so it is the one input the source cannot determine.
+release's notes at https://github.com/ArloL/configurable-containers/releases.
 
 The result, dist/configurable-containers-<version>.xpi, matches the submitted file
 byte for byte, so comparing checksums is enough.
