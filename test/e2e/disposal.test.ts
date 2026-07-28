@@ -13,31 +13,31 @@ async function freshList(driver: WebDriver): Promise<string[]> {
 }
 
 describe("temp disposal (real Firefox)", () => {
-  let session: Session;
-  let port: string;
+  let firefox: Session;
+  let serverPort: string;
 
   beforeAll(async () => {
     // Short grace so the keep-alive window elapses quickly in the test.
-    session = await launch({ extensions: ["probe", "cc"], ccGraceMs: 500 });
-    port = new URL(session.serverUrl).port;
+    firefox = await launch({ extensions: ["probe", "cc"], ccGraceMs: 500 });
+    serverPort = new URL(firefox.serverUrl).port;
   });
 
   afterAll(async () => {
-    await session?.close();
+    await firefox?.close();
   });
 
   it("removes a tmp container after its last tab closes", async () => {
-    const d = session.driver;
+    const d = firefox.driver;
 
     // Route an unmatched host into a fresh tmp container.
     await d.switchTo().newWindow("tab");
     try {
-      await d.get(`http://nomatch.example:${port}/`);
+      await d.get(`http://nomatch.example:${serverPort}/`);
     } catch {
       /* CC reopened the tab away */
     }
-    const { name } = await awaitContainerTab(d, `http://nomatch.example:${port}/`);
-    expect(name).toMatch(/^tmp/);
+    const { name: containerName } = await awaitContainerTab(d, `http://nomatch.example:${serverPort}/`);
+    expect(containerName).toMatch(/^tmp/);
 
     // Close the tmp tab (currently switched to it), then re-attach to a survivor —
     // closing the active tab leaves the driver with no current window.
@@ -49,11 +49,11 @@ describe("temp disposal (real Firefox)", () => {
     // get a fresh probe report each poll instead of accumulating stale tabs.
     await d.switchTo().newWindow("tab");
     try {
-      await d.get(`http://work.example:${port}/`);
+      await d.get(`http://work.example:${serverPort}/`);
     } catch {
       /* CC reopened the tab away */
     }
-    await awaitContainerTab(d, `http://work.example:${port}/`); // now on the Work tab
+    await awaitContainerTab(d, `http://work.example:${serverPort}/`); // now on the Work tab
 
     // Poll: navigate the Work tab to a fresh (cache-busted) URL each time — same host,
     // so it stays in Work, but a new document forces the probe to re-report the live
@@ -61,8 +61,8 @@ describe("temp disposal (real Firefox)", () => {
     const deadline = Date.now() + 15_000;
     let gone = false;
     while (Date.now() < deadline) {
-      await d.get(`http://work.example:${port}/?t=${Date.now()}`); // stays in Work; fresh document
-      if (!(await freshList(d)).includes(name)) {
+      await d.get(`http://work.example:${serverPort}/?t=${Date.now()}`); // stays in Work; fresh document
+      if (!(await freshList(d)).includes(containerName)) {
         gone = true;
         break;
       }

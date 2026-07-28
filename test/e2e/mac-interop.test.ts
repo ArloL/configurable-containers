@@ -13,36 +13,36 @@ import { launch, awaitContainerTab, type Session } from "../../harness/firefox";
 // observationally identical — CC routes normally either way. Only an ASSIGNED domain
 // separates them, which is why the harness seeds one.
 describe("MAC interop (real Firefox, CC + MAC + probe)", () => {
-  let session: Session;
-  let port: string;
+  let firefox: Session;
+  let serverPort: string;
 
   beforeAll(async () => {
-    session = await launch({
+    firefox = await launch({
       extensions: ["probe", "cc", "mac"],
       // nomatch.example matches no CC rule, so CC's own answer would be a throwaway.
       // MAC assigns it to Personal (firefox-container-1). The two answers differ, which
       // is what makes the deferral observable.
       macAssign: { host: "nomatch.example", userContextId: "1" },
     });
-    port = new URL(session.serverUrl).port;
+    serverPort = new URL(firefox.serverUrl).port;
   });
 
   afterAll(async () => {
-    await session?.close();
+    await firefox?.close();
   });
 
   it("defers to MAC on an assigned host instead of routing it into a throwaway", async () => {
-    const url = `http://nomatch.example:${port}/`;
-    await session.driver.switchTo().newWindow("tab");
+    const url = `http://nomatch.example:${serverPort}/`;
+    await firefox.driver.switchTo().newWindow("tab");
     try {
-      await session.driver.get(url);
+      await firefox.driver.get(url);
     } catch {
       // Whichever extension wins tears the tab down mid-nav — expected.
     }
 
     // MAC's container, not CC's. A tmp here would mean CC ignored the assignment and
     // bought a throwaway — the F2/F7 churn this defers to avoid.
-    const { name } = await awaitContainerTab(session.driver, url);
-    expect(name).toBe("Personal");
+    const { name: containerName } = await awaitContainerTab(firefox.driver, url);
+    expect(containerName).toBe("Personal");
   });
 });
