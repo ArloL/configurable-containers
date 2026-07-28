@@ -1,0 +1,41 @@
+# Configurable Containers — your routing config.
+#
+# Anything that matches no rule opens in a fresh temporary container, so an empty
+# config is a working config: every site is isolated, nothing is remembered.
+# Add rules for the sites you want a lasting, named container for.
+#
+# Full reference: https://github.com/ArloL/configurable-containers/blob/main/CONFIG.md
+#
+# Uncomment and edit. Saving reloads the extension.
+
+# rules:
+#   # The common case: one line. github.com opens in a container named "github.com".
+#   - match: github.com
+#
+#   # A curated name instead of the domain.
+#   - match: mail.google.com
+#     open: Google
+#
+#   # Several domains sharing one container.
+#   - match: [github.com, githubusercontent.com]
+#     open: Code
+#
+#   # Offer a choice: a screen appears, and "Personal" is preselected. Use the
+#   # reserved name "Temporary" for a throwaway.
+#   - match: youtube.com
+#     open: [Personal, Temporary]
+#     default: Personal
+#
+#   # Leave a site entirely alone — CC never touches its tabs.
+#   - match: addons.mozilla.org
+#     ignore: true
+#
+#   # A link shim: don't isolate the hop, and close the tab if it strands there.
+#   - match: t.co
+#     redirector: true
+
+# Isolation-continuity groups: sites in one group stay in the SAME throwaway as you
+# move between them, while crossing to anything outside it spins up a clean one.
+# Each group is a plain list of hostnames — no "match:" key here, unlike a rule.
+# groups:
+#   - [example.com, example.org]
