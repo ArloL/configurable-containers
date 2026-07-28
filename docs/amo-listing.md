@@ -64,94 +64,56 @@ Source code and full configuration reference: [github.com/ArloL/configurable-con
 ## Notes for reviewer
 
 Paste verbatim into the "Is there anything our reviewers should bear in mind?" field.
-The build instructions below were verified by extracting the source archive
-(`git archive --format=zip HEAD`), running them in a clean directory, and comparing the
-result file-by-file against the submitted package — see "Reproducibility check" after
-the block.
+Verified against a real rebuild — see "Reproducibility check" below.
 
 ```text
 BUILD INSTRUCTIONS
 
-Environment: any OS with Node.js and npm. Node 22 or newer; the reviewer default
-(Node 24.14.0 / npm 11.9.0 on Ubuntu 24.04) works. No system dependencies beyond
-Node — the end-to-end tests need Firefox, but building does not. All build tools
-are open source, installed from npm, and run locally: esbuild (bundler) and tsx
-(TypeScript runner). package-lock.json is included.
-
-From the root of the source archive:
+Needs Node 22+. From the root of the source archive:
 
     npm ci
-    BUILD_TIMESTAMP=<value> npm run package -- VERSION
+    BUILD_TIMESTAMP=<value> npm run package -- <version>
 
-replacing VERSION with the version string in the submitted manifest.json, and
-<value> with the BUILD_TIMESTAMP printed in the GitHub release notes for that
-version (https://github.com/ArloL/configurable-containers/releases). This writes
-dist/configurable-containers-VERSION.xpi and the unpacked build in dist/cc/.
+<version> is the version in the submitted manifest.json. <value> is in that
+version's release notes at
+https://github.com/ArloL/configurable-containers/releases — zip stores mtimes, so
+it is the one input the source cannot determine.
 
-COMPARING THE RESULT
+The result, dist/configurable-containers-<version>.xpi, matches the submitted file
+byte for byte, so comparing checksums is enough.
 
-The build is byte-for-byte reproducible: the .xpi itself should match the submitted
-file exactly, so comparing checksums is enough. The archive is written by the fflate
-library (a devDependency, pinned in package-lock.json) rather than a system zip, with
-entries in sorted order and an explicit timestamp on each, so the output does not
-depend on which zip or zlib build the machine happens to have.
-
-BUILD_TIMESTAMP is the only input that is not in the source archive. It is the
-time the release was built, and it is published in the release notes because zip
-records modification times and nothing in the source lets you derive them.
-If you omit it the build still succeeds and every file inside is
-identical, but the .xpi checksum will differ — in that case compare the extracted
-contents instead:
-
-    background.js  options.js  choice.js  manifest.json  options.html  choice.html
-
-Only background.js, options.js and choice.js are generated: esbuild bundles three
-TypeScript entry points into three classic scripts. Output is NOT minified.
-manifest.json, options.html and choice.html are copied verbatim from extensions/cc/.
-scripts/package.ts stages extensions/cc/ into dist/cc/ and stamps the version there,
-which is why manifest.json in the source tree carries a placeholder version.
-
-PERMISSIONS AND WHY EACH IS NEEDED
-
-- webRequest, webRequestBlocking, <all_urls> — the core mechanism. A blocking
-  webRequest.onBeforeRequest listener on main_frame decides which container a
-  navigation belongs in; when it belongs in a different one, the request is
-  cancelled and the tab reopened in the target container. It has to be blocking
-  because the decision must happen before the request proceeds. <all_urls> because
-  the user's configuration may route any domain.
-- contextualIdentities — create, query and remove containers.
-- cookies — required by Firefox for tabs.create({ cookieStoreId }); without it
-  every container reopen throws "No permission for cookieStoreId". Also used by the
-  optional per-site cookie-seeding feature.
-- tabs — create, remove and update tabs when moving a navigation into a container.
-- storage — stores the user's configuration. storage.local only.
-
-USER-CONFIGURED CONTENT SCRIPTS — PLEASE NOTE
-
-The configuration format has an optional "scripts" key. If a user adds one, the
-add-on calls browser.contentScripts.register() with the JavaScript string from
-their own configuration so it runs on the domains they specified. This is why
-src/engine/script-injector.ts registers a content script from a code string.
-
-That code comes only from the user's own configuration in storage.local. It is
-never fetched from the network. There is no remote code execution anywhere in the
-add-on: no eval, no new Function, no remotely loaded scripts. The default
-configuration that ships with the add-on contains no "scripts" entries.
-
-PRIVACY
-
-The add-on collects and transmits nothing. There is no analytics or telemetry, and
-it makes no network requests of its own. The only stored data is the user's
-configuration in storage.local. The manifest declares
-data_collection_permissions: { required: ["none"] }.
+esbuild bundles three TypeScript entry points into background.js, options.js and
+choice.js. Nothing is minified; everything else is copied verbatim.
 
 WHAT IT DOES
 
-Routes each site into a Firefox container according to a single YAML configuration
-the user edits in the add-on's options page. Anything no rule matches opens in a
-fresh temporary container. The shipped default configuration contains 18 rules,
-all of them exemptions (inherit / redirector / ignore) — it routes nothing into a
-named container.
+Routes each site into a Firefox container per a YAML config the user edits in the
+options page. Unmatched sites open in a fresh temporary container.
+
+PERMISSIONS
+
+- webRequest, webRequestBlocking, <all_urls> — the whole mechanism. A blocking
+  onBeforeRequest listener on main_frame decides the container; if it differs from
+  the current one the request is cancelled and the tab reopened there. It must
+  block because the decision precedes the request, and any domain may be routed.
+- cookies — Firefox requires it for tabs.create({ cookieStoreId }), which
+  otherwise throws "No permission for cookieStoreId". Also used by the optional
+  cookie-seeding feature.
+- contextualIdentities, tabs — create/query/remove containers and tabs.
+- storage — the user's config. storage.local only.
+
+CONTENT SCRIPTS
+
+The config has an optional "scripts" key. If the user sets it,
+src/engine/script-injector.ts passes that string to contentScripts.register().
+The code comes only from their own storage.local config, never the network. No
+eval, no new Function, no remotely loaded code. The shipped default has no
+"scripts" entries.
+
+PRIVACY
+
+Collects and transmits nothing — no analytics, no network requests of its own.
+Manifest declares data_collection_permissions: { required: ["none"] }.
 ```
 
 ### Reproducibility check
