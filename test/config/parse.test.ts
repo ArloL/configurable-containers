@@ -4,60 +4,60 @@ import { hostMatcher as hm } from "../../src/matcher/matcher";
 
 describe("parseConfig — rule forms", () => {
   it("auto-names a bare single-host rule", () => {
-    const c = parseConfig(`rules:\n  - match: adventofcode.com\n`);
-    expect(c).toEqual({
+    const parsed = parseConfig(`rules:\n  - match: adventofcode.com\n`);
+    expect(parsed).toEqual({
       rules: [{ match: [hm("adventofcode.com")], action: { kind: "open", containers: ["adventofcode.com"] } }],
       groups: [],
     });
   });
 
   it("auto-names a multi-host rule after the first host", () => {
-    const c = parseConfig(`rules:\n  - match: [notion.com, notion.so]\n`);
-    expect(c.rules[0]).toEqual({
+    const parsed = parseConfig(`rules:\n  - match: [notion.com, notion.so]\n`);
+    expect(parsed.rules[0]).toEqual({
       match: [hm("notion.com"), hm("notion.so")],
       action: { kind: "open", containers: ["notion.com"] },
     });
   });
 
   it("auto-names from the canonical host, not the raw string", () => {
-    const c = parseConfig(`rules:\n  - match: Notion.COM\n`);
-    expect(c.rules[0].action).toEqual({ kind: "open", containers: ["notion.com"] });
+    const parsed = parseConfig(`rules:\n  - match: Notion.COM\n`);
+    expect(parsed.rules[0].action).toEqual({ kind: "open", containers: ["notion.com"] });
   });
 
   it("parses open single / multi / default and Temporary passthrough", () => {
-    const c = parseConfig(
+    const parsed = parseConfig(
       `rules:\n` +
         `  - match: goflink.com\n    open: Flink\n` +
         `  - match: figma.com\n    open: [Personal, Work]\n` +
         `  - match: trello.com\n    open: [Personal, Work]\n    default: Work\n` +
         `  - match: pinterest.com\n    open: Temporary\n`,
     );
-    expect(c.rules[0].action).toEqual({ kind: "open", containers: ["Flink"] });
-    expect(c.rules[1].action).toEqual({ kind: "open", containers: ["Personal", "Work"] });
-    expect(c.rules[2].action).toEqual({ kind: "open", containers: ["Personal", "Work"], default: "Work" });
-    expect(c.rules[3].action).toEqual({ kind: "open", containers: ["Temporary"] });
+    expect(parsed.rules[0].action).toEqual({ kind: "open", containers: ["Flink"] });
+    expect(parsed.rules[1].action).toEqual({ kind: "open", containers: ["Personal", "Work"] });
+    expect(parsed.rules[2].action).toEqual({ kind: "open", containers: ["Personal", "Work"], default: "Work" });
+    expect(parsed.rules[3].action).toEqual({ kind: "open", containers: ["Temporary"] });
   });
 
   it("parses inherit / ignore / redirector", () => {
-    const c = parseConfig(
+    const parsed = parseConfig(
       `rules:\n` +
         `  - match: accounts.google.com\n    inherit: true\n` +
         `  - match: getpocket.com\n    ignore: true\n` +
         `  - match: [t.co, slack-redir.net]\n    redirector: true\n`,
     );
-    expect(c.rules[0].action).toEqual({ kind: "inherit" });
-    expect(c.rules[1].action).toEqual({ kind: "ignore" });
-    expect(c.rules[2].action).toEqual({ kind: "redirector" });
-    expect(c.rules[2].match).toEqual([hm("t.co"), hm("slack-redir.net")]);
+    expect(parsed.rules[0].action).toEqual({ kind: "inherit" });
+    expect(parsed.rules[1].action).toEqual({ kind: "ignore" });
+    expect(parsed.rules[2].action).toEqual({ kind: "redirector" });
+    expect(parsed.rules[2].match).toEqual([hm("t.co"), hm("slack-redir.net")]);
   });
 
   it("surfaces both the cookies and scripts overlays on one rule", () => {
-    const c = parseConfig(
+    const parsed = parseConfig(
       `rules:\n  - match: youtube.com\n    open: Temporary\n` +
         `    cookies:\n      - { name: wide, url: "https://www.youtube.com/", value: "1" }\n` +
         `    scripts:\n      - { at: document_start, run: "noop()" }\n`,
     );
-    expect(c.rules[0]).toEqual({
+    expect(parsed.rules[0]).toEqual({
       match: [hm("youtube.com")],
       action: { kind: "open", containers: ["Temporary"] },
       cookies: [{ name: "wide", url: "https://www.youtube.com/", value: "1" }],

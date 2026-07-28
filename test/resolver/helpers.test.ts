@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { makeDeps, host } from "./helpers";
+import { realMatchers, host } from "./helpers";
 import type { Rule, Group } from "../../src/resolver/types";
 
-const deps = makeDeps();
+const deps = realMatchers();
 
 describe("test Deps doubles", () => {
   it("matchRule matches host and subdomains, first-match wins", () => {

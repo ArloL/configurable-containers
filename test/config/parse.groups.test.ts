@@ -13,10 +13,10 @@ function err(yaml: string): ConfigError {
 
 describe("parseConfig — groups", () => {
   it("parses a list of host groups", () => {
-    const c = parseConfig(
+    const parsed = parseConfig(
       `groups:\n  - [google.com, google.de, youtube.com]\n  - [check24.de, check24.com]\n`,
     );
-    expect(c.groups).toEqual([
+    expect(parsed.groups).toEqual([
       { match: [hm("google.com"), hm("google.de"), hm("youtube.com")] },
       { match: [hm("check24.de"), hm("check24.com")] },
     ]);
