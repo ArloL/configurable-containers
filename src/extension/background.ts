@@ -101,7 +101,10 @@ void (async () => {
 
   // First run: the seed becomes the user's config, and storage is truth from here
   // on — a later version shipping a different seed never overrides an edited config.
-  if (loaded.seeded && !loaded.error) await writeStoredConfigYaml(SEED_CONFIG_YAML);
+  // This happens even when the seed does NOT parse: storing the broken text is what
+  // lets the editor (opened below) show it with its parse error, so the user can fix
+  // it. Skipping the write would greet them with a blank textarea and no clue.
+  if (loaded.seeded) await writeStoredConfigYaml(SEED_CONFIG_YAML);
 
   // Fill the object the siblings are already holding. On a parse failure this leaves
   // it empty: nothing matches, so every site opens in a fresh throwaway. The failure
