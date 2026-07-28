@@ -7,8 +7,8 @@ export const MAC_ID = "@testpilot-containers";
 
 export interface Engine {
   // The F1-guarded reopen effect. Reopens `tab`'s `url` into `target`, preserving
-  // placement (index/active/opener), and leaves the reopened tab's first navigation
-  // alone via the `freshlyReopened` guard. Throws on failure (callers react).
+  // placement (index/active/opener), and leaves the reopened tab's whole navigation
+  // alone via the `reopenedNav` guard. Throws on failure (callers react).
   reopen(tab: Tab, url: string, target: Target): Promise<void>;
 }
 
@@ -41,6 +41,10 @@ async function buildNavContext(
   registry: ContainerRegistry,
   port: BrowserPort
 ): Promise<NavContext> {
+  // A pre-commit tab ("about:blank" until its navigation commits, "" when brand new)
+  // reports no `current` even though its container is known: what the disposable path
+  // needs is the site the tab was ON, and that is genuinely unknown here. Reporting
+  // the container instead would keep a middle-clicked link in its opener's throwaway.
   const current =
     tab.url && tab.url !== "about:blank"
       ? { url: tab.url, container: await registry.toRef(tab.cookieStoreId) }
@@ -61,11 +65,20 @@ export function createEngine(opts: EngineOptions): Engine {
   const { port, config, deps, onChoice } = opts;
   const registry = createRegistry(port, opts.tmpSuffix ?? defaultSuffix());
   const handled = new Set<string>();
-  // Tab ids of tabs we just created by reopening. Their FIRST navigation must be
+  // The navigation each tab we reopened is still performing: tabId -> the requestId
+  // once its first request arrives, or null until then. That whole navigation must be
   // left alone: in a real browser onBeforeRequest fires before the new tab's url
-  // commits, so it still reads as about:blank and resolve() cannot tell it is
-  // already correctly contained — without this guard it would reopen forever (F1).
-  const freshlyReopened = new Set<number>();
+  // commits, so it still reads as about:blank and resolve() cannot tell it is already
+  // correctly contained — without this it would reopen forever (F1).
+  //
+  // Tracking the requestId, not just "the first request", is what makes the guard
+  // cover a REDIRECT CHAIN: every hop reuses the requestId and the tab stays
+  // pre-commit throughout, so a one-shot guard let hop 2 look like an unrouted
+  // navigation and bought it another throwaway (tmp2 -> tmp3 on a single click).
+  // Keying on the requestId also keeps the guard off tabs we did NOT route: a
+  // middle-clicked link inherits its opener's container and is pre-commit too, and
+  // it must still be isolated into a throwaway of its own.
+  const reopenedNav = new Map<number, string | null>();
 
   // The F1-guarded reopen effect. Shared by the engine's own `case "reopen"` and the
   // picker (choice screen / reopen picker). Throws on failure — callers decide whether
@@ -80,7 +93,7 @@ export function createEngine(opts: EngineOptions): Engine {
       active: tab.active,
       openerTabId: tab.openerTabId,
     });
-    freshlyReopened.add(created.id); // leave its first nav alone (see 1b)
+    reopenedNav.set(created.id, null); // leave its whole navigation alone (see 1b)
     await port.removeTab(tab.id);
   }
 
@@ -93,10 +106,16 @@ export function createEngine(opts: EngineOptions): Engine {
     const key = d.requestId + "+" + d.url;
     if (handled.has(key)) return { cancel: true };
 
-    // (1b) F1 loop guard — the first nav of a tab we just reopened into.
-    if (freshlyReopened.has(d.tabId)) {
-      freshlyReopened.delete(d.tabId);
-      return;
+    // (1b) F1 loop guard — the navigation we reopened this tab to perform, from its
+    // first request through every redirect hop of it.
+    if (reopenedNav.has(d.tabId)) {
+      const ours = reopenedNav.get(d.tabId);
+      if (ours == null) {
+        reopenedNav.set(d.tabId, d.requestId); // first request: this is the one
+        return;
+      }
+      if (ours === d.requestId) return; // a hop of it — same navigation, still ours
+      reopenedNav.delete(d.tabId); // a later navigation in that tab: route it normally
     }
 
     // (2) Assemble NavContext.

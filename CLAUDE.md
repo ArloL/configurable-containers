@@ -30,7 +30,7 @@ nested in `createEngine`. The choice screen / reopen-picker UI lives in `src/ext
 
 `createEngine` returns `{ reopen }` — the F1-guarded reopen effect. The picker calls
 `engine.reopen` (injected) so its choice-driven reopen goes through the
-`freshlyReopened` guard; never reopen a tab by hand in the picker, and don't make
+`reopenedNav` guard; never reopen a tab by hand in the picker, and don't make
 `createEngine` return `void` again — the picker's correctness depends on reusing the
 engine's reopen, not duplicating it.
 
@@ -72,11 +72,30 @@ engine's reopen, not duplicating it.
   target=_blank / window.open / engine-reopen tabs before they load. Cost of the rule:
   users with `browser.newtabpage.enabled=false` get `about:blank` on Ctrl+T and are not
   auto-containerized — same limitation as TCP.
-- **The engine's `freshlyReopened` tab-id guard is load-bearing.** When the engine
-  reopens a tab, the *new* tab's `onBeforeRequest` fires **before its url commits**
-  (it still reads as `about:blank`), so `resolve()` can't tell it is already in the
-  target container and would reopen forever (the F1 loop). The guard leaves a
-  reopened tab's first navigation alone. Preserve it across any engine/MV3 rework.
+- **The engine's `reopenedNav` guard is load-bearing.** When the engine reopens a tab,
+  the *new* tab's `onBeforeRequest` fires **before its url commits** (it still reads as
+  `about:blank`), so `resolve()` can't tell it is already in the target container and
+  would reopen forever (the F1 loop). The guard leaves the navigation the engine
+  reopened the tab to perform alone. Preserve it across any engine/MV3 rework.
+- **That guard is keyed on the *navigation*, not on "the first request".**
+  `reopenedNav` (tabId → requestId) holds a reopened tab through its whole navigation,
+  because **a redirect chain keeps one requestId and the tab stays `about:blank` for
+  every hop of it**. The original one-shot version guarded only hop 1; hop 2 then
+  looked like an unrouted navigation in a blank tab and bought another throwaway, so a
+  single click on a 30x-ing link walked `tmp1` → `tmp2` → `tmp3`. Covered at L3 and by
+  the redirect-chain case in `test/e2e/routing.test.ts` (the harness server answers 302
+  on `/redirect?to=`).
+- **Two different things are `about:blank` pre-commit, and only one of them is ours.**
+  A tab we reopened *and* a middle-clicked / `target=_blank` / `window.open` tab both
+  read `about:blank` with a real container — the latter **inherits its opener's**. So
+  `buildNavContext` must keep reporting `current: null` for a pre-commit tab: what
+  `disposablePath` needs is the site the tab was ON, which is genuinely unknown, and
+  reporting the container instead parks every middle-clicked link in its opener's
+  throwaway (kottke.org and the site you opened from it sharing `tmp1` — no isolation
+  at all). The requestId in `reopenedNav` is the *only* thing that separates the two
+  cases. `test/e2e/routing.test.ts` clicks a real `target=_blank` link for this (the
+  harness server renders one with `?link=`); a scripted `tabs.create` does not
+  reproduce container inheritance.
 - Temporary containers are identified **by the `tmp` name prefix** (`TMP_PREFIX` in
   `src/engine/registry.ts`), not a stored set — durable across a background restart.
   The disposer removes only `tmp…` containers; it never touches permanent/user ones.

@@ -81,6 +81,46 @@ describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
     expect(mp.calls.createTab).toHaveLength(1); // no second reopen — loop broken
   });
 
+  it("a redirect hop in a reopened throwaway tab stays put — one throwaway per navigation", async () => {
+    const mp = createMockPort();
+    const tmp1 = mp.addIdentity({ name: "tmp1" });
+    const tab = mp.addTab({ url: "https://kottke.org/", cookieStoreId: tmp1.cookieStoreId });
+    const suffix = counter();
+    suffix(); // tmp1 above was issued by this counter
+    createEngine({ port: mp.port, config: { rules: [], groups: [] }, deps, onChoice: noop, tmpSuffix: suffix });
+
+    // Click a link to another site: reopened into a fresh throwaway, tmp2.
+    await mp.fire(req({ requestId: "10", tabId: tab.id, url: "https://linked.test/a" }));
+    const newTab = [...mp.tabs.values()].find((t) => t.id !== tab.id)!;
+    newTab.url = "about:blank"; // pre-commit for the whole redirect chain, as in real Firefox
+
+    // Its own request (reopenedNav absorbs this one) and then a 301 hop, which
+    // arrives on the same requestId with a different url and no guard left.
+    await mp.fire(req({ requestId: "11", tabId: newTab.id, url: "https://linked.test/a" }));
+    const hop = await mp.fire(req({ requestId: "11", tabId: newTab.id, url: "https://www.linked.test/a" }));
+
+    expect(hop).toBeUndefined(); // the hop lands where the navigation already is
+    expect(mp.calls.createIdentity.map((c) => c.name)).toEqual(["tmp2"]);
+    expect(mp.calls.createTab).toHaveLength(1);
+  });
+
+  it("a link opened in a NEW tab from a throwaway gets its own throwaway", async () => {
+    const mp = createMockPort();
+    const tmp1 = mp.addIdentity({ name: "tmp1" });
+    const opener = mp.addTab({ url: "https://kottke.org/", cookieStoreId: tmp1.cookieStoreId });
+    const suffix = counter();
+    suffix(); // tmp1 above was issued by this counter
+    createEngine({ port: mp.port, config: { rules: [], groups: [] }, deps, onChoice: noop, tmpSuffix: suffix });
+
+    // Middle-click / ctrl-click / target=_blank: Firefox opens a tab that INHERITS the
+    // opener's container and reads about:blank until the click's navigation commits.
+    const opened = mp.addTab({ url: "about:blank", cookieStoreId: tmp1.cookieStoreId, openerTabId: opener.id });
+    const res = await mp.fire(req({ requestId: "20", tabId: opened.id, url: "https://dannykatch.substack.com/p/x" }));
+
+    expect(res).toEqual({ cancel: true });
+    expect(mp.calls.createIdentity.map((c) => c.name)).toEqual(["tmp2"]); // NOT left in tmp1
+  });
+
   it("F2: a tab already in the target container stays (no effects)", async () => {
     const mp = createMockPort();
     const work = mp.addIdentity({ name: "Work" });
