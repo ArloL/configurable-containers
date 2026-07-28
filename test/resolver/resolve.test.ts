@@ -86,6 +86,30 @@ describe("resolve — disposable path + continuity", () => {
     )).toEqual({ kind: "stay" });
   });
 
+  // An auto-temp tab sits on about:newtab in a fresh throwaway. The user's first
+  // navigation belongs in that container — there is no earlier site to isolate it
+  // from, and reopening would strand the tab in a second, pointless temporary.
+  it("the first navigation from a new-tab page keeps its temporary", () => {
+    expect(resolve(
+      nav("https://kottke.org/", { url: "about:newtab", container: temp }),
+      config(), deps,
+    )).toEqual({ kind: "stay" });
+  });
+
+  it("the first navigation from about:home keeps its temporary", () => {
+    expect(resolve(
+      nav("https://kottke.org/", { url: "about:home", container: temp }),
+      config(), deps,
+    )).toEqual({ kind: "stay" });
+  });
+
+  it("a *permanent* container on a new-tab page is not affected", () => {
+    expect(resolve(
+      nav("https://kottke.org/", { url: "about:newtab", container: perm("Work") }, perm("Work")),
+      config(), deps,
+    )).toEqual({ kind: "reopen", into: { kind: "temporary" } });
+  });
+
   it("open:Temporary from a permanent container isolates", () => {
     expect(resolve(
       nav("https://pinterest.com/", { url: "https://work.example/", container: perm("Work") }, perm("Work")),

@@ -102,6 +102,13 @@ Scenario: Navigating to a different site isolates into a new container
   When I click a link to imgur.com
   Then a new temporary container is created
   And I leave T
+
+Scenario: The first navigation from a new tab keeps its temporary container
+  Given a new tab that auto-temp put in temporary container T
+    # its current URL is about:newtab — nothing has been browsed in T yet
+  When I type kottke.org into the address bar
+  Then I stay in T
+  And no second temporary container is created
 ```
 
 ## Feature: Rule enforcement (mechanism 1)
