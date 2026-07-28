@@ -65,6 +65,27 @@ recall what, and the prose that would have defined it was rewritten when TESTS.m
 The matrix was deliberately left untouched rather than guessed at. Resolve it by deciding
 what the columns should mean, then making them true.
 
+## `reopenedNav` does not survive a background restart (2026-07-28)
+
+The F1 reopen guard (`src/engine/engine.ts`) is the one piece of guard state nothing can
+rebuild, and `test/engine/restart.test.ts` pins the price rather than fixing it. The
+window is between `port.createTab` and the reopened tab's first request; a restart
+inside it costs **one** extra reopen, converges (the fresh engine guards the reopen it
+performs), and leaks no container — the abandoned throwaway is disposed on the grace.
+
+It is not reconstructible because a reopened pre-commit tab and a middle-clicked one are
+both `about:blank` in a real container, and the middle-clicked one must still be
+isolated into a throwaway of its own. The requestId in `reopenedNav` is the only thing
+that separates them. Persisting it needs a storage seam on `BrowserPort`, which is a
+poor trade for a millisecond window the user currently chooses (a config save calls
+`runtime.reload()`). **Revisit on an MV3 migration**, where suspension is involuntary
+and the window stops being user-chosen — the cost side is already measured.
+
+Harness gap while here: `test/engine/restart.ts` does not model async work already in
+flight at the restart (a floated `containerize` mid-`await`). Firefox kills it; the
+harness lets it land. Every current case drives the restart from a settled state, so
+nothing is in flight — a future case that needs it has to close this first.
+
 ## Notification volume on declined POSTs (2026-07-28)
 
 Every cross-site form POST that would change container now raises a notification,

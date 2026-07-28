@@ -141,12 +141,26 @@ home of F1, F2, F7, F8, F10.
     container) is closed; a tab that redirected onward in-place is **never** closed;
     and the close never fires before the delay. Asserted against the fake clock, so
     ordering is deterministic. (F12)
-- **MV3 restart injection** — a dedicated harness that **drops all in-memory guard
-  state** at an arbitrary point mid-sequence (simulating service-worker
-  termination) and re-runs the invariants. This is the only level that catches
-  F8, and it's a class unit tests structurally cannot see. Guard state must
-  therefore be reconstructible from `browser.*` queries or persisted — the test
-  enforces that.
+- **Restart injection** (`test/engine/restart.ts`, `restart.test.ts`) — a harness that
+  **drops all in-memory guard state** and wires a fresh background against the *same*
+  fake browser, then re-runs the invariants. This is the only level that catches F8, a
+  class unit tests structurally cannot see. Guard state must therefore be
+  reconstructible from `browser.*` queries or persisted, and the tests enforce that one
+  mechanism at a time: the throwaway counter resuming past a live `tmp<N>`, the
+  disposer's startup `tabContainer` reseed, auto-temp's container check standing in for
+  the `processed` set it no longer has, and the already-contained guard once a tab has
+  committed. Each is revert-verified — back it out and exactly one case goes red.
+
+  Not a hypothetical MV3 concern: `src/extension/options.ts` calls `runtime.reload()` on
+  every config save, so a user triggers this in the shipping MV2 build. What that costs
+  is pinned too — see F8 in the matrix note below.
+
+  The harness calls `wireBackground` (`src/extension/wiring.ts`), the same function the
+  extension entry point calls. That is deliberate: a harness that wired the siblings
+  itself would hold a second copy of the startup order, and deleting a reconstruction
+  from the real entry point would leave the suite green. Two fidelity rules keep it
+  honest — the mock's one-handler-per-event slots retire the previous session's
+  listeners, and a per-session clock facade retires its timers.
 
 ## L4 — Integration in real Firefox
 
@@ -239,6 +253,16 @@ confirmation. F9 was the long-standing exception: POST bodies and redirect
 bindings don't exist in a pure resolver. It gained an L3 owner when the decision
 *not* to reopen a non-GET navigation moved into the engine, where a mock port can
 drive it.
+
+F8's tick was the last fictional one — the harness above is what made it true. One
+piece of guard state is genuinely **not** reconstructible: `reopenedNav` holds a tab
+whose url has not committed, and at restart such a tab is indistinguishable from a
+middle-clicked link, which inherits its opener's container and must still be isolated.
+The requestId that separates them exists nowhere else. So the tests pin the *bound*
+rather than the state: a restart mid-reopen costs exactly one wasted reopen, converges
+(the fresh engine guards the reopen it performs), and leaks no container. Recorded in
+[`FOLLOWUPS.md`](FOLLOWUPS.md) so an MV3 migration — where suspension is involuntary
+rather than user-chosen — can weigh persisting it against a cost already measured.
 
 ## GitHub Actions pipeline
 
