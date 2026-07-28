@@ -133,6 +133,49 @@ describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
     expect(mp.calls.createTab).toHaveLength(1);
   });
 
+  it("routes a later navigation in a reopened tab whose own request never arrived", async () => {
+    const mp = createMockPort();
+    const old = mp.addTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
+    createEngine({ port: mp.port, config: workConfig(), deps, onChoice: noop, tmpSuffix: counter() });
+
+    await mp.fire(req({ requestId: "1", tabId: old.id, url: "https://example.com/" }));
+    const newTab = [...mp.tabs.values()].find((t) => t.id !== old.id)!;
+    // The reopened tab's own request never arrives — load aborted, or the user typed
+    // somewhere else first — so it never committed and still reads about:blank.
+    newTab.url = "about:blank";
+
+    // That later navigation is a real one, to a site no rule matches: it must get its
+    // own throwaway, not ride along in Work on the strength of a stale guard.
+    const res = await mp.fire(req({ requestId: "9", tabId: newTab.id, url: "https://other.test/" }));
+
+    expect(res).toEqual({ cancel: true });
+    expect(mp.calls.createIdentity.map((c) => c.name)).toEqual(["Work", "tmp1"]);
+    expect(mp.calls.createTab).toHaveLength(2);
+  });
+
+  it("still absorbs the reopened tab's first request when HSTS rewrote its url", async () => {
+    const mp = createMockPort();
+    const tmp1 = mp.addIdentity({ name: "tmp1" });
+    const tab = mp.addTab({ url: "https://kottke.org/", cookieStoreId: tmp1.cookieStoreId });
+    const suffix = counter();
+    suffix(); // tmp1 above was issued by this counter
+    createEngine({ port: mp.port, config: { rules: [], groups: [] }, deps, onChoice: noop, tmpSuffix: suffix });
+
+    // Reopened to the http url the click carried...
+    await mp.fire(req({ requestId: "30", tabId: tab.id, url: "http://linked.test/a" }));
+    const newTab = [...mp.tabs.values()].find((t) => t.id !== tab.id)!;
+    newTab.url = "about:blank";
+
+    // ...but HSTS upgrades the scheme BEFORE onBeforeRequest, so the tab's own first
+    // request arrives on a url we never asked for. It is still the navigation we
+    // reopened the tab to perform; treating it as a new one buys a second throwaway.
+    const own = await mp.fire(req({ requestId: "31", tabId: newTab.id, url: "https://linked.test/a" }));
+
+    expect(own).toBeUndefined();
+    expect(mp.calls.createIdentity.map((c) => c.name)).toEqual(["tmp2"]);
+    expect(mp.calls.createTab).toHaveLength(1);
+  });
+
   it("a link opened in a NEW tab from a throwaway gets its own throwaway", async () => {
     const mp = createMockPort();
     const tmp1 = mp.addIdentity({ name: "tmp1" });

@@ -27,15 +27,6 @@ single-container rules (CLAUDE.md, "A reopen KEEPS a source tab that is on a
 page"). The two paths should agree; that means showing the choice somewhere
 other than the user's own tab.
 
-## `reopenedNav` never times out its "not yet" state (2026-07-28)
-
-`reopen` seeds the guard with `null` and the *first* request seen in that tab
-claims it (`src/engine/engine.ts`). If the reopened tab's own first request never
-arrives — load aborted, tab discarded, user navigates elsewhere first — the next
-navigation in that tab is absorbed by the guard and silently left unrouted.
-Never observed, and the one-shot predecessor had the same hole. Worth an L3 test
-to find out whether it is reachable before treating it as a bug.
-
 ## `overrides` in package.json (2026-07-28)
 
 `adm-zip` and `shell-quote` are forced past what their own dependents declare

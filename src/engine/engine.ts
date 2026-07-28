@@ -66,10 +66,11 @@ export function createEngine(opts: EngineOptions): Engine {
   const registry = createRegistry(port, opts.tmpSuffix ?? defaultSuffix());
   const handled = new Set<string>();
   // The navigation each tab we reopened is still performing: tabId -> the requestId
-  // once its first request arrives, or null until then. That whole navigation must be
-  // left alone: in a real browser onBeforeRequest fires before the new tab's url
-  // commits, so it still reads as about:blank and resolve() cannot tell it is already
-  // correctly contained — without this it would reopen forever (F1).
+  // once its first request arrives, or the url we are still waiting for until then.
+  // That whole navigation must be left alone: in a real browser onBeforeRequest fires
+  // before the new tab's url commits, so it still reads as about:blank and resolve()
+  // cannot tell it is already correctly contained — without this it would reopen
+  // forever (F1).
   //
   // Tracking the requestId, not just "the first request", is what makes the guard
   // cover a REDIRECT CHAIN: every hop reuses the requestId and the tab stays
@@ -78,7 +79,15 @@ export function createEngine(opts: EngineOptions): Engine {
   // Keying on the requestId also keeps the guard off tabs we did NOT route: a
   // middle-clicked link inherits its opener's container and is pre-commit too, and
   // it must still be isolated into a throwaway of its own.
-  const reopenedNav = new Map<number, string | null>();
+  //
+  // Holding the awaited URL, rather than a bare "not yet" marker, bounds the wait: a
+  // reopened tab whose own request never arrives (load aborted, user typed elsewhere
+  // first) would otherwise let the guard absorb whatever navigation came next, which
+  // leaves that site unrouted in the container we reopened INTO — an unmatched site
+  // riding in a permanent container's cookie jar. Matched by site, not exact url,
+  // because Firefox can legitimately rewrite the url before the first request (HSTS
+  // upgrades the scheme); the site is what survives that and what routing turns on.
+  const reopenedNav = new Map<number, { awaiting: string } | { requestId: string }>();
 
   // The F1-guarded reopen effect. Shared by the engine's own `case "reopen"` and the
   // picker (choice screen / reopen picker). Throws on failure — callers decide whether
@@ -106,7 +115,7 @@ export function createEngine(opts: EngineOptions): Engine {
       active: tab.active,
       openerTabId: keep ? tab.id : tab.openerTabId,
     });
-    reopenedNav.set(created.id, null); // leave its whole navigation alone (see 1b)
+    reopenedNav.set(created.id, { awaiting: url }); // leave its whole navigation alone (see 1b)
     if (!keep) await port.removeTab(tab.id);
   }
 
@@ -121,14 +130,17 @@ export function createEngine(opts: EngineOptions): Engine {
 
     // (1b) F1 loop guard — the navigation we reopened this tab to perform, from its
     // first request through every redirect hop of it.
-    if (reopenedNav.has(d.tabId)) {
-      const ours = reopenedNav.get(d.tabId);
-      if (ours == null) {
-        reopenedNav.set(d.tabId, d.requestId); // first request: this is the one
+    const ours = reopenedNav.get(d.tabId);
+    if (ours) {
+      if ("requestId" in ours) {
+        if (ours.requestId === d.requestId) return; // a hop of it — same navigation, still ours
+        reopenedNav.delete(d.tabId); // a later navigation in that tab: route it normally
+      } else if (deps.sameSite(ours.awaiting, d.url)) {
+        reopenedNav.set(d.tabId, { requestId: d.requestId }); // first request: this is the one
         return;
+      } else {
+        reopenedNav.delete(d.tabId); // the awaited navigation never came — route this one
       }
-      if (ours === d.requestId) return; // a hop of it — same navigation, still ours
-      reopenedNav.delete(d.tabId); // a later navigation in that tab: route it normally
     }
 
     // (2) Assemble NavContext.

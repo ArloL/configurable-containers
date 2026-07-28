@@ -78,13 +78,25 @@ engine's reopen, not duplicating it.
   would reopen forever (the F1 loop). The guard leaves the navigation the engine
   reopened the tab to perform alone. Preserve it across any engine/MV3 rework.
 - **That guard is keyed on the *navigation*, not on "the first request".**
-  `reopenedNav` (tabId → requestId) holds a reopened tab through its whole navigation,
-  because **a redirect chain keeps one requestId and the tab stays `about:blank` for
-  every hop of it**. The original one-shot version guarded only hop 1; hop 2 then
-  looked like an unrouted navigation in a blank tab and bought another throwaway, so a
-  single click on a 30x-ing link walked `tmp1` → `tmp2` → `tmp3`. Covered at L3 and by
-  the redirect-chain case in `test/e2e/routing.test.ts` (the harness server answers 302
-  on `/redirect?to=`).
+  `reopenedNav` (tabId → `{awaiting: url}` before that navigation's first request,
+  `{requestId}` after) holds a reopened tab through its whole navigation, because **a
+  redirect chain keeps one requestId and the tab stays `about:blank` for every hop of
+  it**. The original one-shot version guarded only hop 1; hop 2 then looked like an
+  unrouted navigation in a blank tab and bought another throwaway, so a single click on
+  a 30x-ing link walked `tmp1` → `tmp2` → `tmp3`. Covered at L3 and by the
+  redirect-chain case in `test/e2e/routing.test.ts` (the harness server answers 302 on
+  `/redirect?to=`).
+- **The guard's wait is bounded by the url it awaits, and matched by SITE.** An earlier
+  version seeded `null` and let the *first* request in that tab claim it. When the
+  reopened tab's own request never arrived (load aborted, user typed elsewhere first),
+  that stale marker absorbed whatever navigation came next — returning no `cancel`, so
+  the site loaded **unrouted inside the container we had just reopened into**: an
+  unmatched site in a permanent container's cookie jar, F11 by way of F1 machinery.
+  Comparing by site rather than by exact url is load-bearing in the other direction:
+  Firefox rewrites the url *before* `onBeforeRequest` when **HSTS upgrades the scheme**,
+  so the tab's own first request legitimately arrives on a url we never asked for, and
+  exact-url matching bought a second throwaway on every such reopen. Both directions
+  have an L3 test; revert-verified against each other.
 - **A reopen KEEPS a source tab that is on a page** (`keep = /^https?:/.test(tab.url)`
   in `reopen`), opening the container tab at `index + 1` with the source as its opener,
   and only *cancels* the source's navigation. Session history does not span containers,
