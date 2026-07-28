@@ -2,10 +2,11 @@
 
 **Date:** 2026-07-28
 **Status:** Approved, pending implementation plan
-**Topic:** Move the config from a build-time constant into `browser.storage.local`, add
-the built-in text editor README promises, and produce a signed XPI that installs
-permanently on release Firefox. The first slice whose goal is *daily use* rather than
-routing behavior.
+**Topic:** Move the config from a build-time constant into `browser.storage.local`, add the
+built-in text editor README promises, and set up a CalVer-tagged GitHub Actions release
+that publishes CC as a **listed** add-on on addons.mozilla.org. The first slice whose goal
+is *daily use* rather than routing behavior — and the one that turns a personal tool into
+a published one.
 
 ## 1. Goal & scope
 
@@ -18,11 +19,15 @@ Three things stand between the current state and a tool the author uses every da
 1. The config lives in the bundle, so changing a rule means a rebuild.
 2. There is no editor — README's "edited as text through a built-in editor" has no code.
 3. There is no permanent install; unsigned XPIs cannot be permanently installed on
-   release Firefox.
+   release Firefox, so the extension dies with the browser window.
 
 This slice closes all three. It is deliberately one slice because they are the same
 dependency chain: an editor is pointless without storage, and storage is pointless
 without an install that outlives the browser session.
+
+Distribution is **listed** on AMO rather than a privately signed XPI, which raises the bar
+in two places the design has to answer: the shipped seed can no longer be the author's
+personal config (§4), and the release must produce a reviewable source archive (§8).
 
 Daily use is also the *input* several deferred CONFIG.md open questions are waiting on
 ("multi-home default behavior — deferred to daily use"). Shipping this unblocks them.
@@ -37,8 +42,11 @@ Daily use is also the *input* several deferred CONFIG.md open questions are wait
   third esbuild entry alongside `background` and `choice`.
 - Manifest: add the `storage` permission, add `options_ui`, and change the extension ID
   to `configurable-containers@k5d.de`.
-- **Packaging + signing**: `npm run package` and `npm run sign` (web-ext, AMO unlisted
-  channel), producing a signed XPI installable on release Firefox.
+- A shipped **default seed config** (`src/config/default.yaml`) — a commented example, not
+  the author's personal config (§4).
+- **Packaging + release**: `npm run package`, a GitHub Actions release workflow versioned
+  by [`ArloL/calver-tag-action`](https://github.com/ArloL/calver-tag-action), and AMO
+  submission on the **listed** channel (§8).
 - Seeding the `tmpSuffix` counter from existing containers (see §9).
 - **Harness**: `launch()` pins CC's extension origin via the `extensions.webextensions.uuids`
   pref and exports the constant; the probe gains an `open` command so tests can reach the
@@ -57,6 +65,8 @@ Daily use is also the *input* several deferred CONFIG.md open questions are wait
 - **A "reset to bundled seed" button.** Considered and declined; the seed's job ends at
   first run.
 - **`storage.sync`.** Single-machine tool; `storage.local` only.
+- **A self-hosted `update_url` / `updates.json`.** AMO distributes and auto-updates listed
+  add-ons, and its linter rejects `update_url` on them outright.
 - **A management-overview UI.** The YAML file *is* the overview — the config lists every
   container CC knows about, so a separate screen would restate it.
 - **MAC / Temporary Containers import.** The author's setup is already converted; an
@@ -135,9 +145,31 @@ Single key, `configYaml`, a string, in `browser.storage.local`.
 On first run (`seeded: true` and no error) the adapter writes the seed to storage
 immediately. From that moment storage is the source of truth, which has one deliberate
 consequence: **a future version shipping a different seed will never override an edited
-config.** That is the intended semantics of "the editor is truth" — the packaged
-`configurable-containers.config.yaml` is an install-time convenience, and after install
-it goes stale by design.
+config.** That is the intended semantics of "the editor is truth" — the seed is an
+install-time convenience, and after install it goes stale by design.
+
+### What the seed contains
+
+CC is being **listed publicly on AMO** (§8), so the seed becomes every installer's
+default. It is therefore a new file, `src/config/default.yaml`: a short **commented
+example** that routes nothing but demonstrates the syntax — a bare-domain rule, a
+multi-`open` rule with a `default`, and a group. When the only UI is a text editor, the
+seed is the primary documentation a new user meets, so it carries that weight rather than
+being blank.
+
+`configurable-containers.config.yaml` — the author's real config, with real work domains,
+container names and cookie seeds — is **no longer shipped**. It stays in the repo purely
+as the injection source for `npm run manual` and as the author's own backup; after
+installing from AMO, the author pastes it into the editor once, and from then on their
+config lives in storage like anyone else's.
+
+Three consumers of `__CC_CONFIG_YAML__`, all distinct and none of them the others:
+
+| Build | Seed injected |
+|---|---|
+| `npm test` (e2e) | the `TEST_CONFIG_YAML` constant in `build-extension.ts` |
+| `npm run manual` | `configurable-containers.config.yaml` (the author's real config) |
+| `npm run package` | `src/config/default.yaml` (the shipped example) |
 
 ## 5. The editor page
 
@@ -200,38 +232,87 @@ steps" — annoying, obvious, and fixable in the page that just opened itself.
 - **`open_in_tab: true`** because the about:addons embedded frame is too cramped for a
   config file, and because a page CC opens *itself* on a bad config should be a visible
   tab rather than a pane the user has to go find.
+- **No `update_url`.** AMO distributes and updates listed add-ons, and its linter rejects
+  the field on them.
+- `version` stays a placeholder here; the release pipeline injects the real one into a
+  staged copy (§8).
 - `extensions/probe/manifest.json` keeps its `.test` ID. The probe is never signed or
   distributed.
 - The `id` strings in `docs/superpowers/plans/` and `specs/` are historical records of
   past slices and are **not** rewritten.
 
-## 8. Packaging and signing
+## 8. Packaging and release
 
-`web-ext` becomes a devDependency. Two scripts, both using long options per the author's
-global preference:
+CC is distributed **listed** on addons.mozilla.org: publicly available, installed with one
+click from its listing page, and auto-updated by AMO. This is a change of posture from
+README's "a personal tool first" and brings obligations a private XPI would not have —
+they are spelled out below because they shape the work, not just the paperwork.
 
-- **`npm run package`** — `buildExtension({ configYaml: <configurable-containers.config.yaml> })`,
-  then zip `extensions/cc/` into `dist/`. Produces an unsigned XPI (temporary install,
-  CI artifacts, inspection).
-- **`npm run sign`** — the same build, then
-  `web-ext sign --source-dir extensions/cc --channel unlisted --api-key $WEB_EXT_API_KEY --api-secret $WEB_EXT_API_SECRET`,
-  output to `dist/`.
+### Versioning
 
-AMO's unlisted channel signs automatically with no human review. The resulting XPI
-installs permanently on **release** Firefox via about:addons → Install Add-on From File,
-and survives restarts — which `xpinstall.signatures.required=false` cannot do, since
-release Firefox ignores that pref (CLAUDE.md records the long detour that established
-this).
+Versions come from [`ArloL/calver-tag-action`](https://github.com/ArloL/calver-tag-action):
+`MAJOR_MINOR` is `date -u +"%y%m"` and the micro counts from 101, so the tag is
+`v2607.0.101` and the action's `new_version` output is `2607.0.101`. The next release that
+month is `.102`; August restarts at `2608.0.101`.
 
-Two one-way doors:
+This satisfies AMO's version format (1–4 dot-separated numbers, each 0–999999999, no
+leading zeros) and is monotonic across month and year boundaries, so Firefox's numeric
+part-by-part comparison always orders releases correctly.
 
-- **The ID is bound to the AMO account on the first signed upload.** Changing it later
-  means a new AMO listing and a manual uninstall/reinstall. Hence §7 settling it first.
-- **AMO rejects a version it has already seen**, so every signed build needs a
-  `manifest.json` version bump. Kept manual and documented — auto-incrementing would
-  burn version numbers on failed builds.
+**`manifest.json` keeps a placeholder version and is never hand-edited.** Packaging stages
+`extensions/cc/` into `dist/cc/`, rewrites `version` there from the action output (or a
+local default for developer builds), and packages *that*. The tracked tree therefore stays
+clean whether the build runs in CI or locally — which matters because `background.js` and
+`choice.js` are already gitignored, leaving `manifest.json` as the only tracked file a
+naive in-place bump would dirty.
 
-API keys come from the environment and never enter the repo. `dist/` is gitignored.
+### Scripts
+
+`web-ext` becomes a devDependency. Long options throughout, per the author's global
+preference.
+
+- **`npm run package`** — `buildExtension({ configYaml: src/config/default.yaml })`, stage
+  to `dist/cc/`, set the version, zip. Produces an unsigned XPI for inspection, temporary
+  install, and CI artifacts. Parses the seed first and fails on a `ConfigError` (§11).
+- **`npm run submit`** — the same staged build, then
+  `web-ext sign --source-dir dist/cc --channel listed --api-key $WEB_EXT_API_KEY --api-secret $WEB_EXT_API_SECRET`.
+  On the listed channel this *submits for review* rather than returning a signed file.
+
+### Release workflow
+
+A new workflow, separate from `ci.yml`, following its existing conventions (SHA-pinned
+actions, least-privilege `permissions`):
+
+1. `workflow_dispatch` trigger — releases are deliberate, not every push to main.
+2. Checkout with full history and tags, `permissions: contents: write`. Note this must
+   **not** set `persist-credentials: false` as `ci.yml` does: the action pushes a tag.
+3. Run the full suite first. A release that has not passed e2e is not a release.
+4. `ArloL/calver-tag-action` → `new_version`.
+5. Package at that version, then `npm run submit`.
+6. Attach the packaged XPI and the source archive to a GitHub Release for the tag.
+
+Secrets (`WEB_EXT_API_KEY`, `WEB_EXT_API_SECRET`) are repository secrets and never enter
+the repo. `dist/` is gitignored.
+
+### Obligations that come with listing
+
+- **Source-code submission is required.** AMO requires it whenever shipped JS is bundled or
+  minified, and `background.js` is an esbuild bundle. The release must therefore produce a
+  source archive plus build instructions (`npm ci`, `npm run package`, the Node version)
+  that let a reviewer reproduce the artifact byte-for-byte. This is a deliverable of this
+  slice, not a later chore.
+- **Review is a gate, not a formality.** `<all_urls>` + `webRequestBlocking` + `cookies` is
+  the permission profile most likely to draw human review, so the first submission may take
+  days. Development is unaffected — the temporary-install path (`npm run manual`, the e2e
+  harness) never touches AMO.
+- **The extension ID binds to the AMO account on first submission.** Changing
+  `configurable-containers@k5d.de` afterwards means a new listing. Hence §7 settling it
+  before the first upload.
+- **AMO never forgets a version**, so a resubmission always needs a new one. CalVer gives
+  this for free: a re-run mints the next micro.
+- **Listing metadata** — summary, description, category, license (the repo has `LICENSE`),
+  and a data-collection declaration. CC collects and transmits nothing; the declaration
+  should say so plainly.
 
 ## 9. Adjacent fix: the `tmpSuffix` counter
 
@@ -316,15 +397,23 @@ restore it. This suite has shipped false greens twice.
 | **`runtime.reload()` kills the options tab**, and Firefox's behavior there is unverified. | Pinned by the L4 flow (§10), which continues working in that tab's aftermath. The 100 ms delay guarantees the "Saved" status paints first. |
 | **Reload drops in-memory guards** — `freshlyReopened`, disposer timers. | Saving happens from the options page with no navigation in flight, so the F1 guard has nothing to protect. The disposer sweeps orphans immediately at startup (`disposer.ts:57`), so temps are self-healing. `tmpSuffix` is fixed in §9. |
 | **A schema change strands a stored config**, leaving the author with temporary-only routing. | The §6 failure is safe and self-announcing: the options page opens with the error and the original text intact, so the fix is an edit, never a reinstall. |
-| **AMO signing fails or the ID is rejected.** | `npm run package` produces a working unsigned XPI regardless; the temporary-install path (`npm run manual`) is untouched, so a signing problem never blocks development. |
-| **A bad seed ships in a signed build**, making a fresh install temporary-only. | `npm run package` / `sign` parse the config file and fail on a `ConfigError` before invoking the build. The check belongs to **those scripts, not to `buildExtension`** — the L4 test in §10 depends on `buildExtension` accepting a deliberately invalid seed, so validating inside it would make that test unwritable. |
+| **AMO review rejects or delays the listing.** | Nothing in development depends on AMO: `npm run package` produces a working unsigned XPI, and `npm run manual` plus the e2e harness use temporary install. A rejection costs a resubmission, never a blocked branch. |
+| **A bad seed ships in a release**, making every fresh install temporary-only. | `npm run package` parses `src/config/default.yaml` and fails on a `ConfigError` before invoking the build. The check belongs to **that script, not to `buildExtension`** — the L4 case in §10 depends on `buildExtension` accepting a deliberately invalid seed, so validating inside it would make that test unwritable. |
+| **The source archive drifts from the shipped XPI**, so a reviewer cannot reproduce the build. | Both are produced by the same workflow run at the same tag, from the same staged directory — never assembled by hand. |
+| **The author's personal config is in a public repo** that a listing will draw attention to. | Pre-existing and the author's call; noted because listing changes who looks. It is no longer *shipped* (§4), which is the part this slice controls. |
 
 ## 12. What this slice does *not* prove
 
 - **That the config is any good.** Editing rules against real sites is the point of
   shipping this; the deferred CONFIG.md questions stay deferred until there is data.
-- **Migration between config schema versions.** There is one schema and one user. A
-  breaking change surfaces via §6, which is the whole plan for now.
+- **Migration between config schema versions.** There is one schema. A breaking change
+  surfaces via §6, which is the whole plan for now — and listing raises the stakes, since
+  strangers' configs would break too.
+- **That AMO approves the listing.** Review is outside this slice's control; §8 lists the
+  obligations, it cannot guarantee the outcome.
+- **That the config format is good enough for strangers.** Listing means users who never
+  read CONFIG.md meet the seed and the error messages first. This slice makes both the
+  primary documentation surface without any evidence that they are sufficient.
 - **Multi-machine or multi-profile config sync.** `storage.local` only.
 - **MV3 readiness.** `options_ui`, `storage.local`, and `runtime.reload()` all carry over,
   but the persistent-background assumption in §2 does not. F8 remains open.
