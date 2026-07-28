@@ -32,6 +32,10 @@ export interface LaunchOptions {
   headless?: boolean; // default true; set false for manual/interactive testing
   configYaml?: string; // override the bundled config (manual launcher passes the real one)
   localDomains?: string[] | null; // domains resolved to loopback; default = test domains, null = none
+  // Page the first tab opens on. Marionette otherwise starts every session at
+  // about:blank, which auto-temp deliberately ignores — pass "about:newtab" to
+  // exercise (or, in manual mode, actually see) the auto-temp startup sweep.
+  startupUrl?: string;
 }
 
 // Zip an unpacked extension directory into a temporary .xpi (geckodriver's
@@ -72,6 +76,10 @@ export async function launch(opts: LaunchOptions = {}): Promise<Session> {
   if (opts.headless !== false) options.addArguments("-headless");
   options.setPreference("privacy.userContext.enabled", true);
   options.setPreference("xpinstall.signatures.required", false);
+  if (opts.startupUrl) {
+    options.setPreference("browser.startup.page", 1); // 1 = open the homepage
+    options.setPreference("browser.startup.homepage", opts.startupUrl);
+  }
   // Resolve the test's fake domains straight to loopback (cross-platform, no DNS).
   // Skipped when localDomains is null (live-site manual testing).
   const domains = opts.localDomains !== undefined ? opts.localDomains : DEFAULT_LOCAL_DOMAINS;
@@ -172,6 +180,51 @@ export async function readLocalStorage(driver: WebDriver, key: string): Promise<
   return (await driver.executeScript(
     `return localStorage.getItem(${JSON.stringify(key)});`
   )) as string | null;
+}
+
+export interface ProbeTab {
+  id: number;
+  url: string;
+  cookieStoreId: string;
+  container: string;
+}
+
+// Send a command to the probe extension and return its reply.
+//
+// The driver must currently be on a probe-reported http(s) page: the probe injects a
+// `cc-probe-cmd` DOM listener there that relays to its background (which holds the
+// privileged APIs) and writes the reply back into data-cc-result. This is the only way
+// a test can reach browser.* — WebDriver has no extension APIs.
+export async function probeCommand<T>(driver: WebDriver, cmd: string, timeoutMs = 8000): Promise<T> {
+  await driver.executeScript(
+    "document.documentElement.removeAttribute('data-cc-result');" +
+    `document.dispatchEvent(new CustomEvent('cc-probe-cmd', { detail: { cmd: ${JSON.stringify(cmd)} } }));`
+  );
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const raw = (await driver.executeScript(
+      "return document.documentElement.getAttribute('data-cc-result');"
+    )) as string | null;
+    if (raw) return JSON.parse(raw) as T;
+    await driver.sleep(100);
+  }
+  throw new Error(`probe command ${JSON.stringify(cmd)} timed out after ${timeoutMs}ms`);
+}
+
+// Open a REAL new tab — `browser.tabs.create({})`, exactly what Ctrl/Cmd+T does:
+// about:newtab in the default container. WebDriver's switchTo().newWindow("tab")
+// makes an about:blank tab instead, which auto-temp deliberately ignores, so it
+// cannot exercise auto-temp at all. Note WebDriver also cannot *navigate* to
+// about:newtab ("Navigation to about:newtab is not allowed in this context").
+export function openRealNewTab(driver: WebDriver): Promise<{ id: number; url: string; cookieStoreId: string }> {
+  return probeCommand(driver, "newTab");
+}
+
+// Every tab's id/url/cookieStoreId/container name, straight from browser.tabs.query.
+// Needed because about: pages take no content script, so the probe's usual
+// title/attribute reporting can't see a new-tab page's container.
+export function listTabs(driver: WebDriver): Promise<ProbeTab[]> {
+  return probeCommand(driver, "tabs");
 }
 
 // Poll window handles (WITHOUT re-navigating them — CC does the reopening) until a
