@@ -417,3 +417,30 @@ restore it. This suite has shipped false greens twice.
 - **Multi-machine or multi-profile config sync.** `storage.local` only.
 - **MV3 readiness.** `options_ui`, `storage.local`, and `runtime.reload()` all carry over,
   but the persistent-background assumption in §2 does not. F8 remains open.
+
+## 13. Amendments made during implementation
+
+Two things this design got wrong, corrected in the code and recorded here so the spec
+does not mislead a later reader.
+
+**§2 / §11 — "startup becomes async" is wrong.** The design had listener registration move
+inside an async IIFE and rated the resulting window "milliseconds, accepted". It is not.
+Wiring the siblings behind `await readStoredConfigYaml()` loses the session's **first
+navigation** every time: Firefox dispatches it before `webRequest.onBeforeRequest` exists,
+so the tab is never routed and stays in `firefox-default`. All four event-driven cases in
+`test/e2e/auto-temp.test.ts` went red, deterministically.
+
+What ships instead keeps every listener registered **synchronously** as `background.ts`
+evaluates, and defers only the config: `config` is one object filled in place once storage
+resolves (the siblings all read it at event time), and a `gatedPort` decorator makes the
+blocking `onBeforeRequest` handler `await` a `configReady` promise, so an early navigation
+is *delayed* rather than routed against the empty config. `createScriptInjector` — the one
+eager consumer — is the only sibling that genuinely waits. The risk row "a navigation in
+that window goes unrouted" is therefore retired, not mitigated.
+
+**§4 / §6 — first run must seed storage even when the seed does not parse.** The design
+wrote storage only on a clean parse, which left the broken-seed path with *nothing* stored:
+the editor CC opens for it came up blank and valid, so the config appeared to have vanished
+and there was nothing to fix. Storing the broken text is what makes §6's promise ("the
+options page loads the broken text from storage as usual") true for a broken seed and not
+just a broken stored config.
