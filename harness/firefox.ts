@@ -28,6 +28,10 @@ export const MAC_EXTENSION_ID = "@testpilot-containers";
 export const CC_EXTENSION_ID = "configurable-containers@k5d.de";
 export const CC_EXTENSION_UUID = "5c5b6d4e-9f3a-4a21-8b7c-1d2e3f4a5b6c";
 
+// The probe's own id, from extensions/probe/manifest.json. CC's e2e build echoes its
+// notifications here; buildExtension defaults this off for every shipped build.
+export const PROBE_EXTENSION_ID = "probe@configurable-containers.test";
+
 export function ccExtensionUrl(pagePath: string): string {
   return `moz-extension://${CC_EXTENSION_UUID}/${pagePath}`;
 }
@@ -154,6 +158,7 @@ async function buildXpiFor(
     graceMs?: number;
     redirectorDelayMs?: number;
     configYaml?: string;
+    notifyEchoTo?: string;
     macAssign?: { url: string; userContextId: string };
   },
 ): Promise<{ xpiPath: string; cleanup: () => void }> {
@@ -179,6 +184,7 @@ export async function launch(opts: LaunchOptions = {}): Promise<Session> {
         graceMs: opts.ccGraceMs,
         redirectorDelayMs: opts.ccRedirectorDelayMs,
         configYaml: opts.configYaml,
+        notifyEchoTo: PROBE_EXTENSION_ID,
         macAssign: opts.macAssign && {
           url: `http://${opts.macAssign.host}:${new URL(server.url).port}/`,
           userContextId: opts.macAssign.userContextId,
@@ -295,6 +301,14 @@ export async function readScriptAtStart(driver: WebDriver): Promise<string> {
   )) as string;
 }
 
+// The POST body the server saw on this page's own request — empty for a GET. Proves an
+// assertion arrived intact rather than being lost to a reopen's GET (F9).
+export async function readSeenPost(driver: WebDriver): Promise<string> {
+  return (await driver.executeScript(
+    "return document.body.getAttribute('data-seen-post') || '';"
+  )) as string;
+}
+
 // Generic localStorage read in the current tab (containers partition localStorage, so
 // this reads the current tab's own container partition).
 export async function readLocalStorage(driver: WebDriver, key: string): Promise<string | null> {
@@ -337,6 +351,30 @@ export async function probeCommand<T>(
     await driver.sleep(100);
   }
   throw new Error(`probe command ${JSON.stringify(cmd)} timed out after ${timeoutMs}ms`);
+}
+
+export interface ProbeNotification {
+  title: string;
+  message: string;
+}
+
+// Notifications CC's test build echoed to the probe. Polls, because the echo races the
+// page load the driver is parked on; a desktop notification is in no DOM, so this
+// relay is the only way L4 can observe one at all.
+export async function readNotifications(
+  driver: WebDriver,
+  match: (n: ProbeNotification) => boolean,
+  timeoutMs = 15_000,
+): Promise<ProbeNotification> {
+  const deadline = Date.now() + timeoutMs;
+  let seen: ProbeNotification[] = [];
+  while (Date.now() < deadline) {
+    seen = await probeCommand<ProbeNotification[]>(driver, "notifications");
+    const hit = seen.find(match);
+    if (hit) return hit;
+    await driver.sleep(300);
+  }
+  throw new Error(`no matching notification; saw ${JSON.stringify(seen)}`);
 }
 
 // Open a REAL new tab — `browser.tabs.create({})`, exactly what Ctrl/Cmd+T does:
