@@ -387,6 +387,44 @@ Scenario: Rules and groups are independent lists, never shadowing
   # Membership only matters on the temporary path; mail.google.com is never temp
 ```
 
+## Feature: Automatic mode (blank/newtab → immediate temp)
+
+```gherkin
+Scenario: A newly-opened tab is immediately containerized
+  Given the user opens a new tab (Ctrl+T)
+  When the tab is created
+  Then the tab is immediately moved from firefox-default into a fresh temporary container
+  And the user sees about:newtab in that temporary container
+
+Scenario: Pressing the home button is containerized
+  Given the user presses the home button with about:home configured
+  When the tab navigates to about:home
+  Then the tab is immediately moved into a fresh temporary container
+
+Scenario: A tab already in a non-default container is left alone
+  Given a tab in the Work container
+  When that tab is navigated to about:newtab (e.g. from an extension)
+  Then the tab stays in Work
+  And no new temporary container is created
+
+Scenario: An http(s) navigation on tab creation is left alone
+  Given Firefox opens a URL from an external app in a new tab
+  When the tab is created with a http(s) URL
+  Then the tab stays in firefox-default
+  And the engine processes it normally at onBeforeRequest time
+
+Scenario: A tab still loading its page is not containerized
+  Given a tab is opened on a real URL (a target=_blank link, window.open, a reopen)
+  # Firefox reports it as about:blank until the navigation commits
+  When the tab is created and reports about:blank
+  Then the tab is left alone so its navigation can complete
+  And no unnecessary temporary container is created
+```
+
+The last scenario is why `about:blank` is excluded, and it costs us the case where a
+user has disabled the new-tab page — Ctrl+T then yields `about:blank`, which we cannot
+tell apart from a tab mid-load, so it is not auto-containerized (as in TCP).
+
 ---
 
 ## Undecided — scenarios pending a decision

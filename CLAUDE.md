@@ -20,10 +20,10 @@ browser.
 Layers (mirror TESTING.md): L1 `src/resolver/` (pure) · L2 `src/matcher/` · PSL
 `src/psl/` · config `src/config/` · L3 `src/engine/` (interception engine +
 disposer, tested against a mock `browser.*` + a fake clock) · L4 real Firefox
-(`harness/`, `test/e2e/`, Selenium/geckodriver). The engine, disposer,
-cookie-seeder, script-injector, redirector-closer, and picker are all **siblings**,
-wired at the extension entry `src/extension/background.ts` — none is nested in
-`createEngine`. The choice screen / reopen-picker UI lives in `src/extension/choice.ts`
+(`harness/`, `test/e2e/`, Selenium/geckodriver). The engine, auto-temp,
+disposer, cookie-seeder, script-injector, redirector-closer, and picker are all
+**siblings**, wired at the extension entry `src/extension/background.ts` — none is
+nested in `createEngine`. The choice screen / reopen-picker UI lives in `src/extension/choice.ts`
 (a separate esbuild entry point bundled to `extensions/cc/choice.js`, loaded by
 `choice.html`); the pure protocol it shares with `src/engine/picker.ts` is
 `src/extension/picker-protocol.ts`.
@@ -40,16 +40,38 @@ engine's reopen, not duplicating it.
   `No permission for cookieStoreId` on `tabs.create({ cookieStoreId })` without it,
   so every container reopen silently fails and nothing routes. Any code opening a tab
   into a container needs it.
-- **Automatic mode (blank/newtab → immediate temp) is a known gap, not a design
-  decision.** The engine today skips non-`http(s)` URLs (`src/engine/engine.ts`), so a
-  freshly-opened tab stays in `firefox-default` until its first navigation. TCP's
-  `maybeReopenInTmpContainer` containerizes `about:blank` / `about:newtab` /
-  `about:home` on `tabs.onCreated` *immediately*; CC does not, and this is a real
-  regression for a TCP migrant. It is the one remaining Temporary Containers
-  carry-over — deferred to a future slice (a `tabs.onCreated` sibling), not declined.
-  Don't assume the `about:blank` skip is intentional or out of scope; don't remove the
-  non-http guard without it (that guard is also what keeps the F1 reopen loop safe).
-  See CONFIG.md §"Temporary Containers parity — outstanding".
+- **Auto-temp (`createAutoTemp` in `src/engine/auto-temp.ts`) containerizes `about:newtab`
+  / `about:home` into a fresh temporary immediately on `tabs.onCreated`.** It is wired
+  alongside the other siblings (engine, disposer, cookie-seeder, script-injector,
+  redirector-closer, picker) in `src/extension/background.ts` — not nested in
+  `createEngine`. It uses a `creating` flag to guard its own replacement tab. It shares a
+  `tmpSuffix` counter with the engine so temp-container names never collide. The
+  first http(s) navigation from an auto-temp tab goes through normal engine routing —
+  auto-temp is purely about containerizing the new-tab page itself. Don't remove the
+  engine's non-http guard: it still keeps the F1 reopen loop safe (the engine must not
+  try to reopen non-http navigations).
+  **Crucially, auto-temp listens on BOTH `onTabCreated` AND `onTabUpdated`.** In real
+  Firefox, `tabs.onCreated` sometimes fires with `about:blank` (bug 1586612), so the
+  real URL only appears via a subsequent `onTabUpdated`. An early draft that listened
+  only on `onCreated` passed the L3 mock test (which fires events with `about:newtab`
+  directly) but silently failed in real Firefox. A `processed` set of tab IDs
+  deduplicates between the two events so a tab caught early by `onCreated` is not
+  re-containerized by a later `onUpdated`.
+- **Never pass `about:newtab` (or `about:home`) to `tabs.create`.** Firefox rejects it
+  with `Error: Illegal URL: about:newtab` — an extension can only *land* on the new-tab
+  page by passing **no url at all** (hence `CreateTabProps.url` is optional). Auto-temp
+  shipped once with `url: tab.url` and every `containerize()` threw *after* creating the
+  tmp identity: orphan `tmp…` containers, no tab ever moved, and the only symptom was a
+  swallowed `console.warn`. TCP dodges this by passing url only when it matches
+  `/^https?:/`.
+- **`about:blank` must NOT be an auto-temp candidate.** A Firefox tab reads as
+  `about:blank` for its entire *pre-commit* life, so a tab en route to a real page is
+  indistinguishable from a blank one at `onCreated`/early-`onUpdated` time (verified:
+  `tabs.create({url:"http://…"})` fires `onCreated url="about:blank" csid=firefox-default`,
+  and the url appears only in a later `onUpdated`). Containerizing it would destroy
+  target=_blank / window.open / engine-reopen tabs before they load. Cost of the rule:
+  users with `browser.newtabpage.enabled=false` get `about:blank` on Ctrl+T and are not
+  auto-containerized — same limitation as TCP.
 - **The engine's `freshlyReopened` tab-id guard is load-bearing.** When the engine
   reopens a tab, the *new* tab's `onBeforeRequest` fires **before its url commits**
   (it still reads as `about:blank`), so `resolve()` can't tell it is already in the
@@ -77,6 +99,26 @@ engine's reopen, not duplicating it.
   artifact and flake the disposal e2e. Don't re-enable parallelism.
 - esbuild constant-folds numbers in the bundle (`300000` → `3e5`); assert against
   esbuild's form, not the source literal.
+- **WebDriver cannot make a new-tab page — use the probe.** `switchTo().newWindow("tab")`
+  produces `about:blank` (which auto-temp ignores by design), and `driver.get("about:newtab")`
+  fails with *"Navigation to about:newtab is not allowed in this context"*. So the probe
+  exposes `newTab` (`browser.tabs.create({})` — exactly what Ctrl+T does) and `tabs`
+  (a `browser.tabs.query` dump), reached from a test via `openRealNewTab` / `listTabs` /
+  `probeCommand` in `harness/firefox.ts`. The relay is a `cc-probe-cmd` DOM event the
+  probe listens for in its injected script, so **the driver must be parked on a
+  probe-reported http(s) page** before issuing one. `listTabs` is also the only way to
+  observe a new-tab page's container at all — `about:` pages take no content script, so
+  the probe's usual title/attribute reporting can't see them.
+- **An auto-temp e2e must not navigate.** Any unmatched http URL lands in a `tmp`
+  container via the *engine's* disposable path, so "open a tab, navigate, assert tmp"
+  passes whether or not auto-temp exists — three e2e tests once did exactly that. The
+  signal that isolates auto-temp is a tab sitting in a `tmp` container **while still on
+  `about:newtab`, before any navigation**. `launch({ startupUrl: "about:newtab" })`
+  covers the startup-sweep path (Marionette otherwise always starts at `about:blank`);
+  it is also what makes `npm run manual` greet you with a `tmp1` tab like a real profile
+  would. When the sweep fires it discards the driver's own starting tab — re-`switchTo`
+  a surviving handle before doing anything else, and observe from a *fresh* tab, since
+  navigating the swept tab consumes the evidence.
 - **`commands.onCommand` can't be driven by Selenium.** Firefox fires keyboard-command
   shortcuts at the browser-*chrome* level; Selenium's W3C actions deliver keys to web
   *content*, so the reopen-picker command (`Ctrl+Shift+O`, manifest `commands`) is

@@ -391,13 +391,9 @@ crosses it — that is what containers exist to prevent. Practical consequences:
   the author's setup (all `never`), deliberately not modeled.
 
 **Temporary Containers parity — outstanding**
-- **Automatic mode** (TCP's `maybeReopenInTmpContainer`): a freshly-opened blank/new
-  tab (`about:blank` / `about:newtab` / `about:home`) should reopen into a fresh
-  temporary container *immediately*, so the new-tab page itself is isolated before
-  the user navigates. The engine today skips non-`http(s)` URLs
-  (`src/engine/engine.ts`), so a new tab stays in `firefox-default` until its first
-  navigation — a real regression for a TCP migrant. This is a **known gap, not a
-  design decision**: it is deferred to a future slice (a `tabs.onCreated`-based
-  sibling mirroring TCP's approach), not declined. No config key, rule action, or
-  scenario in `TESTS.md` exists for it yet — design + plan will be written when the
-  slice is taken on.
+- **Automatic mode is implemented** (`src/engine/auto-temp.ts`) for `about:newtab` /
+  `about:home`. One case is *not* covered, and cannot be: a user who disables the
+  new-tab page (`browser.newtabpage.enabled=false`) gets `about:blank` on Ctrl+T, and
+  Firefox reports every tab as `about:blank` until its navigation commits — so a blank
+  new tab is indistinguishable from a tab on its way to a real page. TCP has the same
+  limitation. No config key; not a deferred slice.
