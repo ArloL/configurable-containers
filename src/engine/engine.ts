@@ -1,5 +1,5 @@
 import { resolve } from "../resolver/resolve";
-import type { Config, ContainerRef, Deps, NavContext, Target } from "../resolver/types";
+import type { Config, ContainerRef, Decision, Deps, NavContext, Target } from "../resolver/types";
 import type { BrowserPort, Tab, WebRequestDetails } from "./port";
 import { createRegistry, type ContainerRegistry } from "./registry";
 
@@ -61,10 +61,36 @@ async function buildNavContext(
   return { targetUrl: d.url, current, initiator };
 }
 
+// The two decisions the engine executes by opening a tab — and therefore the two it
+// cannot execute for a request that carries a body.
+type Declinable = Extract<Decision, { kind: "reopen" } | { kind: "choice" }>;
+
+// How the notification names where the tab is, and where the rules wanted it.
+async function containerLabel(port: BrowserPort, cookieStoreId: string): Promise<string> {
+  const ci = await port.getIdentity(cookieStoreId);
+  return ci ? ci.name : "the default container";
+}
+
+function targetLabel(decision: Declinable): string {
+  if (decision.kind === "choice") return `one of: ${decision.options.join(", ")}`;
+  switch (decision.into.kind) {
+    case "permanent":
+      return decision.into.name;
+    case "temporary":
+      return "a new temporary container";
+    case "default":
+      return "the default container";
+  }
+}
+
 export function createEngine(opts: EngineOptions): Engine {
   const { port, config, deps, onChoice } = opts;
   const registry = createRegistry(port, opts.tmpSuffix ?? defaultSuffix());
   const handled = new Set<string>();
+  // Hosts already warned about a declined non-GET. Session-scoped: the
+  // runtime.reload() a config save triggers clears it, which is what we want — the
+  // rules just changed, so the user should hear about them again.
+  const warnedHosts = new Set<string>();
   // The navigation each tab we reopened is still performing: tabId -> the requestId
   // once its first request arrives, or the url we are still waiting for until then.
   // That whole navigation must be left alone: in a real browser onBeforeRequest fires
@@ -119,6 +145,18 @@ export function createEngine(opts: EngineOptions): Engine {
     if (!keep) await port.removeTab(tab.id);
   }
 
+  async function announceDeclined(d: WebRequestDetails, tab: Tab, decision: Declinable): Promise<void> {
+    const host = new URL(d.url).host;
+    if (warnedHosts.has(host)) return;
+    warnedHosts.add(host);
+    await port.notify({
+      title: "Configurable Containers",
+      message:
+        `A form submission to ${host} stayed in ${await containerLabel(port, tab.cookieStoreId)} ` +
+        `instead of ${targetLabel(decision)} — moving it would have dropped the form data.`,
+    });
+  }
+
   port.onBeforeRequest(async (d) => {
     // (0) Scope: only top-level http(s) navigations.
     if (d.type !== "main_frame") return;
@@ -150,6 +188,18 @@ export function createEngine(opts: EngineOptions): Engine {
 
     // (3) Pure decision.
     const decision = resolve(nav, config, deps);
+
+    // (3b) F9 — tabs.create can only issue a GET, so reopening a navigation that
+    // carries a body would drop it silently. Leave it where it is and say so. Placed
+    // before macOwns (no reason to ask MAC about a navigation we will not act on) and
+    // before handled.add (this path adds no state, so it is fail-open by construction).
+    // The reopenedNav guard has already returned for navigations that are ours.
+    if ((decision.kind === "reopen" || decision.kind === "choice") && d.method !== "GET") {
+      // Floated, never awaited: a navigation must not wait on a toast, and a
+      // notification that cannot be raised must not break routing.
+      void announceDeclined(d, tab, decision).catch((e) => console.warn("[engine] notify failed", e));
+      return; // no cancel — the POST proceeds in the tab's current container
+    }
 
     // (4) Effects.
     switch (decision.kind) {
