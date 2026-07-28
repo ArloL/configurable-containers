@@ -247,6 +247,36 @@ engine's reopen, not duplicating it.
   `driver.get` throws (tolerate, then `awaitContainerTab`); to read *fresh* container
   state, navigate a **matched** host (stays in its permanent container, no reopen)
   with a **cache-busting** query param so the probe re-reports into a new document.
+- **Real MAC is loadable from `mac/src` unbuilt, but three things bite** (all handled in
+  `buildXpiFor`/`launch`, see `test/e2e/mac-interop.test.ts`):
+  1. `mac/src/_locales` is a **nested submodule** (mozilla-l10n) we do not check out, and
+     MAC's manifest declares `default_locale: "en"` — Firefox then refuses the add-on
+     with a bare *"Extension is invalid"* that names nothing. The harness synthesises the
+     six `__MSG_` keys the manifest interpolates; they are display strings the background
+     logic never reads. This is why CI checks out `submodules: true` and **not**
+     `recursive` — recursive would drag in a localisation repo for six labels.
+  2. **A MAC site assignment cannot be scripted.** It is created from MAC's
+     browser-action popup or context menu — chrome UI Selenium cannot drive, the same
+     limit as `commands.onCommand` — and MAC's external API exposes only `getAssignment`,
+     with no setter. `Utils.currentTab()` is `tabs.query({active:true})`, so opening
+     `popup.html` as a tab assigns the popup's own `moz-extension:` url; and WebDriver
+     must activate a tab to script it, so there is no arrangement that works. The harness
+     instead appends one script to MAC's background **page** inside the `.xpi` it builds
+     (the submodule on disk is untouched) which calls MAC's **own** `storageArea.set`, so
+     the storage-key format lives in MAC's code and is never mirrored here.
+  3. **Seed the assignment with `neverAsk: true`.** Otherwise MAC parks the tab on its
+     confirm-page interstitial instead of reopening (`assignManager.js`,
+     `reloadPageInContainer`) and no container tab ever appears — the test times out
+     looking for one, which reads like a deferral bug and is not.
+- **An unassigned domain cannot test the MAC handshake.** `macOwns` swallows a throw and
+  returns false, so a broken handshake and "no assignment" are observationally identical
+  — CC routes normally either way. Only an **assigned** domain separates them, and it is
+  what proves the two things L3 cannot: that cross-extension `sendMessage` reaches MAC at
+  all, and that MAC's permission gate accepts CC (it throws unless the caller declares
+  `contextualIdentities` — keep that permission for this reason too, not just for
+  `tabs.create`). Backing the F7 defer out makes the e2e fail as *no container tab at
+  all*, not as a `tmp` one: CC and MAC fight over the navigation, which is the churn
+  signature F2/F7 names.
 - **Debug a real-Firefox extension** by running geckodriver manually with
   `--log trace`, connecting Selenium via `usingServer`, and setting the pref
   `devtools.console.stdout.content=true`; the extension's `console.error` then shows

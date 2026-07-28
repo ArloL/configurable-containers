@@ -9,10 +9,17 @@ import { startServer, type TestServer } from "./server";
 import { buildExtension } from "./build-extension";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const EXT_DIRS: Record<"probe" | "cc", string> = {
+// `mac` is the upstream Multi-Account Containers submodule, loaded UNBUILT: its src/ is
+// plain JS with no bundle step (its own build is just `web-ext build -s src/`).
+const EXT_DIRS: Record<"probe" | "cc" | "mac", string> = {
   probe: path.resolve(HERE, "../extensions/probe"),
   cc: path.resolve(HERE, "../extensions/cc"),
+  mac: path.resolve(HERE, "../mac/src"),
 };
+
+// MAC's own extension id (mac/src/manifest.json). CC addresses it by this id for the
+// getAssignment handshake — see MAC_ID in src/engine/engine.ts, which must match.
+export const MAC_EXTENSION_ID = "@testpilot-containers";
 
 // CC's extension id (must match extensions/cc/manifest.json) and a FIXED uuid for
 // its moz-extension:// origin, pinned via the extensions.webextensions.uuids pref in
@@ -38,7 +45,12 @@ export interface Session {
 }
 
 export interface LaunchOptions {
-  extensions?: ("probe" | "cc")[];
+  extensions?: ("probe" | "cc" | "mac")[];
+  // Seed a MAC site assignment (requires the "mac" extension). Given as a HOST, not a
+  // url, because the test server's port is only known inside launch() and MAC keys
+  // assignments by hostname+port. userContextId is the number in a cookieStoreId:
+  // "1" is firefox-container-1, Firefox's built-in Personal.
+  macAssign?: { host: string; userContextId: string };
   ccGraceMs?: number; // grace passed to the cc build (default: production 300000)
   ccRedirectorDelayMs?: number; // redirector-close delay (default: production 2000)
   headless?: boolean; // default true; set false for manual/interactive testing
@@ -53,7 +65,10 @@ export interface LaunchOptions {
 // Zip an unpacked extension directory into a temporary .xpi (geckodriver's
 // installAddon wants a file, not a directory). Uses fflate for the same reason
 // scripts/package.ts does — no dependency on a `zip` binary being installed.
-function zipDir(dir: string): { xpiPath: string; cleanup: () => void } {
+function zipDir(
+  dir: string,
+  transform?: (entries: Record<string, Uint8Array>) => void,
+): { xpiPath: string; cleanup: () => void } {
   const out = mkdtempSync(path.join(tmpdir(), "cc-e2e-xpi-"));
   const xpiPath = path.join(out, "addon.xpi");
 
@@ -67,17 +82,89 @@ function zipDir(dir: string): { xpiPath: string; cleanup: () => void } {
     }
   };
   walk(dir);
+  transform?.(entries);
 
   writeFileSync(xpiPath, zipSync(entries, { level: 9 }));
   return { xpiPath, cleanup: () => rmSync(out, { recursive: true, force: true }) };
 }
 
+// MAC's manifest declares `default_locale: "en"`, but mac/src/_locales is a NESTED
+// submodule (mozilla-l10n/multi-account-containers-l10n) we deliberately do not check
+// out — Firefox then rejects the add-on outright ("Extension is invalid"). Every string
+// it supplies is display text; the background logic under test uses none of it. So the
+// harness synthesises the handful of keys the manifest interpolates, which keeps CI to
+// `submodules: true` instead of dragging in a whole localisation repo for six labels.
+function ensureMacLocale(entries: Record<string, Uint8Array>): void {
+  const file = "_locales/en/messages.json";
+  if (entries[file]) return;
+  const keys = [
+    "extensionDescription", "alwaysOpenSiteInContainer", "containerShortcut",
+    "openContainerPanel", "reopenInContainerShortcut", "sortTabsByContainer",
+  ];
+  const messages = Object.fromEntries(keys.map((k) => [k, { message: k }]));
+  entries[file] = new TextEncoder().encode(JSON.stringify(messages));
+}
+
+// Seed a MAC site assignment by appending one script to MAC's background PAGE inside
+// the .xpi we build. The submodule on disk is never touched — the rewrite happens on
+// the in-memory zip entries, the same spirit as CC's build-time config injection.
+//
+// This substitutes for the ONE step of a real MAC setup that cannot be scripted: an
+// assignment is created from MAC's browser-action popup (or context menu), both
+// chrome UI Selenium cannot drive, and MAC's external API exposes only `getAssignment`,
+// no setter. Everything actually under test stays stock MAC: the seeding calls MAC's
+// OWN `storageArea.set`, so the storage-key format lives in MAC's code and is never
+// mirrored here, and CC still reads it back through MAC's real `getAssignment` path.
+function injectMacAssignment(
+  entries: Record<string, Uint8Array>,
+  assign: { url: string; userContextId: string },
+): void {
+  const page = "js/background/index.html";
+  const hook = "js/background/cc-harness-assign.js";
+  const html = new TextDecoder().decode(entries[page]);
+  if (!html.includes("</body>")) throw new Error(`MAC background page shape changed: no </body> in ${page}`);
+
+  entries[hook] = new TextEncoder().encode(
+    `// Injected by the CC e2e harness (harness/firefox.ts). Not part of upstream MAC.\n` +
+      `(async () => {\n` +
+      `  const url = ${JSON.stringify(assign.url)};\n` +
+      `  const userContextId = ${JSON.stringify(assign.userContextId)};\n` +
+      `  for (let i = 0; i < 100; i++) {\n` +
+      `    try {\n` +
+      // neverAsk mirrors the user ticking "Remember my decision": without it MAC parks
+      // the tab on its confirm-page interstitial instead of reopening, and no container
+      // tab ever appears (assignManager.js reloadPageInContainer).
+      `      await assignManager.storageArea.set(url, { userContextId, neverAsk: true });\n` +
+      `      if (await assignManager.storageArea.get(url)) return;\n` +
+      `    } catch (e) { /* MAC still initialising — retry */ }\n` +
+      `    await new Promise((r) => setTimeout(r, 100));\n` +
+      `  }\n` +
+      `  console.error("[cc-harness] could not seed the MAC assignment");\n` +
+      `})();\n`,
+  );
+  entries[page] = new TextEncoder().encode(
+    html.replace("</body>", `  <script type="text/javascript" src="cc-harness-assign.js"></script>\n  </body>`),
+  );
+}
+
 // Build (cc only) then zip the given extension into an installable .xpi.
 async function buildXpiFor(
-  ext: "probe" | "cc",
-  opts: { graceMs?: number; redirectorDelayMs?: number; configYaml?: string },
+  ext: "probe" | "cc" | "mac",
+  opts: {
+    graceMs?: number;
+    redirectorDelayMs?: number;
+    configYaml?: string;
+    macAssign?: { url: string; userContextId: string };
+  },
 ): Promise<{ xpiPath: string; cleanup: () => void }> {
   if (ext === "cc") await buildExtension(opts);
+  if (ext === "mac") {
+    const assign = opts.macAssign;
+    return zipDir(EXT_DIRS.mac, (entries) => {
+      ensureMacLocale(entries);
+      if (assign) injectMacAssignment(entries, assign);
+    });
+  }
   return zipDir(EXT_DIRS[ext]);
 }
 
@@ -92,6 +179,10 @@ export async function launch(opts: LaunchOptions = {}): Promise<Session> {
         graceMs: opts.ccGraceMs,
         redirectorDelayMs: opts.ccRedirectorDelayMs,
         configYaml: opts.configYaml,
+        macAssign: opts.macAssign && {
+          url: `http://${opts.macAssign.host}:${new URL(server.url).port}/`,
+          userContextId: opts.macAssign.userContextId,
+        },
       }),
     );
   }
