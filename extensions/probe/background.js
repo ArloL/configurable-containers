@@ -80,7 +80,7 @@ browser.runtime.onMessage.addListener(async (msg) => {
     const names = {};
     for (const ci of await browser.contextualIdentities.query({})) names[ci.cookieStoreId] = ci.name;
     return tabs.map((t) => ({
-      id: t.id, url: t.url, cookieStoreId: t.cookieStoreId,
+      id: t.id, url: t.url, cookieStoreId: t.cookieStoreId, index: t.index,
       container: names[t.cookieStoreId] || "",
     }));
   }

@@ -4,6 +4,7 @@ import {
   launch,
   awaitContainerTab,
   readContainerList,
+  listTabs,
   type Session,
 } from "../../harness/firefox";
 
@@ -80,6 +81,53 @@ describe("routing — a redirect chain is one navigation (real Firefox, CC + pro
     const { name } = await awaitContainerTab(session.driver, final);
     expect(name).toMatch(/^tmp/);
     expect((await readContainerList(session.driver)).filter((c) => c.startsWith("tmp"))).toEqual([name]);
+  });
+});
+
+describe("routing — a same-tab link that changes container (real Firefox, CC + probe)", () => {
+  let session: Session;
+  let port: string;
+
+  beforeAll(async () => {
+    session = await launch({ extensions: ["probe", "cc"] });
+    port = new URL(session.serverUrl).port;
+  });
+
+  afterAll(async () => {
+    await session?.close();
+  });
+
+  it("keeps the page you were on and opens the container tab beside it", async () => {
+    const target = `http://work.example:${port}/`;
+    const article = `http://nomatch.example:${port}/?same=1&link=${encodeURIComponent(target)}`;
+    await session.driver.switchTo().newWindow("tab");
+    try {
+      await session.driver.get(article);
+    } catch {
+      // CC reopened the blank tab away — expected.
+    }
+    const { name: articleContainer } = await awaitContainerTab(session.driver, article);
+    expect(articleContainer).toMatch(/^tmp/);
+
+    // A plain same-tab link out of the article, into a host that belongs elsewhere.
+    // The driver stays parked on the article tab: CC cancels the navigation instead
+    // of tearing the tab down, which is the whole point.
+    await session.driver.findElement(By.id("go")).click();
+
+    const deadline = Date.now() + 15_000;
+    let tabs = await listTabs(session.driver);
+    while (Date.now() < deadline && !tabs.some((t) => t.url.startsWith(target))) {
+      await session.driver.sleep(300);
+      tabs = await listTabs(session.driver);
+    }
+
+    const kept = tabs.find((t) => t.url === article);
+    const opened = tabs.find((t) => t.url.startsWith(target));
+    expect(kept, "the article tab must survive the click").toBeDefined();
+    expect(kept!.container).toBe(articleContainer); // still on its page, in its container
+    expect(opened, "the link must open in its container").toBeDefined();
+    expect(opened!.container).toBe("Work");
+    expect(opened!.index).toBe(kept!.index + 1); // beside it, not somewhere else
   });
 });
 

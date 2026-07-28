@@ -216,6 +216,7 @@ export interface ProbeTab {
   id: number;
   url: string;
   cookieStoreId: string;
+  index: number; // position in its window — what "opened beside it" is asserted against
   container: string;
 }
 

@@ -98,11 +98,14 @@ describe("options page (real Firefox, CC + probe)", () => {
       await session.driver.switchTo().window(handles[0]);
 
       // nomatch.example matched no rule before this edit; it must now land in Editor.
+      // Drive it from a FRESH tab: CC keeps a tab that is already on a page and only
+      // cancels its navigation, and a cancelled navigation never returns to the driver.
       const url = `http://nomatch.example:${port}/?cb=edited-${Date.now()}`;
+      await session.driver.switchTo().newWindow("tab");
       try {
         await session.driver.get(url);
       } catch {
-        // CC reopens the tab into Editor, tearing this one down — expected.
+        // CC reopens the blank tab into Editor, tearing this one down — expected.
       }
       await awaitContainerTab(session.driver, url);
       expect(await readContainerName(session.driver)).toBe("Editor");
