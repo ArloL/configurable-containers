@@ -14,6 +14,17 @@ const EXT_DIRS: Record<"probe" | "cc", string> = {
   cc: path.resolve(HERE, "../extensions/cc"),
 };
 
+// CC's extension id (must match extensions/cc/manifest.json) and a FIXED uuid for
+// its moz-extension:// origin, pinned via the extensions.webextensions.uuids pref in
+// launch(). Without the pin the origin is random per profile and a test could not
+// address an extension page at all.
+export const CC_EXTENSION_ID = "configurable-containers@k5d.de";
+export const CC_EXTENSION_UUID = "5c5b6d4e-9f3a-4a21-8b7c-1d2e3f4a5b6c";
+
+export function ccExtensionUrl(pagePath: string): string {
+  return `moz-extension://${CC_EXTENSION_UUID}/${pagePath}`;
+}
+
 // Default fake domains resolved to loopback for e2e tests.
 const DEFAULT_LOCAL_DOMAINS = [
   "work.example", "nomatch.example", "redirect.example", "figma.example", "youtube.example",
@@ -76,6 +87,11 @@ export async function launch(opts: LaunchOptions = {}): Promise<Session> {
   if (opts.headless !== false) options.addArguments("-headless");
   options.setPreference("privacy.userContext.enabled", true);
   options.setPreference("xpinstall.signatures.required", false);
+  // Pin CC's moz-extension:// origin so ccExtensionUrl() addresses a real page.
+  options.setPreference(
+    "extensions.webextensions.uuids",
+    JSON.stringify({ [CC_EXTENSION_ID]: CC_EXTENSION_UUID }),
+  );
   if (opts.startupUrl) {
     options.setPreference("browser.startup.page", 1); // 1 = open the homepage
     options.setPreference("browser.startup.homepage", opts.startupUrl);
@@ -239,6 +255,45 @@ export function listTabs(driver: WebDriver): Promise<ProbeTab[]> {
 // unaddressable.
 export function navigateTab(driver: WebDriver, tabId: number, url: string): Promise<{ ok: boolean }> {
   return probeCommand(driver, "nav", { id: tabId, url });
+}
+
+// Open a URL in a new tab via the probe. The ONLY way a test can reach a
+// moz-extension:// page: WebDriver refuses that scheme ("Navigation to
+// moz-extension://… is not allowed in this context"), while an extension may open
+// another extension's pages. The driver must already be on a probe-reported http(s)
+// page for the command relay to exist.
+export function openExtensionPage(
+  driver: WebDriver,
+  url: string,
+): Promise<{ id: number; url: string }> {
+  return probeCommand(driver, "open", { url });
+}
+
+// Switch the driver to the first window handle whose URL starts with `urlPrefix`.
+// Opening a tab does not move the driver, and an extension page is not addressable
+// by navigation, so this is how a test starts operating one.
+export async function switchToUrl(
+  driver: WebDriver,
+  urlPrefix: string,
+  timeoutMs = 10_000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  let seen: string[] = [];
+  while (Date.now() < deadline) {
+    seen = [];
+    for (const handle of await driver.getAllWindowHandles()) {
+      try {
+        await driver.switchTo().window(handle);
+        const current = await driver.getCurrentUrl();
+        seen.push(current);
+        if (current.startsWith(urlPrefix)) return;
+      } catch {
+        // Tab vanished mid-poll (CC reopens tear tabs down) — keep looking.
+      }
+    }
+    await driver.sleep(200);
+  }
+  throw new Error(`no window at ${urlPrefix}; saw ${JSON.stringify(seen)}`);
 }
 
 // Poll window handles (WITHOUT re-navigating them — CC does the reopening) until a

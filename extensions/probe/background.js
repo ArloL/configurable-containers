@@ -58,7 +58,15 @@ async function reportTab(tabId, cookieStoreId, url) {
 //   tabs    — dump every tab's id/url/cookieStoreId/container name.
 //   nav     — navigate a tab BY ID; WebDriver can only drive the tab it is switched
 //             to, and gives no way to map a window handle to a tabs.Tab id.
+//   open    — open an arbitrary URL in a new tab, including another extension's
+//             moz-extension:// page. WebDriver cannot navigate to that scheme at
+//             all, and Firefox lets one extension open another's pages without
+//             web_accessible_resources (that gate is for web content).
 browser.runtime.onMessage.addListener(async (msg) => {
+  if (msg && msg.cmd === "open") {
+    const t = await browser.tabs.create({ url: msg.url });
+    return { id: t.id, url: t.url };
+  }
   if (msg && msg.cmd === "nav") {
     await browser.tabs.update(msg.id, { url: msg.url });
     return { ok: true };
