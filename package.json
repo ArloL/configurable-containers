@@ -5,6 +5,7 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:realtime": "vitest run --config vitest.realtime.config.ts",
     "typecheck": "tsc --noEmit",
     "manual": "tsx harness/manual.ts",
     "package": "tsx scripts/package.ts",

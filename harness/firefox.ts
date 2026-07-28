@@ -361,6 +361,14 @@ export async function probeCommand<T>(
   throw new Error(`probe command ${JSON.stringify(cmd)} timed out after ${timeoutMs}ms`);
 }
 
+// Every container's name, live from browser.contextualIdentities.query. readContainerList
+// reads a snapshot the probe wrote when a document loaded, so watching a container be
+// REMOVED through it means navigating a tab on every poll; this asks the browser each
+// time, from a tab the test never has to touch.
+export function listContainers(driver: WebDriver): Promise<string[]> {
+  return probeCommand(driver, "containers");
+}
+
 export interface ProbeNotification {
   title: string;
   message: string;
