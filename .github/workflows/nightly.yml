@@ -1,0 +1,93 @@
+name: Nightly
+
+# Guard rails, not gates: these run on a schedule and open an issue on regression
+# rather than blocking a PR. They are the cases that cost too much wall clock to sit
+# in `npm test` on every push. See TESTING.md, "Cross-cutting gates".
+
+on:
+  schedule:
+  - cron: "43 3 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency: nightly
+
+jobs:
+  disposal-realtime:
+    name: Real-delay disposal
+    runs-on: ubuntu-latest
+    # The case itself waits out a five-minute grace plus slack; the rest is Firefox
+    # startup and npm. Generous, so a slow runner reports a failure rather than a kill.
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      # No submodules: this runs one CC-only case. mac/ is needed by
+      # test/e2e/mac-interop.test.ts, which ci.yml already covers on every push.
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      # Same reason as ci.yml: the runner's default Firefox is a snap, which
+      # geckodriver/Selenium cannot drive reliably.
+      - uses: browser-actions/setup-firefox@0bc507ddf224827e3b1af68e014d5e42ab93e795 # v1.7.2
+        id: firefox
+        with:
+          firefox-version: latest
+
+      - run: npm ci
+
+      # A real five-minute timer in a real background page — the one thing the fake
+      # clock at L3 and the 500ms grace at L4 structurally cannot prove.
+      - name: Run the real-delay cases (headless Firefox via Selenium)
+        env:
+          FIREFOX_BIN: ${{ steps.firefox.outputs.firefox-path }}
+        run: npm run test:realtime
+
+  report-regression:
+    name: Report a regression
+    needs:
+    - disposal-realtime
+    # Nobody watches a scheduled run, so a red night has to come and find us. Only on
+    # failure — a cancelled or skipped run is not a regression.
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+    - name: Open or update the tracking issue
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GH_REPO: ${{ github.repository }}
+        TITLE: Nightly real-delay disposal is failing
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: |
+        set -euo pipefail
+        # One issue for the whole streak: a nightly that fails for a week should not
+        # file seven of them.
+        existing="$(gh issue list --state open --limit 100 --json number,title \
+          --jq 'first(.[] | select(.title == env.TITLE) | .number) // empty')"
+        if [ -n "$existing" ]; then
+          gh issue comment "$existing" --body "Still failing: $RUN_URL"
+        else
+          gh issue create --title "$TITLE" --body "$(cat <<EOF
+        \`npm run test:realtime\` failed: $RUN_URL
+
+        That case waits out the shipped five-minute grace in a real Firefox, so a
+        failure means one of two things, and the assertion that failed says which:
+
+        - **removed early** — the bundle is not carrying the production grace, or
+          something disposes a throwaway without waiting for it.
+        - **never removed** — a long background-page timer was throttled, coalesced or
+          dropped. Every other disposal test uses a fake clock or a 500ms grace and
+          would stay green through it (TESTING.md, F10).
+        EOF
+        )"
+        fi
