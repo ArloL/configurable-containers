@@ -73,6 +73,10 @@ browser.runtime.onMessageExternal.addListener((msg) => {
 //             moz-extension:// page. WebDriver cannot navigate to that scheme at
 //             all, and Firefox lets one extension open another's pages without
 //             web_accessible_resources (that gate is for web content).
+//   containers — every container's name, live. The data-cc-containers attribute is a
+//             snapshot taken when a document loaded, so watching a container get
+//             REMOVED through it means re-navigating something on every poll; this
+//             asks the browser instead, from a tab that never moves.
 //   notifications — every notification CC's test build echoed to us so far.
 browser.runtime.onMessage.addListener(async (msg) => {
   if (msg && msg.cmd === "open") {
@@ -95,6 +99,9 @@ browser.runtime.onMessage.addListener(async (msg) => {
       id: t.id, url: t.url, cookieStoreId: t.cookieStoreId, index: t.index,
       container: names[t.cookieStoreId] || "",
     }));
+  }
+  if (msg && msg.cmd === "containers") {
+    return (await browser.contextualIdentities.query({})).map((c) => c.name);
   }
   if (msg && msg.cmd === "notifications") {
     return notifications;

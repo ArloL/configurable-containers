@@ -28,6 +28,11 @@ rules:
     default: Temporary
 `;
 
+// The keep-alive grace `npm run package` ships: five minutes between a throwaway's
+// last tab closing and its removal. Exported so the nightly real-delay case waits out
+// the SAME number the bundle carries, rather than a copy of it that could drift.
+export const PRODUCTION_GRACE_MS = 300000;
+
 // Bundle the extension background (engine + real port + tldts + yaml) into one
 // classic script Firefox can load as an MV2 background, plus the keyboard-driven choice
 // page script. Returns the background path (the harness installs the whole dir).
@@ -43,7 +48,7 @@ export async function buildExtension(
     target: "firefox115",
     logLevel: "silent",
     define: {
-      __CC_GRACE_MS__: String(opts.graceMs ?? 300000),
+      __CC_GRACE_MS__: String(opts.graceMs ?? PRODUCTION_GRACE_MS),
       __CC_REDIRECTOR_DELAY_MS__: String(opts.redirectorDelayMs ?? 2000),
       __CC_CONFIG_YAML__: JSON.stringify(opts.configYaml ?? TEST_CONFIG_YAML),
       __CC_NOTIFY_ECHO_TO__: JSON.stringify(opts.notifyEchoTo ?? ""),
