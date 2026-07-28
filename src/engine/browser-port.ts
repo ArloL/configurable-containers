@@ -49,7 +49,7 @@ export function createBrowserPort(): BrowserPort {
         index: p.index, active: p.active, openerTabId: p.openerTabId,
       });
       return {
-        id: t.id!, url: t.url ?? p.url, cookieStoreId: t.cookieStoreId ?? p.cookieStoreId,
+        id: t.id!, url: t.url ?? p.url ?? "", cookieStoreId: t.cookieStoreId ?? p.cookieStoreId,
         index: t.index, active: t.active, openerTabId: t.openerTabId,
       };
     },
