@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { launch, awaitContainerTab, type Session } from "../../harness/firefox";
+import { By } from "selenium-webdriver";
+import {
+  launch,
+  awaitContainerTab,
+  readContainerList,
+  type Session,
+} from "../../harness/firefox";
 
 describe("routing (real Firefox, CC + probe)", () => {
   let session: Session;
@@ -39,5 +45,81 @@ describe("routing (real Firefox, CC + probe)", () => {
     const { store, name } = await awaitContainerTab(session.driver, url);
     expect(store).toMatch(/^firefox-container-\d+$/);
     expect(name).toMatch(/^tmp/);
+  });
+});
+
+// Own session: the assertion counts the throwaways that exist in the whole profile,
+// so it must not inherit any from a neighbouring test.
+describe("routing — a redirect chain is one navigation (real Firefox, CC + probe)", () => {
+  let session: Session;
+  let port: string;
+
+  beforeAll(async () => {
+    session = await launch({ extensions: ["probe", "cc"] });
+    port = new URL(session.serverUrl).port;
+  });
+
+  afterAll(async () => {
+    await session?.close();
+  });
+
+  it("lands the whole chain in the one throwaway opened for it", async () => {
+    const final = `http://hop.example:${port}/`;
+    await session.driver.switchTo().newWindow("tab");
+    try {
+      await session.driver.get(
+        `http://nomatch.example:${port}/redirect?to=${encodeURIComponent(final)}`,
+      );
+    } catch {
+      // CC reopened the tab away — expected.
+    }
+
+    // Firefox holds the reopened tab at about:blank until the chain commits, so every
+    // hop after the first was a navigation CC saw as uncontained: each one used to buy
+    // another throwaway, walking tmp1 -> tmp2 for a single click.
+    const { name } = await awaitContainerTab(session.driver, final);
+    expect(name).toMatch(/^tmp/);
+    expect((await readContainerList(session.driver)).filter((c) => c.startsWith("tmp"))).toEqual([name]);
+  });
+});
+
+// Own session for the same reason: this counts throwaways profile-wide.
+describe("routing — a link opened in a new tab (real Firefox, CC + probe)", () => {
+  let session: Session;
+  let port: string;
+
+  beforeAll(async () => {
+    session = await launch({ extensions: ["probe", "cc"] });
+    port = new URL(session.serverUrl).port;
+  });
+
+  afterAll(async () => {
+    await session?.close();
+  });
+
+  it("isolates it from the opener's throwaway", async () => {
+    const target = `http://hop.example:${port}/`;
+    const opener = `http://nomatch.example:${port}/?link=${encodeURIComponent(target)}`;
+    await session.driver.switchTo().newWindow("tab");
+    try {
+      await session.driver.get(opener);
+    } catch {
+      // CC reopened the tab away — expected.
+    }
+    const first = await awaitContainerTab(session.driver, opener);
+    expect(first.name).toMatch(/^tmp/);
+
+    // A real click on a target=_blank link. Firefox opens a tab that INHERITS the
+    // opener's container and reads about:blank until the click commits — the same
+    // pre-commit state a redirect hop is in, but a different navigation, so it has to
+    // be isolated rather than left where it landed.
+    await session.driver.findElement(By.id("go")).click();
+
+    const second = await awaitContainerTab(session.driver, target);
+    expect(second.name).toMatch(/^tmp/);
+    expect(second.name).not.toBe(first.name);
+    expect((await readContainerList(session.driver)).filter((c) => c.startsWith("tmp")).sort()).toEqual(
+      [first.name, second.name].sort(),
+    );
   });
 });

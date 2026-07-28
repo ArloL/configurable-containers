@@ -28,6 +28,7 @@ export function ccExtensionUrl(pagePath: string): string {
 // Default fake domains resolved to loopback for e2e tests.
 const DEFAULT_LOCAL_DOMAINS = [
   "work.example", "nomatch.example", "redirect.example", "figma.example", "youtube.example",
+  "hop.example",
 ];
 
 export interface Session {
