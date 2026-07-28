@@ -70,9 +70,22 @@ export async function startServer(): Promise<TestServer> {
     // gesture: target=_blank by default (the new tab then inherits its opener's
     // container the way a middle-click does, which no scripted tabs.create
     // reproduces), or a plain same-tab link with &same=1.
+    // &popup=1 makes the click a window.open with features instead — a share button.
+    // Firefox gives that its own popup WINDOW, and the tab in it is pre-commit, so it
+    // is the case a reopen has to put back where it found it.
     const link = params.get("link");
-    const target = params.has("same") ? "" : ` target="_blank"`;
+    const popup = params.has("popup");
+    const target = params.has("same") || popup ? "" : ` target="_blank"`;
     const anchor = link ? `<a id="go"${target} href="${escapeAttr(link)}">go</a>` : "";
+    // The url stays in the href (escaped once, above) and the script reads it back from
+    // there — it is never interpolated into JS, so this adds no second injection sink.
+    const popupScript =
+      link && popup
+        ? "<script>document.getElementById('go').addEventListener('click', function (e) {" +
+          "  e.preventDefault();" +
+          "  window.open(this.href, 'share', 'width=640,height=480');" +
+          "});</script>"
+        : "";
 
     // Reflect the request's Cookie header into a body attribute so an external driver
     // can assert the FIRST request already carried a seeded cookie (F12 wire side).
@@ -87,7 +100,7 @@ export async function startServer(): Promise<TestServer> {
         // If CC's script-injector already set localStorage.cc_script, it's visible here —
         // proving the injected script ran before the page's own scripts (F12 timing).
         "<script>document.documentElement.setAttribute('data-cc-script-at-start', localStorage.getItem('cc_script') || '');</script>" +
-        `</head><body data-seen-cookie="${escapeAttr(cookie)}" data-seen-post="${escapeAttr(post)}">ok${anchor}</body></html>`;
+        `</head><body data-seen-cookie="${escapeAttr(cookie)}" data-seen-post="${escapeAttr(post)}">ok${anchor}${popupScript}</body></html>`;
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
       res.end(html);
     };

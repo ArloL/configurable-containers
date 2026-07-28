@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { By, Key } from "selenium-webdriver";
-import { launch, awaitContainerTab, type Session } from "../../harness/firefox";
+import { launch, awaitContainerTab, listTabs, type Session } from "../../harness/firefox";
 
 describe("choice screen + reopen picker (real Firefox, CC + probe)", () => {
   let firefox: Session;
@@ -80,6 +80,77 @@ describe("choice screen + reopen picker (real Firefox, CC + probe)", () => {
     await firefox.driver.close();
     const handles = await firefox.driver.getAllWindowHandles();
     if (handles.length) await firefox.driver.switchTo().window(handles[0]);
+  });
+
+  it("keeps the page you were on while you choose, and lands the choice beside it", async () => {
+    // Its own query string: earlier cases leave their own figma.example tabs open in
+    // this session, and a bare host url would match those instead of this one's.
+    const multiOpenUrl = `http://figma.example:${serverPort}/?keeps-the-page`;
+    const articleUrl = `http://nomatch.example:${serverPort}/?same=1&link=${encodeURIComponent(multiOpenUrl)}`;
+    await navFreshTab(articleUrl);
+    const { name: articleContainer } = await awaitContainerTab(firefox.driver, articleUrl);
+
+    // A same-tab link into a multi-open rule. The choice page used to be loaded into
+    // THIS tab, so the article was gone before anything had been chosen — the very loss
+    // a single-container reopen avoids by keeping the source tab.
+    await firefox.driver.findElement(By.id("go")).click();
+
+    const deadline = Date.now() + 15_000;
+    let tabs = await listTabs(firefox.driver);
+    while (Date.now() < deadline && !tabs.some((tab) => tab.url.includes("/choice.html"))) {
+      await firefox.driver.sleep(300);
+      tabs = await listTabs(firefox.driver);
+    }
+
+    const keptArticleTab = tabs.find((tab) => tab.url === articleUrl);
+    const choiceTab = tabs.find((tab) => tab.url.includes("/choice.html"));
+    expect(keptArticleTab, "the article must survive being asked to choose").toBeDefined();
+    expect(keptArticleTab!.container).toBe(articleContainer);
+    expect(choiceTab, "the choice must get a tab of its own").toBeDefined();
+    expect(choiceTab!.index).toBe(keptArticleTab!.index + 1);
+
+    // Choosing consumes the choice tab, leaving the container tab exactly where a
+    // single-container reopen would have put it.
+    await awaitChoicePage();
+    await firefox.driver.actions().sendKeys(await optionKeyFor("Work")).perform();
+    const { name: chosenContainer } = await awaitContainerTab(firefox.driver, multiOpenUrl);
+    expect(chosenContainer).toBe("Work");
+
+    // Indices are read from ONE fresh snapshot: tabs closing elsewhere in the session
+    // renumber every tab after them, so the earlier reading is only good against itself.
+    const after = await listTabs(firefox.driver);
+    const articleStillOpen = after.find((tab) => tab.url === articleUrl);
+    const chosenTab = after.find((tab) => tab.url.startsWith(multiOpenUrl));
+    expect(after.some((tab) => tab.url.includes("/choice.html"))).toBe(false);
+    expect(articleStillOpen, "the article must survive the choice too").toBeDefined();
+    expect(chosenTab!.index).toBe(articleStillOpen!.index + 1);
+  });
+
+  it("Esc cancels: the choice tab closes, and nothing was opened or lost", async () => {
+    const multiOpenUrl = `http://figma.example:${serverPort}/?esc-cancels`;
+    const articleUrl = `http://nomatch.example:${serverPort}/?same=1&link=${encodeURIComponent(multiOpenUrl)}`;
+    await navFreshTab(articleUrl);
+    await awaitContainerTab(firefox.driver, articleUrl); // leaves the driver on the article
+    const articleHandle = await firefox.driver.getWindowHandle();
+
+    await firefox.driver.findElement(By.id("go")).click();
+    await awaitChoicePage();
+    // Esc used to navigate this tab to the url — which, in a tab of its own, only earns
+    // another choice page. Cancelling means closing it.
+    await firefox.driver.actions().sendKeys(Key.ESCAPE).perform();
+
+    // The choice tab closes under the driver, so observe from the article's own tab.
+    await firefox.driver.switchTo().window(articleHandle);
+    const deadline = Date.now() + 8000;
+    let tabs = await listTabs(firefox.driver);
+    while (Date.now() < deadline && tabs.some((tab) => tab.url.includes("/choice.html"))) {
+      await firefox.driver.sleep(200);
+      tabs = await listTabs(firefox.driver);
+    }
+
+    expect(tabs.some((tab) => tab.url.includes("/choice.html"))).toBe(false);
+    expect(tabs.some((tab) => tab.url === articleUrl), "the article is untouched").toBe(true);
+    expect(tabs.some((tab) => tab.url.startsWith(multiOpenUrl)), "nothing was opened").toBe(false);
   });
 
   // SKIPPED: Firefox `commands.onCommand` fires only on browser-CHROME key events, which

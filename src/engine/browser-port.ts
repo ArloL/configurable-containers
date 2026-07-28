@@ -10,6 +10,7 @@ function mapTab(t: browser.tabs.Tab): Tab {
     index: t.index,
     active: t.active,
     openerTabId: t.openerTabId,
+    windowId: t.windowId!,
   };
 }
 
@@ -38,10 +39,7 @@ export function createBrowserPort(): BrowserPort {
     async getTab(tabId): Promise<Tab | null> {
       try {
         const t = await browser.tabs.get(tabId);
-        return {
-          id: t.id!, url: t.url ?? "", cookieStoreId: t.cookieStoreId ?? "firefox-default",
-          index: t.index, active: t.active, openerTabId: t.openerTabId,
-        };
+        return mapTab(t);
       } catch {
         return null; // tab gone — engine treats as fail-open
       }
@@ -49,12 +47,13 @@ export function createBrowserPort(): BrowserPort {
 
     async createTab(p: CreateTabProps): Promise<Tab> {
       const t = await browser.tabs.create({
-        url: p.url, cookieStoreId: p.cookieStoreId,
+        url: p.url, cookieStoreId: p.cookieStoreId, windowId: p.windowId,
         index: p.index, active: p.active, openerTabId: p.openerTabId,
       });
       return {
         id: t.id!, url: t.url ?? p.url ?? "", cookieStoreId: t.cookieStoreId ?? p.cookieStoreId,
         index: t.index, active: t.active, openerTabId: t.openerTabId,
+        windowId: t.windowId!,
       };
     },
 
@@ -139,12 +138,8 @@ export function createBrowserPort(): BrowserPort {
       return { unregister: () => reg.unregister() };
     },
 
-    async updateTab(tabId, props) {
-      await browser.tabs.update(tabId, { url: props.url });
-    },
-
     onMessage(handler) {
-      browser.runtime.onMessage.addListener((msg) => handler(msg) as never);
+      browser.runtime.onMessage.addListener((msg, sender) => handler(msg, { tabId: sender.tab?.id }) as never);
     },
 
     onCommand(handler) {

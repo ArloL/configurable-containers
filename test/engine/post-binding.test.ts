@@ -75,7 +75,7 @@ describe("engine — a non-GET navigation is never reopened (F9)", () => {
     // as surely — decline before showing it.
     expect(blockingResponse).toBeUndefined();
     expect(offered).toEqual([]);
-    expect(browser.navigatedTabs).toEqual([]);
+    expect(browser.openedTabs).toEqual([]);
     expect(browser.notifications[0].message).toContain("instead of one of: Personal, Work");
   });
 

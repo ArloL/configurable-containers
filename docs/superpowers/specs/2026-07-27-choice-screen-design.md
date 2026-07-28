@@ -8,6 +8,16 @@ and the **manual reopen picker** (a keyboard command that re-offers the matching
 `open` list for the active tab). Proven pure/at L3 (mock `browser.*`) and confirmed in
 real Firefox (L4). Closes the last unimplemented TESTS.md feature surface besides F9.
 
+> **Superseded in part (2026-07-28).** This slice put the choice page in the *triggering*
+> tab, which destroyed the page the user was on before they had chosen anything — the
+> loss `reopen` avoids for single-container rules. Three things below no longer hold:
+> the choice page now opens in a **tab of its own** via `supersede` (§4's URL, §5's
+> `updateTab` seam); the payload and the `cc-pick` message carry **no `tabId`** (the
+> background takes the tab from the message sender, so the page cannot name a tab it is
+> not); and **Esc closes the choice tab** rather than navigating it to `url`, which in a
+> dedicated tab would only be answered with another choice page. See `FOLLOWUPS.md`
+> history and `test/e2e/choice.test.ts`.
+
 ## 1. Goal & scope
 
 CONFIG.md §"Choice screen and reopen picker" defines two UI surfaces, both

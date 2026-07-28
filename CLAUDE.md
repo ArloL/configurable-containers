@@ -29,13 +29,27 @@ call plus the async config tail; the wiring is a separate function so the L3 res
 harness drives the *real* startup path instead of a second copy of it. The choice screen / reopen-picker UI lives in `src/extension/choice.ts`
 (a separate esbuild entry point bundled to `extensions/cc/choice.js`, loaded by
 `choice.html`); the pure protocol it shares with `src/engine/picker.ts` is
-`src/extension/picker-protocol.ts`.
+`src/extension/picker-protocol.ts`. **Neither the hash payload nor the `cc-pick` message
+carries a tab id**: the background takes the tab from the message *sender*, because the
+hash a choice page renders from is reachable by anyone who can get the user to a crafted
+`moz-extension://<id>/choice.html#…` link, and so is anything derived from it. The url in
+that message is re-checked for http(s) at the same boundary — it goes on to
+`port.createTab`, where a `javascript:` url would run in a privileged origin.
 
 `createEngine` returns `{ reopen }` — the F1-guarded reopen effect. The picker calls
 `engine.reopen` (injected) so its choice-driven reopen goes through the
 `reopenedNav` guard; never reopen a tab by hand in the picker, and don't make
 `createEngine` return `void` again — the picker's correctness depends on reusing the
 engine's reopen, not duplicating it.
+
+**Where a new tab goes is `supersede` (`src/engine/supersede.ts`), and it has three
+callers for a reason.** It owns one rule — keep a source tab that is on a page and open
+beside it, replace one with nothing to lose — plus the window, index, opener and active
+flag that go with it. `engine.reopen`, `picker.showChoice` and (for its own placement)
+auto-temp all go through it. The rule was duplicated in the picker once and immediately
+drifted: the choice page was loaded into the *triggering* tab, so a multi-container rule
+destroyed the page the user was on before they had chosen anything, while a
+single-container rule kept it. Add a caller rather than a second copy.
 
 ## Firefox extension constraints (learned through debugging)
 
@@ -100,8 +114,18 @@ engine's reopen, not duplicating it.
   so the tab's own first request legitimately arrives on a url we never asked for, and
   exact-url matching bought a second throwaway on every such reopen. Both directions
   have an L3 test; revert-verified against each other.
+- **A reopen carries the source tab's `windowId`, and Firefox honours it even for a popup
+  window.** A share button (`window.open(url, "name", "width=640,height=480")`) gets a
+  window of its own whose tab is pre-commit, so it takes the *replace* branch; with no
+  window on the `tabs.create` the replacement landed in the last focused **normal** window
+  and removing the original then closed the popup, taking the navigation with it. The open
+  question was whether Firefox would put a tab into a popup window at all — **it does**,
+  verified in Firefox 153 by the popup case in `test/e2e/routing.test.ts`, which reads
+  `windowId` out of the probe's `tabs` dump. The same omission teleported any tab reopened
+  in an unfocused window. `Tab.windowId` is therefore required, not optional: an optional
+  one is a field the mock can forget to set and the suite then stops covering this.
 - **A reopen KEEPS a source tab that is on a page** (`keep = /^https?:/.test(tab.url)`
-  in `reopen`), opening the container tab at `index + 1` with the source as its opener,
+  in `supersede`), opening the container tab at `index + 1` with the source as its opener,
   and only *cancels* the source's navigation. Session history does not span containers,
   so replacing that tab destroys what the user was reading with no way back — clicking a
   link out of an article closed the article. This is MAC's rule
@@ -266,7 +290,14 @@ engine's reopen, not duplicating it.
   probe listens for in its injected script, so **the driver must be parked on a
   probe-reported http(s) page** before issuing one. `listTabs` is also the only way to
   observe a new-tab page's container at all — `about:` pages take no content script, so
-  the probe's usual title/attribute reporting can't see them.
+  the probe's usual title/attribute reporting can't see them. It reports each tab's
+  `windowId` too, which is the only way to tell "the popup survived" from "the routed tab
+  reappeared in the main window" — window handles alone don't distinguish them.
+- **Two tests in one session must not share a URL.** The choice-screen cases each leave a
+  `figma.example` tab open, so a later `tabs.find(t => t.url.startsWith(host))` matched the
+  *earlier* test's tab and read its index. Give a case its own query string. Tab indices
+  have the mirror trap: a tab closing anywhere renumbers every tab after it, so compare
+  indices only within ONE `listTabs` snapshot, never across two.
 - **WebDriver cannot navigate to a `moz-extension://` URL** either — `driver.get` fails with
   *"Navigation to moz-extension://… is not allowed in this context"*, Marionette's
   non-web-scheme restriction, the same one that blocks `about:newtab`. Pinning the uuid

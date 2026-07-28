@@ -2,6 +2,7 @@ import { resolve } from "../resolver/resolve";
 import type { Config, ContainerRef, Decision, Deps, NavContext, Target } from "../resolver/types";
 import type { BrowserPort, Tab, WebRequestDetails } from "./port";
 import { createRegistry, type ContainerRegistry } from "./registry";
+import { supersede } from "./supersede";
 
 export const MAC_ID = "@testpilot-containers";
 
@@ -121,28 +122,11 @@ export function createEngine(opts: EngineOptions): Engine {
   // surface the result (the picker reports {ok:false} to the choice page).
   async function reopen(tab: Tab, url: string, target: Target): Promise<void> {
     const store = await registry.toStoreId(target);
-
-    // Does the source tab hold something worth keeping? Session history does not span
-    // containers, so replacing a tab that is ON a page destroys what the user was
-    // reading with no way back — clicking a link out of an article would close the
-    // article. So keep that tab (its navigation is cancelled) and open the container
-    // tab right after it, as MAC does (assignManager.js:275, `removeTab`).
-    //
-    // A tab with nothing to lose is still replaced: a new-tab page, the choice page,
-    // or a tab still pre-commit on about:blank — which is what a middle-clicked or
-    // target=_blank link is. Replacing those is required, not just harmless: keeping
-    // them would strand an empty tab next to every link opened in a new tab.
-    const keep = /^https?:/.test(tab.url);
-
-    const created = await port.createTab({
-      url,
-      cookieStoreId: store,
-      index: keep ? tab.index + 1 : tab.index,
-      active: tab.active,
-      openerTabId: keep ? tab.id : tab.openerTabId,
+    // `supersede` owns the keep-or-replace rule and the window; the picker's choice tab
+    // goes through the same function, so the two cannot drift.
+    await supersede(port, tab, { url, cookieStoreId: store }, (created) => {
+      reopenedNav.set(created.id, { awaiting: url }); // leave its whole navigation alone (see 1b)
     });
-    reopenedNav.set(created.id, { awaiting: url }); // leave its whole navigation alone (see 1b)
-    if (!keep) await port.removeTab(tab.id);
   }
 
   async function announceDeclined(d: WebRequestDetails, tab: Tab, decision: Declinable): Promise<void> {
