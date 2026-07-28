@@ -9,14 +9,14 @@ import { createBrowserPort, realClock } from "../engine/browser-port";
 import { parseConfig } from "../config/parse";
 import { matchRule, matchGroup } from "../matcher/matcher";
 import { sameSite } from "../psl/same-site";
-import { BUNDLED_CONFIG_YAML } from "./config";
+import { SEED_CONFIG_YAML } from "./config";
 
 // Injected at bundle time by esbuild (harness/build-extension.ts).
 declare const __CC_GRACE_MS__: number;
 declare const __CC_REDIRECTOR_DELAY_MS__: number;
 
 const port = createBrowserPort();
-const config = parseConfig(BUNDLED_CONFIG_YAML);
+const config = parseConfig(SEED_CONFIG_YAML);
 
 // Shared temp-container suffix counter so engine reopen + auto-temp never collide.
 let n = 0;

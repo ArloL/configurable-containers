@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Configurable Containers — config</title>
+  <style>
+    body { font: 14px sans-serif; padding: 16px; max-width: 60em; }
+    #cc-config { width: 100%; height: 70vh; font-family: monospace; font-size: 13px; }
+    #cc-error { color: #a00; white-space: pre-wrap; min-height: 1.2em; }
+    #cc-status { color: #555; }
+    button { font-size: 14px; padding: 4px 12px; }
+  </style>
+</head>
+<body>
+  <p>Edit the routing config. Saving reloads the extension.</p>
+  <textarea id="cc-config" spellcheck="false"></textarea>
+  <p id="cc-error"></p>
+  <p><button id="cc-save">Save</button> <span id="cc-status"></span></p>
+  <script src="options.js"></script>
+</body>
+</html>

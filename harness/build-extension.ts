@@ -6,6 +6,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const OUTDIR = path.resolve(HERE, "../extensions/cc");
 const ENTRY = path.resolve(HERE, "../src/extension/background.ts");
 const CHOICE_ENTRY = path.resolve(HERE, "../src/extension/choice.ts");
+const OPTIONS_ENTRY = path.resolve(HERE, "../src/extension/options.ts");
 const OUTFILE = path.resolve(OUTDIR, "background.js");
 
 // The test config (used by e2e tests). The manual launcher injects the user's real
@@ -34,7 +35,7 @@ export async function buildExtension(
   opts: { graceMs?: number; redirectorDelayMs?: number; configYaml?: string } = {},
 ): Promise<string> {
   await build({
-    entryPoints: [ENTRY, CHOICE_ENTRY],
+    entryPoints: [ENTRY, CHOICE_ENTRY, OPTIONS_ENTRY],
     bundle: true,
     outdir: OUTDIR,
     format: "iife",
