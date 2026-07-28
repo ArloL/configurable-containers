@@ -51,11 +51,18 @@ jobs:
         run: |
           git archive --format=zip --output "dist/configurable-containers-src-${VERSION}.zip" HEAD
 
+      # --upload-source-code is what actually satisfies the requirement above; merely
+      # attaching the archive to the GitHub release does not, and a listed submission
+      # without it sits in review. README's "Building from source" section travels
+      # inside the archive as the reviewer's build instructions.
       - name: Submit to AMO (listed channel)
         env:
           WEB_EXT_API_KEY: ${{ secrets.WEB_EXT_API_KEY }}
           WEB_EXT_API_SECRET: ${{ secrets.WEB_EXT_API_SECRET }}
-        run: npm run submit
+          VERSION: ${{ steps.version.outputs.new_version }}
+        run: |
+          npm run submit -- \
+            --upload-source-code "dist/configurable-containers-src-${VERSION}.zip"
 
       - name: Publish the GitHub release
         env:

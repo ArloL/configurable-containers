@@ -328,7 +328,11 @@ the repo. `dist/` is gitignored.
   minified, and `background.js` is an esbuild bundle. The release must therefore produce a
   source archive plus build instructions (`npm ci`, `npm run package`, the Node version)
   that let a reviewer reproduce the artifact byte-for-byte. This is a deliverable of this
-  slice, not a later chore.
+  slice, not a later chore. **Producing the archive is not enough — it must be *uploaded*
+  with the submission**, via `web-ext sign --upload-source-code`. Attaching it to the
+  GitHub release satisfies nothing on AMO's side; a listed submission missing it simply
+  sits in review. README's "Building from source" section rides along inside the archive
+  and serves as the reviewer's build instructions.
 - **Review is a gate, not a formality.** `<all_urls>` + `webRequestBlocking` + `cookies` is
   the permission profile most likely to draw human review, so the first submission may take
   days. Development is unaffected — the temporary-install path (`npm run manual`, the e2e
