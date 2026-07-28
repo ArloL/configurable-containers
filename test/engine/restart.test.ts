@@ -1,0 +1,203 @@
+import { describe, it, expect } from "vitest";
+import { aFakeBrowser, aFakeClock } from "./mock-port";
+import { startTheBackground, restartTheBackground, GRACE_MS, REDIRECTOR_DELAY_MS } from "./restart";
+import { hostMatcher } from "../../src/matcher/matcher";
+import { parseConfig } from "../../src/config/parse";
+import type { Config } from "../../src/resolver/types";
+import type { WebRequestDetails } from "../../src/engine/port";
+
+// work.example opens the permanent "Work" container. Every other host is unmatched,
+// so it takes the disposable path and lands in a throwaway.
+function workConfig(): Config {
+  return {
+    rules: [{ match: [hostMatcher("work.example")], action: { kind: "open", containers: ["Work"] } }],
+    groups: [],
+  };
+}
+
+function aNavigationTo(over: Partial<WebRequestDetails> = {}): WebRequestDetails {
+  return { requestId: "1", tabId: 1, url: "https://unmatched.example/", type: "main_frame", method: "GET", ...over };
+}
+
+function aBrowserWithFakeClock() {
+  const browser = aFakeBrowser();
+  const { clock, advance } = aFakeClock();
+  return { browser, clock, advance };
+}
+
+const theTabOtherThan = (browser: ReturnType<typeof aFakeBrowser>, id: number) =>
+  [...browser.openTabs.values()].find((t) => t.id !== id)!;
+
+const containerNames = (browser: ReturnType<typeof aFakeBrowser>) =>
+  browser.createdContainers.map((c) => c.name);
+
+// F8. A background restart destroys every Map, Set and counter the engine and its
+// siblings hold. What the extension knows afterwards is only what it rebuilt from
+// browser.* queries — so these cases pin, one mechanism at a time, that the rebuild
+// actually happens. It is not a hypothetical MV3 concern: options.ts calls
+// runtime.reload() on every config save, so the user triggers this in the shipping
+// MV2 build whenever they hit save.
+describe("a background restart — state that must be reconstructed", () => {
+  it("resumes the throwaway counter past a container that is still live", async () => {
+    const { browser, clock } = aBrowserWithFakeClock();
+    const firstSourceTab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
+    let session = await startTheBackground(browser, clock, workConfig());
+
+    await browser.navigates(aNavigationTo({ requestId: "1", tabId: firstSourceTab.id }));
+    expect(containerNames(browser)).toEqual(["tmp1"]);
+
+    session = await restartTheBackground(session, browser, clock, workConfig());
+
+    const secondSourceTab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
+    await browser.navigates(aNavigationTo({ requestId: "2", tabId: secondSourceTab.id, url: "https://other.example/" }));
+
+    // A second tmp1 would collide by name with the live one, and CC identifies its
+    // own throwaways by name — the counter is in memory, the names are not.
+    expect(containerNames(browser)).toEqual(["tmp1", "tmp2"]);
+  });
+
+  it("still disposes a throwaway it created before the restart", async () => {
+    const { browser, clock, advance } = aBrowserWithFakeClock();
+    const sourceTab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
+    let session = await startTheBackground(browser, clock, workConfig());
+
+    await browser.navigates(aNavigationTo({ tabId: sourceTab.id }));
+    const throwaway = [...browser.containers.values()].find((c) => c.name === "tmp1")!;
+    const onlyTabInTheThrowaway = theTabOtherThan(browser, sourceTab.id);
+
+    session = await restartTheBackground(session, browser, clock, workConfig());
+    await advance(0); // let the new disposer's startup query settle
+
+    // The tab closes on the far side of the restart, so the container it names was
+    // learned by a background that no longer exists.
+    await browser.closesTab(onlyTabInTheThrowaway);
+    await advance(GRACE_MS - 1);
+    expect(browser.removedContainers).toEqual([]); // not yet
+    await advance(1);
+    // Inside the grace, so the 10-minute GC sweep cannot be what passes this.
+    expect(browser.removedContainers).toEqual([throwaway.cookieStoreId]);
+  });
+
+  it("does not containerize a new-tab page it already containerized", async () => {
+    const { browser, clock } = aBrowserWithFakeClock();
+    const newTabPage = browser.existingTab({ url: "about:newtab", cookieStoreId: "firefox-default" });
+    let session = await startTheBackground(browser, clock, workConfig());
+    await browser.settle();
+
+    expect(containerNames(browser)).toEqual(["tmp1"]);
+    expect(browser.closedTabIds).toEqual([newTabPage.id]);
+
+    session = await restartTheBackground(session, browser, clock, workConfig());
+    await browser.settle();
+
+    // The replacement is on about:newtab too, so auto-temp's startup sweep sees it
+    // again with no `processed` set left to remember it. What keeps the sweep off it
+    // is that the tab is no longer in firefox-default.
+    expect(containerNames(browser)).toEqual(["tmp1"]);
+  });
+
+  it("leaves a tab that already committed in its right container alone", async () => {
+    const { browser, clock } = aBrowserWithFakeClock();
+    const sourceTab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
+    let session = await startTheBackground(browser, clock, workConfig());
+
+    await browser.navigates(aNavigationTo({ requestId: "1", tabId: sourceTab.id, url: "https://work.example/" }));
+    const workTab = theTabOtherThan(browser, sourceTab.id); // on work.example: committed
+    expect(browser.openedTabs).toHaveLength(1);
+
+    session = await restartTheBackground(session, browser, clock, workConfig());
+
+    const blockingResponse = await browser.navigates(
+      aNavigationTo({ requestId: "2", tabId: workTab.id, url: "https://work.example/inbox" }),
+    );
+
+    // Once a tab's url has committed, tabs.get carries everything the guard state did:
+    // the F2 answer is reconstructible in full, so a restart is not observable here.
+    expect(blockingResponse).toBeUndefined();
+    expect(browser.openedTabs).toHaveLength(1);
+  });
+});
+
+describe("a background restart — state that cannot be", () => {
+  // reopenedNav holds a tab whose url has not committed, which is exactly why nothing
+  // can rebuild it: at restart that tab reads about:blank in some container, and so
+  // does a middle-clicked link — which inherits its opener's container and must still
+  // be isolated. The requestId that separates them exists nowhere else. So the bound
+  // is what gets pinned, not the state: one wasted hop, and it converges.
+  it("costs one extra reopen mid-flight, then converges and leaks nothing", async () => {
+    const { browser, clock, advance } = aBrowserWithFakeClock();
+    const sourceTab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
+    let session = await startTheBackground(browser, clock, workConfig());
+
+    await browser.navigates(aNavigationTo({ requestId: "1", tabId: sourceTab.id }));
+    const reopenedTab = theTabOtherThan(browser, sourceTab.id);
+    // Real Firefox fires the reopened tab's own onBeforeRequest before its url
+    // commits, which is the window the guard exists to cover.
+    reopenedTab.url = "about:blank";
+    expect(containerNames(browser)).toEqual(["tmp1"]);
+
+    session = await restartTheBackground(session, browser, clock, workConfig());
+
+    // Its own request now reaches an engine with no memory of having opened it.
+    const wastedHop = await browser.navigates(
+      aNavigationTo({ requestId: "2", tabId: reopenedTab.id }),
+    );
+    expect(wastedHop).toEqual({ cancel: true });
+    expect(containerNames(browser)).toEqual(["tmp1", "tmp2"]);
+
+    // The fresh engine guards the reopen it just performed, which is what stops this
+    // being the F1 runaway rather than a single wasted hop. Change how resolve()
+    // treats a pre-commit tab and this count is the assertion that goes red.
+    const secondThrowawayTab = theTabOtherThan(browser, sourceTab.id);
+    const settled = await browser.navigates(
+      aNavigationTo({ requestId: "3", tabId: secondThrowawayTab.id }),
+    );
+    expect(settled).toBeUndefined();
+    expect(browser.openedTabs).toHaveLength(2);
+
+    // tmp1 was abandoned mid-flight, so the disposer has to be what cleans it up.
+    await advance(GRACE_MS);
+    expect([...browser.containers.values()].map((c) => c.name)).toEqual(["tmp2"]);
+  });
+
+  it("drops a redirector close it had already scheduled", async () => {
+    const { browser, clock, advance } = aBrowserWithFakeClock();
+    const redirectorConfig = parseConfig("rules:\n  - match: t.co\n    redirector: true\n");
+    const shimTab = browser.existingTab({ url: "https://t.co/abc", cookieStoreId: "firefox-default" });
+    let session = await startTheBackground(browser, clock, redirectorConfig);
+
+    await browser.updatesTab(shimTab, { status: "complete" }); // close scheduled for later
+    session = await restartTheBackground(session, browser, clock, redirectorConfig);
+    await advance(REDIRECTOR_DELAY_MS * 2);
+
+    // A pending setTimeout dies with the background page that scheduled it, so a
+    // stranded shim tab survives a config save. Correct, and worth pinning: it is
+    // also what proves the harness retires a dead session's timers — without that
+    // the suite would report state surviving a restart that never happened.
+    expect(browser.closedTabIds).toEqual([]);
+  });
+
+  it("warns about a declined form submission again — the rules may have just changed", async () => {
+    const { browser, clock } = aBrowserWithFakeClock();
+    const sourceTab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
+    const submitsAForm = (requestId: string) =>
+      browser.navigates(aNavigationTo({ requestId, tabId: sourceTab.id, url: "https://work.example/sso", method: "POST" }));
+    let session = await startTheBackground(browser, clock, workConfig());
+
+    await submitsAForm("1");
+    await browser.settle();
+    expect(browser.notifications).toHaveLength(1);
+
+    await submitsAForm("2"); // same host, same session: already said
+    await browser.settle();
+    expect(browser.notifications).toHaveLength(1);
+
+    session = await restartTheBackground(session, browser, clock, workConfig());
+
+    await submitsAForm("3");
+    await browser.settle();
+    // warnedHosts clearing is wanted, not incidental: a restart means a config save,
+    // so the rule that went unapplied may not be the one the user was told about.
+    expect(browser.notifications).toHaveLength(2);
+  });
+});
