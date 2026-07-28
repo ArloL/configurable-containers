@@ -59,19 +59,35 @@ opens a full-tab text editor. Saving reloads the extension.
 
 ## Building from source
 
-Requires Node 22 and a system Firefox for the end-to-end tests.
+Requires Node 22 or newer (verified on 24). Building needs nothing else; the
+end-to-end tests additionally need a system Firefox.
 
 ```
 npm ci
-npm run typecheck
-npm test        # unit + e2e; launches real Firefox via Selenium
-npm run package # -> dist/configurable-containers-<version>.xpi
+npm run package -- <version>   # -> dist/configurable-containers-<version>.xpi
 ```
 
-`npm run package` bundles `src/extension/background.ts` and the two page scripts with
-esbuild and stages them, with `extensions/cc/manifest.json`, into `dist/cc/`. Releases
-are cut by `.github/workflows/release.yaml`, which stamps the version from a CalVer tag
-and submits to AMO.
+That is the whole build. `npm run package` bundles the three entry points
+(`src/extension/background.ts`, `options.ts`, `choice.ts`) with esbuild — **unminified** —
+and stages them, with `extensions/cc/manifest.json` and the two HTML pages, into
+`dist/cc/`, stamping the version there so the tracked manifest keeps a placeholder.
+Only `background.js`, `options.js` and `choice.js` are generated; everything else is
+copied verbatim.
+
+Reproducible: a build from a `git archive` of the same commit produces byte-identical
+files. The `.xpi` checksum differs because zip records modification times — compare the
+extracted contents, not the archive.
+
+The rest of the checks:
+
+```
+npm run typecheck
+npm run lint:ext  # addons-linter, the validator AMO runs
+npm test          # unit + e2e; launches real Firefox via Selenium
+```
+
+Releases are cut by `.github/workflows/release.yaml`, which stamps the version from a
+CalVer tag and submits to AMO.
 
 ## Status
 
