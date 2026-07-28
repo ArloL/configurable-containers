@@ -25,8 +25,10 @@ flows from breaking along the way.
   click through, and the config only *routes* — it never owns container
   lifecycle. Containers are created on demand by name; ones no rule
   mentions are left untouched.
-- **A management overview.** See and manage many containers at a glance, without
-  the friction of MAC's current UI.
+- **The config is the overview.** Every container CC routes to is named in that one
+  file, so the whole mapping already reads at a glance — no dashboard to click
+  through, and none planned. This is the answer to MAC's per-site UI friction, not
+  a smaller version of it.
 - **SSO that just works.** Make single-sign-on providers painless to use within
   permanent containers, instead of the fiddly setup Temporary Containers Plus
   requires.
