@@ -195,10 +195,16 @@ export interface ProbeTab {
 // `cc-probe-cmd` DOM listener there that relays to its background (which holds the
 // privileged APIs) and writes the reply back into data-cc-result. This is the only way
 // a test can reach browser.* — WebDriver has no extension APIs.
-export async function probeCommand<T>(driver: WebDriver, cmd: string, timeoutMs = 8000): Promise<T> {
+export async function probeCommand<T>(
+  driver: WebDriver,
+  cmd: string,
+  params: Record<string, unknown> = {},
+  timeoutMs = 8000,
+): Promise<T> {
+  const detail = JSON.stringify({ cmd, ...params });
   await driver.executeScript(
     "document.documentElement.removeAttribute('data-cc-result');" +
-    `document.dispatchEvent(new CustomEvent('cc-probe-cmd', { detail: { cmd: ${JSON.stringify(cmd)} } }));`
+    `document.dispatchEvent(new CustomEvent('cc-probe-cmd', { detail: ${detail} }));`
   );
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -225,6 +231,14 @@ export function openRealNewTab(driver: WebDriver): Promise<{ id: number; url: st
 // title/attribute reporting can't see a new-tab page's container.
 export function listTabs(driver: WebDriver): Promise<ProbeTab[]> {
   return probeCommand(driver, "tabs");
+}
+
+// Navigate a specific tab by its browser.tabs id — what typing a URL into that tab's
+// address bar does. WebDriver can only drive the tab it is switched to, and offers no
+// way to map a window handle to a tab id, so an about:newtab tab is otherwise
+// unaddressable.
+export function navigateTab(driver: WebDriver, tabId: number, url: string): Promise<{ ok: boolean }> {
+  return probeCommand(driver, "nav", { id: tabId, url });
 }
 
 // Poll window handles (WITHOUT re-navigating them — CC does the reopening) until a

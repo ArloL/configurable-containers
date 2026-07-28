@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import {
-  launch, listTabs, openRealNewTab, awaitContainerTab, type ProbeTab, type Session,
+  launch, listTabs, navigateTab, openRealNewTab, awaitContainerTab, type ProbeTab, type Session,
 } from "../../harness/firefox";
 
 // These tests must NOT reach auto-temp through an http navigation. Any unmatched
@@ -81,6 +81,25 @@ describe("auto-temp (real Firefox, CC + probe)", () => {
     expect(second).toBeDefined();
     expect(second!.container).toMatch(/^tmp/);
     expect(second!.cookieStoreId).not.toBe(first.cookieStoreId);
+  });
+
+  // The manual-testing flow: get a tmp tab, type a URL, expect to still be in it.
+  it("keeps the tab in its own temporary container on the first navigation", async () => {
+    await parkOnProbePage("typed");
+    const before = await awaitNewTabPageTab();
+
+    const url = `http://nomatch.example:${port}/?typed=${Date.now()}`;
+    await navigateTab(session.driver, before.id, url);
+
+    const deadline = Date.now() + 10_000;
+    let landed: ProbeTab | undefined;
+    while (Date.now() < deadline && !landed) {
+      landed = (await listTabs(session.driver)).find((t) => t.url === url);
+      if (!landed) await session.driver.sleep(300);
+    }
+    expect(landed, "navigated tab never appeared").toBeDefined();
+    // Not merely "some tmp" — reopening into a fresh tmp2 was the bug.
+    expect(landed!.container).toBe(before.container);
   });
 
   it("routes a matched host opened from an auto-temp tab to its permanent container", async () => {

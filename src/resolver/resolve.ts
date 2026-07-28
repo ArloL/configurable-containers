@@ -22,6 +22,13 @@ function toward(current: ContainerRef | null, desired: ContainerRef): Decision {
 function disposablePath(nav: NavContext, config: Config, deps: Deps): Decision {
   const current = nav.current;
   if (current && current.container.kind === "temporary") {
+    // A throwaway the user has not browsed in yet — auto-temp puts every new tab in
+    // one, sitting on about:newtab / about:home. Its first navigation belongs here:
+    // there is no earlier site to isolate it from, and the comparisons below have
+    // nothing meaningful to compare against (no registrable domain, no group), so
+    // they would strand the tab in a second, pointless temporary.
+    if (!/^https?:/.test(current.url)) return { kind: "stay" };
+
     const sameSite = deps.sameSite(current.url, nav.targetUrl);
     const gA = deps.matchGroup(current.url, config.groups);
     const gB = deps.matchGroup(nav.targetUrl, config.groups);
