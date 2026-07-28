@@ -37,6 +37,10 @@ jobs:
 
       - run: npm run typecheck
 
+      # addons-linter is what AMO runs server-side; catching it here means a manifest
+      # problem surfaces on the PR rather than at release time.
+      - run: npm run lint:ext
+
       # Selenium Manager auto-provisions geckodriver at runtime (network needed).
       # FIREFOX_BIN points the harness at the Firefox installed above.
       - name: Run tests (headless Firefox via Selenium)
