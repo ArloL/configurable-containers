@@ -86,7 +86,7 @@ describe("resolve — disposable path + continuity", () => {
     )).toEqual({ kind: "stay" });
   });
 
-  // An auto-aThrowaway tab sits on about:newtab in a fresh throwaway. The user's first
+  // An auto-temp tab sits on about:newtab in a fresh throwaway. The user's first
   // navigation belongs in that container — there is no earlier site to isolate it
   // from, and reopening would strand the tab in a second, pointless temporary.
   it("the first navigation from a new-tab page keeps its temporary", () => {

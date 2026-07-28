@@ -27,6 +27,44 @@ single-container rules (CLAUDE.md, "A reopen KEEPS a source tab that is on a
 page"). The two paths should agree; that means showing the choice somewhere
 other than the user's own tab.
 
+## Behaviour described in TESTS.md but not asserted anywhere (2026-07-28)
+
+TESTS.md was deleted when the tests became the only behaviour spec
+(`docs/superpowers/specs/2026-07-28-bdd-test-naming-design.md`). Its 47 decided
+scenarios were audited against the suite first; these three had no test, and are kept
+here so the intent is not lost with the file. Each needs a failing test written first —
+they are coverage gaps, not renames.
+
+- **Two blank tabs to the same unmatched site are isolated.** Every existing isolation
+  test drives one tab, or a link from an opener. Nothing asserts that two *independent*
+  blank tabs navigating to the same unmatched host get separate throwaways. `resolve` is
+  pure and takes one navigation, so this is only expressible at L3 or L4.
+- **Rule enforcement overrides same-site continuity.** `resolve` consults `matchRule`
+  before `disposablePath`, so a matched rule structurally always wins — but no test pins
+  it. The scenario is the `www.google.com` (throwaway) → `mail.google.com` (Gmail rule)
+  hop: same registrable domain, yet it must still switch container.
+- **A group does not override an open rule.** The mirror of the above for groups: a
+  domain in both a group and an `open` rule must follow the rule. The existing group
+  tests all cover continuity *within* the disposable path, which is the other direction.
+
+## Nothing pins the literal value of TMP_PREFIX (2026-07-28)
+
+`test/engine/registry.test.ts` imports `TMP_PREFIX` and interpolates it, so changing
+`"tmp"` to anything else moves both sides of every assertion and the suite stays green
+(verified by mutation). The behaviour — prefix-based identification — *is* covered; the
+value is not. That value is load-bearing across a background restart: CC recognises its
+own throwaways by name, so changing the prefix would silently orphan every `tmp…`
+container in a live profile. A test asserting the literal would catch it.
+
+## What the L5 and Mutation columns of the coverage matrix mean (2026-07-28)
+
+`TESTING.md`'s subtle-bug matrix ticks L5 for F3, F4, F5, F6, F9, F11 and F12, and
+Mutation for F3, F4, F5 and F6. There is no acceptance suite and no Stryker config, so
+the ticks encode something other than "a test exists at this level" — the author did not
+recall what, and the prose that would have defined it was rewritten when TESTS.md went.
+The matrix was deliberately left untouched rather than guessed at. Resolve it by deciding
+what the columns should mean, then making them true.
+
 ## Notification volume on declined POSTs (2026-07-28)
 
 Every cross-site form POST that would change container now raises a notification,
