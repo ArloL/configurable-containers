@@ -23,8 +23,10 @@ Layers (mirror TESTING.md): L1 `src/resolver/` (pure) · L2 `src/matcher/` · PS
 disposer, tested against a mock `browser.*` + a fake clock) · L4 real Firefox
 (`harness/`, `test/e2e/`, Selenium/geckodriver). The engine, auto-temp,
 disposer, cookie-seeder, script-injector, redirector-closer, and picker are all
-**siblings**, wired at the extension entry `src/extension/background.ts` — none is
-nested in `createEngine`. The choice screen / reopen-picker UI lives in `src/extension/choice.ts`
+**siblings**, wired by `wireBackground` (`src/extension/wiring.ts`) — none is
+nested in `createEngine`. The extension entry `src/extension/background.ts` is only that
+call plus the async config tail; the wiring is a separate function so the L3 restart
+harness drives the *real* startup path instead of a second copy of it. The choice screen / reopen-picker UI lives in `src/extension/choice.ts`
 (a separate esbuild entry point bundled to `extensions/cc/choice.js`, loaded by
 `choice.html`); the pure protocol it shares with `src/engine/picker.ts` is
 `src/extension/picker-protocol.ts`.
@@ -176,7 +178,8 @@ engine's reopen, not duplicating it.
   answer where temporary-only is a loud one. Note `parseConfig("")` does not throw: an
   empty config is legal and means "nothing matches".
 - **Every `browser.*` listener must be registered SYNCHRONOUSLY as `background.ts`
-  evaluates — never after an `await`.** The storage read is async, and wiring the siblings
+  evaluates — never after an `await`.** This is `wireBackground`'s contract: it is called
+  at module top level and never awaits. The storage read is async, and wiring the siblings
   inside an async IIFE (as the 2026-07-28 design spec originally proposed) loses the
   session's **first navigation** outright: Firefox dispatches it before
   `webRequest.onBeforeRequest` exists, so that tab is never routed and sits in
@@ -192,7 +195,8 @@ engine's reopen, not duplicating it.
      config. This is safe only because Firefox awaits a blocking listener's returned
      promise before the request proceeds (see `src/engine/browser-port.ts`).
   `createScriptInjector` is the one sibling that consumes config eagerly, so it is the one
-  that legitimately waits.
+  that legitimately waits. `useConfig` folds the `Object.assign` and the gate release into
+  one call for the same reason: they must happen together, so a caller cannot do one alone.
 - **Saving reloads the extension** (`browser.runtime.reload()`), which is why the
   `tmpSuffix` counter is raised past existing container names via `highestTmpSuffix`
   (`src/engine/registry.ts`) instead of restarting at 0 — otherwise every save reissues
@@ -227,6 +231,16 @@ engine's reopen, not duplicating it.
   `onTabCreated` from `createTab` (as Firefox does, which is what makes a listener
   re-enter its own handler) and throws on privileged `about:` URLs. Never relax those
   to make a test pass.
+- **The restart harness (`test/engine/restart.ts`) rests on two fidelity rules, and the
+  second is the one whose absence would make the suite lie.** (1) Re-wiring is all it
+  takes to retire the old listeners, because `mock-port.ts` holds ONE handler slot per
+  event — a second registration replaces the first, as a dead context's listeners stop
+  being called. (2) Each session's timers must stop with it. The fake clock is shared and
+  outlives the session, so without the per-session clock facade the previous disposer
+  keeps re-arming its 10-minute GC through a closure that still holds a live port, and
+  the harness reports state "surviving" a restart that never happened — verified by
+  backing the facade out, which reds the redirector case. What is *not* modelled: async
+  work already in flight at the restart. Drive restarts from a settled state.
 - **The auto-temp ↔ resolver coupling has no test in `test/resolver/` alone.**
   `disposablePath` keeps a throwaway only on same-site/same-group, so it must special-case
   a `current.url` that is not http(s) — an auto-temp tab sits on `about:newtab`, and
