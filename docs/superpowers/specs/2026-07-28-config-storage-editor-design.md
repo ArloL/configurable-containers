@@ -40,7 +40,11 @@ Daily use is also the *input* several deferred CONFIG.md open questions are wait
 - **Packaging + signing**: `npm run package` and `npm run sign` (web-ext, AMO unlisted
   channel), producing a signed XPI installable on release Firefox.
 - Seeding the `tmpSuffix` counter from existing containers (see §9).
-- Tests down the pyramid: pure `loadConfig`, one L4 flow proving storage → routing.
+- **Harness**: `launch()` pins CC's extension origin via the `extensions.webextensions.uuids`
+  pref and exports the constant; the probe gains an `open` command so tests can reach the
+  options page (§10).
+- Tests down the pyramid: pure `loadConfig`, four L4 cases covering seed, validation,
+  storage → routing, and the bad-config failure.
 
 ### Out of scope (deferred)
 
@@ -251,44 +255,55 @@ to the seed; stored beats seed; unparseable stored yields the empty config *and 
 revert to the seed*; a broken seed on first run also yields the empty config. Every branch
 of the decision is covered here, without a browser.
 
-**L4 — `test/e2e/options.test.ts`.** One flow, because the options page has an addressing
-problem: it lives at `moz-extension://<uuid>/options.html`, and a test cannot know that
-uuid. The probe cannot help — storage and extension URLs are per-extension.
+### Reaching the options page at L4 — two findings, both verified in headless Firefox
 
-So the test uses CC's own failure path as the door. Build with a **deliberately broken
-seed** (`buildExtension({ configYaml: <invalid> })`); CC opens the options page itself at
-startup (§6). From that one auto-opened page, in order:
+The options page lives at `moz-extension://<uuid>/options.html`, and the uuid is normally
+random per profile. Two experiments settled how a test addresses it.
 
-1. The parse error is rendered and Save is disabled.
-2. Replace the text with a valid config routing a new host to a named container.
-   The error clears and Save enables.
-3. Click Save. The extension reloads.
-4. Navigate that host; assert via the probe that it lands in the named container.
+**1. WebDriver cannot navigate to a `moz-extension://` URL.** `driver.get` on the page
+fails with *"Navigation to moz-extension://…/choice.html is not allowed in this context"* —
+the same phrasing CLAUDE.md records for `about:newtab`, i.e. Marionette's restriction on
+non-web schemes. This holds even with the origin pinned, so the driver can never open an
+extension page itself; it can only *operate* one that something else opened (which is how
+`test/e2e/choice.test.ts` already works).
 
-That single flow proves storage → routing end to end — the seed path, the editor, the
-storage write, `runtime.reload()`, and re-parse on restart — with no debug hooks and no
-uuid. It also captures what Firefox does to the options tab across the reload (§5).
+**2. The probe can open it, and the uuid can be pinned.** Both halves tested together:
+with `extensions.webextensions.uuids` set to `{"<cc-addon-id>":"<fixed-uuid>"}`, the probe's
+background called `browser.tabs.create({ url: "moz-extension://<fixed-uuid>/choice.html" })`
+and the tab loaded (title `Choose container`). So:
 
-**The good-seed path needs no new test.** Every existing e2e already exercises it: a
+- **Pinning works.** The pref fixes CC's origin to a constant the test can hard-code.
+- **`web_accessible_resources` is not needed.** Firefox gates those on *web content*, not on
+  other extensions — an installed extension may open another's pages by URL. The config
+  editor therefore stays unreachable from any website, which it must.
+
+Harness changes this implies: `launch()` sets the uuid pref and exports the constant; the
+probe gains an `open` command in its existing `cc-probe-cmd` relay (`browser.tabs.create({url})`),
+reached from tests through `probeCommand`. As CLAUDE.md notes, the driver must be parked on
+a probe-reported http(s) page to issue a command. The pinned map keys on the **new** ID from
+§7, `configurable-containers@k5d.de`.
+
+### L4 cases — `test/e2e/options.test.ts`
+
+With the probe as the door, these are independent cases rather than one forced flow:
+
+1. **Seed is visible.** Default build; open the options page; the textarea contains the
+   injected seed config.
+2. **Invalid input is refused.** Type a malformed config; the parse error renders and Save
+   is disabled.
+3. **Storage → routing (the money test).** Type a valid config routing a new host to a
+   named container; Save; the extension reloads; navigate that host and assert via the
+   probe that it lands in that container. This is the one that proves the whole chain —
+   storage write, `runtime.reload()`, re-parse at startup, routing — and it also captures
+   what Firefox does to the options tab across the reload (§5).
+4. **Bad stored config (§6).** Build with a deliberately broken seed
+   (`buildExtension({ configYaml: <invalid> })`); assert CC opens the options page itself
+   at startup with the error shown, and that an unmatched host lands in a `tmp` container
+   (temporary-only, nothing routed to a permanent one).
+
+**The good-seed path needs no test of its own.** Every existing e2e already exercises it: a
 fresh profile has no storage, so the injected test config loads through the new
 `loadConfig` path. If that path breaks, the whole existing e2e suite goes red.
-
-**Why not pin the uuid — tested, does not work.** Pinning CC's origin via the
-`extensions.webextensions.uuids` pref (`{"<addon-id>":"<uuid>"}`) in `launch()` would let
-a test open the options page directly and split the flow above into independent cases.
-Tried in headless Firefox against the pinned origin: `driver.get` fails with
-*"Navigation to moz-extension://…/choice.html is not allowed in this context"* — the same
-error phrasing CLAUDE.md records for `about:newtab`, i.e. Marionette's restriction on
-navigating to non-web schemes, which fires before the uuid can matter. **WebDriver cannot
-navigate to a `moz-extension://` URL at all**, pinned or not.
-
-The driver can still *operate* an extension page that something else opened — that is how
-`test/e2e/choice.test.ts` works, since CC navigates the tab to the choice page itself. So
-"CC opens the page, the test switches to it" is not a workaround for a missing uuid; it is
-the only available door, which is why the broken-seed flow above is the design rather than
-a fallback. Making `options.html` a `web_accessible_resource` would let a content page
-reach it, but that exposes the config editor to every website — not a trade worth making
-for test convenience.
 
 **Per CLAUDE.md, every new test is revert-verified** — back the fix out, watch it go red,
 restore it. This suite has shipped false greens twice.
