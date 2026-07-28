@@ -6,7 +6,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "manual": "tsx harness/manual.ts"
+    "manual": "tsx harness/manual.ts",
+    "package": "tsx scripts/package.ts",
+    "submit": "web-ext sign --source-dir dist/cc --artifacts-dir dist --channel listed --api-key \"$WEB_EXT_API_KEY\" --api-secret \"$WEB_EXT_API_SECRET\""
   },
   "dependencies": {
     "tldts": "^6.1.0",
@@ -21,6 +23,7 @@
     "selenium-webdriver": "^4.25.0",
     "tsx": "^4.23.1",
     "typescript": "^7.0.2",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.10",
+    "web-ext": "^10.5.0"
   }
 }

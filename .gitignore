@@ -8,3 +8,6 @@ test-results/
 extensions/cc/background.js
 extensions/cc/choice.js
 extensions/cc/options.js
+
+# Packaged xpi + staged extension (npm run package)
+dist/

@@ -10,5 +10,5 @@
     "types": ["node", "firefox-webext-browser"],
     "noEmit": true
   },
-  "include": ["harness", "test", "src"]
+  "include": ["harness", "scripts", "test", "src"]
 }
