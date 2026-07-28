@@ -1,12 +1,17 @@
 name: Check actions
 
 on:
+  # push is limited to main: an unfiltered one would run this workflow twice for
+  # the same commit, once for the branch push and once for the pull request. The
+  # default pull_request types (opened, synchronize, reopened) are what the
+  # unfiltered push used to cover here.
   push:
+    branches:
+    - main
   pull_request:
     branches:
     - main
-    types:
-    - reopened
+  workflow_dispatch:
   schedule:
   - cron: "26 21 5 * *"
 permissions: {}
