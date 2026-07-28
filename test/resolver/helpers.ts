@@ -22,7 +22,7 @@ function lastTwoLabels(h: string): string {
   return h.split(".").slice(-2).join(".");
 }
 
-export function makeDeps(): Deps {
+export function realMatchers(): Deps {
   return {
     matchRule: (url: string, rules: Rule[]): Rule | null =>
       rules.find((r) => anyMatch(r.match, url)) ?? null,
@@ -36,11 +36,11 @@ export function makeDeps(): Deps {
 }
 
 // Convenience constructors for readable test cases.
-export function config(rules: Rule[] = [], groups: Group[] = []): Config {
+export function aConfigOf(rules: Rule[] = [], groups: Group[] = []): Config {
   return { rules, groups };
 }
 
-export function nav(
+export function aNavigation(
   targetUrl: string,
   current: { url: string; container: ContainerRef } | null = null,
   initiator: ContainerRef | null = null,
@@ -49,6 +49,6 @@ export function nav(
 }
 
 // ContainerRef shorthands.
-export const def: ContainerRef = { kind: "default" };
-export const temp: ContainerRef = { kind: "temporary" };
-export const perm = (name: string): ContainerRef => ({ kind: "permanent", name });
+export const theDefaultContainer: ContainerRef = { kind: "default" };
+export const aThrowaway: ContainerRef = { kind: "temporary" };
+export const theContainerNamed = (name: string): ContainerRef => ({ kind: "permanent", name });

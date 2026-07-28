@@ -1,19 +1,19 @@
 import { describe, it, expect } from "vitest";
 import fc from "fast-check";
 import { resolve } from "../../src/resolver/resolve";
-import { makeDeps, config, nav, def, temp, perm } from "./helpers";
+import { realMatchers, aConfigOf, aNavigation, theDefaultContainer, aThrowaway, theContainerNamed } from "./helpers";
 import type { Rule, Group, ContainerRef, NavContext } from "../../src/resolver/types";
 
-const deps = makeDeps();
+const deps = realMatchers();
 
 // Fixed host pool so matches actually occur.
 const hosts = ["a.com", "b.com", "c.com", "sub.a.com", "d.co", "e.co"];
 const arbHost = fc.constantFrom(...hosts);
 const arbUrl = arbHost.map((h) => `https://${h}/`);
 const arbContainer: fc.Arbitrary<ContainerRef> = fc.oneof(
-  fc.constant(def),
-  fc.constant(temp),
-  fc.constantFrom("Work", "Personal", "Gmail").map((n) => perm(n)),
+  fc.constant(theDefaultContainer),
+  fc.constant(aThrowaway),
+  fc.constantFrom("Work", "Personal", "Gmail").map((n) => theContainerNamed(n)),
 );
 const arbAction = fc.oneof(
   fc.record({
@@ -65,10 +65,10 @@ describe("resolve — properties", () => {
   it("F6: inherit yields only stay or reopen into exactly the initiator", () => {
     const inheritRule: Rule = { match: ["a.com"], action: { kind: "inherit" } };
     fc.assert(fc.property(arbContainer, arbContainer, (initiator, currentC) => {
-      const n = nav("https://a.com/", { url: "https://b.com/", container: currentC }, initiator);
-      const d = resolve(n, config([inheritRule]), deps);
+      const n = aNavigation("https://a.com/", { url: "https://b.com/", container: currentC }, initiator);
+      const d = resolve(n, aConfigOf([inheritRule]), deps);
       if (d.kind === "reopen") {
-        expect(d.into).toEqual(initiator); // never a fresh temp-from-nowhere or a permanent from nowhere
+        expect(d.into).toEqual(initiator); // never a fresh aThrowaway-from-nowhere or a permanent from nowhere
       } else {
         expect(d.kind).toBe("stay");
       }
@@ -78,8 +78,8 @@ describe("resolve — properties", () => {
   it("F3: continuity monotonicity on the disposable path", () => {
     fc.assert(fc.property(arbUrl, arbUrl, arbConfig, (curUrl, tgtUrl, cfg) => {
       // Force the disposable path: no rules, current is a temporary.
-      const cfg2 = config([], cfg.groups);
-      const d = resolve(nav(tgtUrl, { url: curUrl, container: temp }), cfg2, deps);
+      const cfg2 = aConfigOf([], cfg.groups);
+      const d = resolve(aNavigation(tgtUrl, { url: curUrl, container: aThrowaway }), cfg2, deps);
       const sameSite = deps.sameSite(curUrl, tgtUrl);
       const gA = deps.matchGroup(curUrl, cfg2.groups);
       const gB = deps.matchGroup(tgtUrl, cfg2.groups);
