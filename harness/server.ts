@@ -6,19 +6,30 @@ function escapeAttr(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 }
 
+// The one host /redirect ever sends a browser to (a launch() local domain, so it
+// resolves to this same loopback server). Fixed on purpose: reading the destination
+// off the query string made this an open redirect — CodeQL
+// js/server-side-unvalidated-url-redirection — and a redirect chain only ever needs
+// to cross to one other host.
+export const REDIRECT_TARGET_HOST = "hop.example";
+
 export interface TestServer {
   url: string;
   close: () => Promise<void>;
 }
 
 export async function startServer(): Promise<TestServer> {
+  let port = 0; // filled in by listen() below, before any request can arrive
+
   const server = createServer((req, res) => {
-    // /redirect?to=<url> answers 302, so a test can drive a real redirect chain —
-    // the browser keeps the tab pre-commit ("about:blank") across every hop.
-    const params = new URL(req.url ?? "/", "http://127.0.0.1").searchParams;
-    const to = params.get("to");
-    if (to) {
-      res.writeHead(302, { location: to });
+    const requested = new URL(req.url ?? "/", "http://127.0.0.1");
+    const params = requested.searchParams;
+
+    // /redirect answers 302 to REDIRECT_TARGET_HOST on this same server, so a test can
+    // drive a real cross-host redirect chain — the browser keeps the tab pre-commit
+    // ("about:blank") across every hop of it.
+    if (requested.pathname === "/redirect") {
+      res.writeHead(302, { location: `http://${REDIRECT_TARGET_HOST}:${port}/` });
       res.end();
       return;
     }
@@ -46,7 +57,7 @@ export async function startServer(): Promise<TestServer> {
   });
 
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const { port } = server.address() as AddressInfo;
+  port = (server.address() as AddressInfo).port;
 
   return {
     url: `http://127.0.0.1:${port}/`,

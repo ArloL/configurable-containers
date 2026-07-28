@@ -7,6 +7,7 @@ import {
   listTabs,
   type Session,
 } from "../../harness/firefox";
+import { REDIRECT_TARGET_HOST } from "../../harness/server";
 
 describe("routing (real Firefox, CC + probe)", () => {
   let session: Session;
@@ -65,12 +66,10 @@ describe("routing — a redirect chain is one navigation (real Firefox, CC + pro
   });
 
   it("lands the whole chain in the one throwaway opened for it", async () => {
-    const final = `http://hop.example:${port}/`;
+    const final = `http://${REDIRECT_TARGET_HOST}:${port}/`;
     await session.driver.switchTo().newWindow("tab");
     try {
-      await session.driver.get(
-        `http://nomatch.example:${port}/redirect?to=${encodeURIComponent(final)}`,
-      );
+      await session.driver.get(`http://nomatch.example:${port}/redirect`);
     } catch {
       // CC reopened the tab away — expected.
     }
