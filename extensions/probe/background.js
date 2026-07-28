@@ -51,6 +51,17 @@ async function reportTab(tabId, cookieStoreId, url) {
   }
 }
 
+// Notifications echoed by CC's test build (harness/build-extension.ts sets the echo
+// target; shipped builds set ""). Collected here because a desktop notification lives
+// in no DOM, so WebDriver has no other way to observe one.
+const notifications = [];
+browser.runtime.onMessageExternal.addListener((msg) => {
+  if (msg && msg.cmd === "cc-notification") {
+    notifications.push({ title: msg.title, message: msg.message });
+  }
+  return Promise.resolve({ ok: true });
+});
+
 // Driver commands, relayed from the injected content script above.
 //   newTab  — `browser.tabs.create({})`, i.e. exactly what Ctrl/Cmd+T does: a tab
 //             at the new-tab page in the default container. WebDriver's
@@ -62,6 +73,7 @@ async function reportTab(tabId, cookieStoreId, url) {
 //             moz-extension:// page. WebDriver cannot navigate to that scheme at
 //             all, and Firefox lets one extension open another's pages without
 //             web_accessible_resources (that gate is for web content).
+//   notifications — every notification CC's test build echoed to us so far.
 browser.runtime.onMessage.addListener(async (msg) => {
   if (msg && msg.cmd === "open") {
     const t = await browser.tabs.create({ url: msg.url });
@@ -83,6 +95,9 @@ browser.runtime.onMessage.addListener(async (msg) => {
       id: t.id, url: t.url, cookieStoreId: t.cookieStoreId, index: t.index,
       container: names[t.cookieStoreId] || "",
     }));
+  }
+  if (msg && msg.cmd === "notifications") {
+    return notifications;
   }
   return null;
 });
