@@ -42,8 +42,8 @@ Daily use is also the *input* several deferred CONFIG.md open questions are wait
   third esbuild entry alongside `background` and `choice`.
 - Manifest: add the `storage` permission, add `options_ui`, and change the extension ID
   to `configurable-containers@k5d.de`.
-- A shipped **default seed config** (`src/config/default.yaml`) — a commented example, not
-  the author's personal config (§4).
+- A shipped **default seed config** (`src/config/default.yaml`) — exemption rules plus
+  commented examples, not the author's personal config (§4).
 - **Packaging + release**: `npm run package`, a GitHub Actions release workflow versioned
   by [`ArloL/calver-tag-action`](https://github.com/ArloL/calver-tag-action), and AMO
   submission on the **listed** channel (§8).
@@ -151,11 +151,39 @@ install-time convenience, and after install it goes stale by design.
 ### What the seed contains
 
 CC is being **listed publicly on AMO** (§8), so the seed becomes every installer's
-default. It is therefore a new file, `src/config/default.yaml`: a short **commented
-example** that routes nothing but demonstrates the syntax — a bare-domain rule, a
-multi-`open` rule with a `default`, and a group. When the only UI is a text editor, the
-seed is the primary documentation a new user meets, so it carries that weight rather than
-being blank.
+default. It is therefore a new file, `src/config/default.yaml`. When the only UI is a text
+editor, the seed is the primary documentation a new user meets, so it carries that weight
+rather than being blank: the commented examples demonstrate the syntax (a bare-domain
+rule, a curated `open:`, a multi-host rule, a multi-`open` rule with a `default`, and a
+group).
+
+It also ships **active rules**, but only of one kind. The guarantee is not "routes
+nothing" — it is that **every shipped rule is an exemption (`ignore`, `redirector`,
+`inherit`) and never `open`.** That is the line worth holding: an exemption can only fail
+to isolate, whereas an `open:` rule would put a real site's data into a named container
+the installer never asked for. `test/config/default.test.ts` asserts the action kind of
+*every* rule, so the guarantee survives later edits instead of being a one-off review.
+
+What ships, and why each category earns its place:
+
+- **`inherit`** on the identity providers (`accounts.google.com`, `login.microsoftonline.com`,
+  `okta.com`, `auth0.com`, …). Without these, "Sign in with …" is broken out of the box:
+  the auth hop reads as a cross-site navigation and gets a *fresh* throwaway, so the
+  provider cannot see the session it just created. It does not widen exposure — the login
+  page runs in whichever container initiated it, so a site in a throwaway still cannot
+  reach Google cookies held in another container. Bare hosts cover subdomains, so one
+  `okta.com` line covers every `<tenant>.okta.com`.
+- **`redirector`** on link shims (TCP's `t.co`, `outgoing.prod.mozaws.net`,
+  `slack-redir.net`, `away.vk.com`, plus the universal social shims).
+- **`ignore`** on `addons.mozilla.org` and `accounts.firefox.com` — Firefox's own add-on
+  and account pages misbehave when moved between containers.
+
+Two deliberate omissions. **No region-specific hosts**, not even commented: the author's
+German payment/eID entries are real but unverifiable by a stranger reading the file, and
+every shipped domain is a claim the project implicitly vouches for. A generic comment
+points at the payment step-up case without naming a host. **No `getpocket.com`**, despite
+TCP's `IGNORED_DOMAINS_DEFAULT` still carrying it — Pocket shut down in July 2025, and a
+dead claim is one more thing a new reader has to evaluate.
 
 `configurable-containers.config.yaml` — the author's real config, with real work domains,
 container names and cookie seeds — is **no longer shipped**. It stays in the repo purely

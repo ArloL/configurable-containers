@@ -48,8 +48,12 @@ How domains map to containers is defined in a single user configuration. See
 Configurable Containers is published on addons.mozilla.org. Install it from its
 listing page; Firefox keeps it updated.
 
-On first run it seeds a commented example config that routes nothing — every site
-opens in a fresh temporary container until you add rules. Edit the config in the
+On first run it seeds a starter config. Nothing is routed into a named container until
+you say so — every site opens in a fresh temporary container. The rules that do ship
+only mark the handful of hosts where isolating would break something: SSO and identity
+providers stay in whichever container started the login, known link shims aren't
+isolated and close themselves, and Firefox's own add-on and account pages are left
+alone. Commented examples below them show the syntax. Edit the config in the
 add-on's preferences (about:addons → Configurable Containers → Preferences), which
 opens a full-tab text editor. Saving reloads the extension.
 
