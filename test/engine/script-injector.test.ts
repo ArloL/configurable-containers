@@ -1,12 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { createMockPort } from "./mock-port";
+import { aFakeBrowser } from "./mock-port";
 import { createScriptInjector } from "../../src/engine/script-injector";
 import { parseConfig } from "../../src/config/parse";
 import type { Config } from "../../src/resolver/types";
 
 describe("script-injector", () => {
   it("registers each script with the right matches/code/runAt", async () => {
-    const mock = createMockPort();
+    const browser = aFakeBrowser();
     const config = parseConfig(`
 rules:
   - match: work.example
@@ -18,9 +18,9 @@ rules:
       - { run: "first();" }
       - { at: document_end, run: "second();" }
 `);
-    await createScriptInjector({ port: mock.port, config });
+    await createScriptInjector({ port: browser.port, config });
 
-    expect(mock.registeredScripts).toEqual([
+    expect(browser.registeredScripts).toEqual([
       {
         matches: ["*://work.example/*", "*://*.work.example/*"],
         js: [{ code: "localStorage.setItem('cc_script','1');" }],
@@ -40,22 +40,22 @@ rules:
   });
 
   it("defaults runAt to document_start when at is omitted", async () => {
-    const mock = createMockPort();
+    const browser = aFakeBrowser();
     const config = parseConfig(`rules:\n  - match: x.example\n    scripts:\n      - { run: "x();" }\n`);
-    await createScriptInjector({ port: mock.port, config });
-    expect(mock.registeredScripts).toHaveLength(1);
-    expect(mock.registeredScripts[0].runAt).toBe("document_start");
+    await createScriptInjector({ port: browser.port, config });
+    expect(browser.registeredScripts).toHaveLength(1);
+    expect(browser.registeredScripts[0].runAt).toBe("document_start");
   });
 
   it("registers nothing when the config has no scripts", async () => {
-    const mock = createMockPort();
+    const browser = aFakeBrowser();
     const config = parseConfig(`rules:\n  - match: bare.example\n    open: C\n`);
-    await createScriptInjector({ port: mock.port, config });
-    expect(mock.registeredScripts).toEqual([]);
+    await createScriptInjector({ port: browser.port, config });
+    expect(browser.registeredScripts).toEqual([]);
   });
 
   it("skips an ignore rule's scripts (defensive — parser already rejects)", async () => {
-    const mock = createMockPort();
+    const browser = aFakeBrowser();
     // parseConfig REJECTS scripts-on-ignore, so hand-build the Config to test the
     // injector's defensive skip directly.
     const handBuilt: Config = {
@@ -68,7 +68,7 @@ rules:
       ],
       groups: [],
     };
-    await createScriptInjector({ port: mock.port, config: handBuilt });
-    expect(mock.registeredScripts).toEqual([]);
+    await createScriptInjector({ port: browser.port, config: handBuilt });
+    expect(browser.registeredScripts).toEqual([]);
   });
 });
