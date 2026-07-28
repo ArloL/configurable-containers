@@ -290,7 +290,7 @@ engine's reopen, not duplicating it.
   `driver.get` throws (tolerate, then `awaitContainerTab`); to read *fresh* container
   state, navigate a **matched** host (stays in its permanent container, no reopen)
   with a **cache-busting** query param so the probe re-reports into a new document.
-- **Real MAC is loadable from `mac/src` unbuilt, but three things bite** (all handled in
+- **Real MAC is loadable from `mac/src` unbuilt, but four things bite** (all handled in
   `buildXpiFor`/`launch`, see `test/e2e/mac-interop.test.ts`):
   1. `mac/src/_locales` is a **nested submodule** (mozilla-l10n) we do not check out, and
      MAC's manifest declares `default_locale: "en"` — Firefox then refuses the add-on
@@ -311,6 +311,16 @@ engine's reopen, not duplicating it.
      confirm-page interstitial instead of reopening (`assignManager.js`,
      `reloadPageInContainer`) and no container tab ever appears — the test times out
      looking for one, which reads like a deferral bug and is not.
+  4. **Wait for the container to RESOLVE before seeding the assignment.** MAC deletes any
+     assignment whose container it cannot `contextualIdentities.get` and lets the page
+     load uncontained (`assignManager.js`, "isn't present any more"). CC has already
+     deferred by then, so nothing routes the tab — and the assignment is gone for good,
+     so polling never recovers. Firefox provisions even the **built-in** containers
+     lazily, so `firefox-container-1` (Personal) can genuinely be absent on a cold
+     profile: this flaked CI exactly once, passing on a re-run of the identical commit.
+     Verifying the write landed is **not** enough; the seeding loop gates on the `get`.
+     Reproduce by seeding a `userContextId` that does not exist — the signature is "no
+     container tab" for the full timeout, never a wrong container.
 - **An unassigned domain cannot test the MAC handshake.** `macOwns` swallows a throw and
   returns false, so a broken handshake and "no assignment" are observationally identical
   — CC routes normally either way. Only an **assigned** domain separates them, and it is

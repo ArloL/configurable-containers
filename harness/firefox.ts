@@ -135,12 +135,20 @@ function injectMacAssignment(
       `  const userContextId = ${JSON.stringify(assign.userContextId)};\n` +
       `  for (let i = 0; i < 100; i++) {\n` +
       `    try {\n` +
+      // The container MUST resolve before the assignment is written. MAC deletes any
+      // assignment whose container it cannot get and lets the page load uncontained
+      // (assignManager.js, "The container we have in the assignment map isn't present
+      // any more"). CC has deferred to MAC by then, so nothing routes the tab AND the
+      // assignment is gone for good — the test fails as "no container tab" for its whole
+      // timeout, never as a wrong one. Firefox provisions even the built-in containers
+      // lazily, so on a cold profile this get is exactly what loses the race.
+      `      await browser.contextualIdentities.get(backgroundLogic.cookieStoreId(userContextId));\n` +
       // neverAsk mirrors the user ticking "Remember my decision": without it MAC parks
       // the tab on its confirm-page interstitial instead of reopening, and no container
       // tab ever appears (assignManager.js reloadPageInContainer).
       `      await assignManager.storageArea.set(url, { userContextId, neverAsk: true });\n` +
       `      if (await assignManager.storageArea.get(url)) return;\n` +
-      `    } catch (e) { /* MAC still initialising — retry */ }\n` +
+      `    } catch (e) { /* MAC still initialising, or the container not provisioned — retry */ }\n` +
       `    await new Promise((r) => setTimeout(r, 100));\n` +
       `  }\n` +
       `  console.error("[cc-harness] could not seed the MAC assignment");\n` +
