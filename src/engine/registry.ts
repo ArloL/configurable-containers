@@ -5,6 +5,21 @@ import type { ContainerRef, Target } from "../resolver/types";
 // of our throwaways. Identity is derived from the name, so it survives a restart.
 export const TMP_PREFIX = "tmp";
 
+// The largest N among existing `tmp<N>` container names, or 0 if there are none.
+// The suffix counter is in-memory, so a background restart would otherwise reissue
+// tmp1 and collide by name with a live throwaway. Names are the only durable record
+// (see TMP_PREFIX above), so the counter is recovered from them at startup.
+export function highestTmpSuffix(names: string[]): number {
+  let max = 0;
+  for (const name of names) {
+    if (!name.startsWith(TMP_PREFIX)) continue;
+    const rest = name.slice(TMP_PREFIX.length);
+    if (!/^\d+$/.test(rest)) continue;
+    max = Math.max(max, Number(rest));
+  }
+  return max;
+}
+
 export interface ContainerRegistry {
   // cookieStoreId -> ContainerRef (for reading a tab's current/initiator container).
   toRef(cookieStoreId: string | undefined): Promise<ContainerRef>;
