@@ -1,14 +1,16 @@
 ---
 name: no-gherkin-dsl
-description: User rejects Gherkin/cucumber test execution; wants plain BDD-style test code without a DSL layer
+description: User rejects Gherkin/cucumber test execution AND a separate prose spec; the tests themselves are the spec, read via naming
 metadata: 
   node_type: memory
   type: feedback
   originSessionId: 8a910ba6-638c-4ee1-bfee-f14aa13c436f
 ---
 
-The user does not want tests executed via Gherkin/cucumber runners ("that's just stupid regex matching"). Gherkin notation is acceptable as human-readable *spec notation* (as in TESTS.md), but the executable tests must be plain developer-friendly BDD-style code (describe/it, given-when-then in code) with no step-binding DSL.
+The user does not want tests executed via Gherkin/cucumber runners ("that's just stupid regex matching"). Executable tests must be plain developer-friendly BDD-style code (describe/it) with no step-binding DSL.
 
-**Why:** Step binding is regex matching over prose — indirection without added power.
+As of 2026-07-28 this went further: `TESTS.md`, the prose spec of 47 Gherkin-notation scenarios, was **deleted**. The user's words: "I dont want duplication. the tests were just for reference. move it to the source code that should read as 'BDD' as possible using descriptive variables and method names." The behaviour reading now lives in the test source itself.
 
-**How to apply:** When designing or writing tests for this project, mirror spec scenarios one-test-per-scenario in plain test code (e.g. Vitest/Playwright); never introduce cucumber-js or step-definition layers. Spec-drift guarantees should be structural (title-matching checks), not step bindings.
+**Why:** Two descriptions of one system, free to drift, only one of them executable. Step binding adds indirection without power; a shared step-function vocabulary is the same DSL layer by another name.
+
+**How to apply:** Carry the BDD reading with *names*, not structure — descriptive locals and helper names (`browser.opensTab(...)`, `aNavigation(...)`, `theContainerNamed("Work")`), no `// Given/When/Then` comment scaffolding (it restates the code, which they cut) and no step functions. Never propose re-introducing a prose scenario file or a scenario-to-test drift check. See [[comments-only-if-they-add-value]].

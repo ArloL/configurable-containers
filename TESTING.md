@@ -5,8 +5,9 @@ silent** bugs, not the obvious ones. This is a routing engine sitting on top of
 Firefox's container + `webRequest` machinery; the dangerous failures here don't
 throw, they mis-route a tab or churn a container while everything looks fine.
 
-The [behaviour scenarios](TESTS.md) are the human-readable spec; this document is
-how those scenarios (and the invariants underneath them) get *executed*.
+The test suite itself is the behaviour spec — each test named for what it pins,
+its body written to read as that behaviour. This document is how those tests (and
+the invariants underneath them) are *organised*.
 
 ## What "subtle bug" means in this project
 
@@ -36,7 +37,7 @@ matrix](#subtle-bug-coverage-matrix) proves no class is orphaned.
 
 ```
         ┌─────────────────────────────┐
-        │  L5  Acceptance (TESTS.md)   │  BDD code, real Firefox      slow
+        │  L5  Acceptance (in tests)   │  BDD naming, real Firefox    slow
         ├─────────────────────────────┤
         │  L4  Integration (Firefox)   │  Selenium/geckodriver, +MAC
         ├─────────────────────────────┤
@@ -57,7 +58,7 @@ tests are milliseconds and exhaustive; only the stateful and browser-real classe
 Recommended stack (swappable): **Vitest** (L1–L3), **fast-check** for
 property-based, a **mock `browser.*`** (`sinon-chrome` or a hand-rolled fake),
 **Selenium/geckodriver (real Firefox, headless)** for L4 and L5 (the L5 acceptance
-suite is plain BDD-style test code mirroring `TESTS.md` — no Gherkin runner),
+reading lives in the tests' own names — no Gherkin runner),
 **Stryker** for mutation testing.
 
 > **Driver note (plumbing spike, 2026-07-09):** L4/L5 use Selenium/geckodriver,
@@ -81,7 +82,7 @@ resolve(targetUrl, initiatingContainer, currentTabContainer, config)
 No `browser.*`, no clock, no I/O. This is where F4, F5, F6, and the routing side
 of F3 are proven. Two flavours:
 
-- **Table-driven examples** — one row per `TESTS.md` line item and per known edge
+- **Table-driven examples** — one row per behaviour and per known edge
   (`www.google.com → mail.google.com` switch; inherit-hop membership; domain in
   both an open rule and a group).
 - **Property-based invariants** (fast-check generates configs + nav contexts):
@@ -179,19 +180,26 @@ create/dispose, real redirects.
   seconds so real timers are exercised without 15-minute waits; a separate
   nightly job runs one real-delay case to guard against the fake clock lying.
 
-## L5 — Acceptance: TESTS.md as BDD test code
+## L5 — Acceptance: the tests are the spec
 
-Every scenario in [`TESTS.md`](TESTS.md) is implemented as a plain BDD-style
-test (`describe` / `it`, given-when-then expressed in code) driving the L4
-Firefox harness. Deliberately **no Gherkin runner**: cucumber-style step binding
-is regex matching over prose — an extra DSL layer that adds indirection without
-adding power. TESTS.md stays the human-readable spec; the acceptance suite
-mirrors it one test per scenario, each test named after its scenario title. The
-age-gate chain (F4 end-to-end), the choice screen, and the strict-SSO breakage
-are the headline acceptance cases. Drift is guarded structurally instead of via
-step binding: a CI check parses the scenario titles out of TESTS.md and fails
-the build if any title lacks a matching test (or a test lacks a scenario) — the
-same spec-can't-drift guarantee, without the DSL.
+There is no separate acceptance suite, and no second document to drift from. The
+behaviour reading lives in the tests themselves: each is named for the behaviour
+it pins, and its body is written so the mechanics read as that behaviour —
+descriptive locals and helper names (`browser.opensTab`, `aNavigation`,
+`theContainerNamed`), not a step DSL. A scenario is owned by whichever level can
+prove it, so the acceptance reading is spread across L1–L4 rather than
+duplicated above them.
+
+Deliberately **no Gherkin runner** and **no step vocabulary**: cucumber-style
+step binding is regex matching over prose, and a shared step library is the same
+indirection by another name. Plain `describe` / `it` with well-chosen words
+carries the meaning without the layer.
+
+This replaced a `TESTS.md` of 47 Gherkin-notation scenarios, written as reference
+before implementation. It was deleted once the tests asserted the same behaviour:
+two descriptions of one system, free to drift, only one of them executable. The
+three scenarios that had no test are recorded in
+[`FOLLOWUPS.md`](FOLLOWUPS.md) rather than lost.
 
 ## Cross-cutting gates
 

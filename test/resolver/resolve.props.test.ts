@@ -68,7 +68,7 @@ describe("resolve — properties", () => {
       const n = aNavigation("https://a.com/", { url: "https://b.com/", container: currentC }, initiator);
       const d = resolve(n, aConfigOf([inheritRule]), deps);
       if (d.kind === "reopen") {
-        expect(d.into).toEqual(initiator); // never a fresh aThrowaway-from-nowhere or a permanent from nowhere
+        expect(d.into).toEqual(initiator); // never a fresh temporary-from-nowhere or a permanent from nowhere
       } else {
         expect(d.kind).toBe("stay");
       }
