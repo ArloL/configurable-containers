@@ -85,6 +85,19 @@ engine's reopen, not duplicating it.
   single click on a 30x-ing link walked `tmp1` → `tmp2` → `tmp3`. Covered at L3 and by
   the redirect-chain case in `test/e2e/routing.test.ts` (the harness server answers 302
   on `/redirect?to=`).
+- **A reopen KEEPS a source tab that is on a page** (`keep = /^https?:/.test(tab.url)`
+  in `reopen`), opening the container tab at `index + 1` with the source as its opener,
+  and only *cancels* the source's navigation. Session history does not span containers,
+  so replacing that tab destroys what the user was reading with no way back — clicking a
+  link out of an article closed the article. This is MAC's rule
+  (`mac/src/js/background/assignManager.js:275`, `removeTab`). A tab with **nothing to
+  lose is still replaced** — a new-tab page, the choice page, or a tab still pre-commit
+  on `about:blank` (what a middle-clicked / `target=_blank` link is) — and that branch is
+  required, not cosmetic: keeping those would strand an empty tab beside every link
+  opened in a new tab. **Consequence for e2e:** a cancelled navigation never returns to
+  WebDriver, so a test must drive routing from a **fresh** (`about:blank`) tab —
+  `driver.get` on a tab that is already on a page will hang until the test times out
+  (`test/e2e/options.test.ts` did).
 - **Two different things are `about:blank` pre-commit, and only one of them is ours.**
   A tab we reopened *and* a middle-clicked / `target=_blank` / `window.open` tab both
   read `about:blank` with a real container — the latter **inherits its opener's**. So

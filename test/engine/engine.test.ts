@@ -25,7 +25,7 @@ function workConfig(): Config {
 const noop = () => {};
 
 describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
-  it("reopens a plain nav into the target container, preserving placement", async () => {
+  it("opens the container tab beside a source tab that is ON a page, and keeps that tab", async () => {
     const mp = createMockPort();
     const old = mp.addTab({ url: "https://start.test/", cookieStoreId: "firefox-default", index: 3, active: true, openerTabId: 7 });
     createEngine({ port: mp.port, config: workConfig(), deps, onChoice: noop, tmpSuffix: counter() });
@@ -37,7 +37,36 @@ describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
     const created = mp.calls.createTab[0];
     const work = (await mp.port.queryIdentities()).find((c) => c.name === "Work")!;
     expect(created.cookieStoreId).toBe(work.cookieStoreId);
-    expect(created).toMatchObject({ url: "https://example.com/", index: 3, active: true, openerTabId: 7 });
+    // index+1 = right after the source, whose id becomes the new tab's opener.
+    expect(created).toMatchObject({ url: "https://example.com/", index: 4, active: true, openerTabId: old.id });
+    // Reading start.test survives the click: history does not span containers, so
+    // replacing this tab would lose the page with no way back.
+    expect(mp.calls.removeTab).toEqual([]);
+    expect(mp.tabs.get(old.id)?.url).toBe("https://start.test/");
+  });
+
+  it("replaces a source tab with nothing to lose, preserving its placement", async () => {
+    const mp = createMockPort();
+    // about:blank = a tab still pre-commit, which is what a middle-clicked or
+    // target=_blank link is. Keeping it would strand an empty tab beside every one.
+    const old = mp.addTab({ url: "about:blank", cookieStoreId: "firefox-default", index: 3, active: true, openerTabId: 7 });
+    createEngine({ port: mp.port, config: workConfig(), deps, onChoice: noop, tmpSuffix: counter() });
+
+    const res = await mp.fire(req({ tabId: old.id }));
+
+    expect(res).toEqual({ cancel: true });
+    expect(mp.calls.createTab[0]).toMatchObject({ url: "https://example.com/", index: 3, active: true, openerTabId: 7 });
+    expect(mp.calls.removeTab).toEqual([old.id]);
+  });
+
+  it("replaces an auto-temp tab sitting on about:newtab", async () => {
+    const mp = createMockPort();
+    const tmp1 = mp.addIdentity({ name: "tmp1" });
+    const old = mp.addTab({ url: "about:newtab", cookieStoreId: tmp1.cookieStoreId });
+    createEngine({ port: mp.port, config: workConfig(), deps, onChoice: noop, tmpSuffix: counter() });
+
+    await mp.fire(req({ tabId: old.id }));
+
     expect(mp.calls.removeTab).toEqual([old.id]);
   });
 
@@ -262,7 +291,9 @@ describe("engine — F7 MAC defer + choice", () => {
 describe("engine.reopen — extracted F1-guarded effect", () => {
   it("reopens a tab into the target container, preserving placement, and guards the reopened tab's first nav", async () => {
     const mp = createMockPort();
-    const old = mp.addTab({ url: "https://start.test/", cookieStoreId: "firefox-default", index: 3, active: true, openerTabId: 7 });
+    // The picker reaches here with the tab sitting on the choice page (a moz-extension
+    // url), which is a tab with nothing to lose — so this is the replacing path.
+    const old = mp.addTab({ url: "moz-extension://test/choice.html#x", cookieStoreId: "firefox-default", index: 3, active: true, openerTabId: 7 });
     const engine = createEngine({ port: mp.port, config: workConfig(), deps, onChoice: noop, tmpSuffix: counter() });
 
     await engine.reopen(old, "https://example.com/", { kind: "permanent", name: "Work" });
@@ -290,7 +321,7 @@ describe("engine.reopen — extracted F1-guarded effect", () => {
 
     expect(mp.calls.createIdentity).toHaveLength(1);
     expect(mp.calls.createIdentity[0].name).toMatch(/^tmp/);
-    expect(mp.calls.removeTab).toEqual([old.id]);
+    expect(mp.calls.removeTab).toEqual([]); // start.test is a real page — kept
   });
 
   it("reopen throws when createTab fails (does not swallow); old tab not removed", async () => {

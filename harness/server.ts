@@ -23,11 +23,13 @@ export async function startServer(): Promise<TestServer> {
       return;
     }
 
-    // ?link=<url> puts a target=_blank anchor on the page, so a test can CLICK it
-    // with a real user gesture — the new tab then inherits its opener's container
-    // the way a middle-click does, which no scripted tabs.create reproduces.
+    // ?link=<url> puts an anchor on the page so a test can CLICK it with a real user
+    // gesture: target=_blank by default (the new tab then inherits its opener's
+    // container the way a middle-click does, which no scripted tabs.create
+    // reproduces), or a plain same-tab link with &same=1.
     const link = params.get("link");
-    const anchor = link ? `<a id="go" target="_blank" href="${escapeAttr(link)}">go</a>` : "";
+    const target = params.has("same") ? "" : ` target="_blank"`;
+    const anchor = link ? `<a id="go"${target} href="${escapeAttr(link)}">go</a>` : "";
 
     // Reflect the request's Cookie header into a body attribute so an external driver
     // can assert the FIRST request already carried a seeded cookie (F12 wire side).
