@@ -61,6 +61,108 @@ Source code and full configuration reference: [github.com/ArloL/configurable-con
 | License | MIT (matches `LICENSE`) |
 | Data collection | None — mirrors `data_collection_permissions: { required: ["none"] }` in the manifest |
 
+## Notes for reviewer
+
+Paste verbatim into the "Is there anything our reviewers should bear in mind?" field.
+The build instructions below were verified by extracting the source archive
+(`git archive --format=zip HEAD`), running them in a clean directory, and comparing the
+result file-by-file against the submitted package — see "Reproducibility check" after
+the block.
+
+```text
+BUILD INSTRUCTIONS
+
+Environment: any OS with Node.js and npm. Node 22 or newer; the reviewer default
+(Node 24.14.0 / npm 11.9.0 on Ubuntu 24.04) works. No system dependencies beyond
+Node — the end-to-end tests need Firefox, but building does not. All build tools
+are open source, installed from npm, and run locally: esbuild (bundler) and tsx
+(TypeScript runner). package-lock.json is included.
+
+From the root of the source archive:
+
+    npm ci
+    npm run package -- VERSION
+
+replacing VERSION with the version string in the submitted manifest.json. This
+writes dist/configurable-containers-VERSION.xpi and the unpacked build in dist/cc/.
+
+COMPARING THE RESULT
+
+The .xpi is a zip archive, and zip records file modification times, so the checksum
+of the .xpi file itself will NOT match. The contents are identical. Please compare
+the extracted files:
+
+    background.js  options.js  choice.js  manifest.json  options.html  choice.html
+
+All six are byte-identical between a build from this source archive and the
+submitted package.
+
+Only background.js, options.js and choice.js are generated: esbuild bundles three
+TypeScript entry points into three classic scripts. Output is NOT minified.
+manifest.json, options.html and choice.html are copied verbatim from extensions/cc/.
+scripts/package.ts stages extensions/cc/ into dist/cc/ and stamps the version there,
+which is why manifest.json in the source tree carries a placeholder version.
+
+PERMISSIONS AND WHY EACH IS NEEDED
+
+- webRequest, webRequestBlocking, <all_urls> — the core mechanism. A blocking
+  webRequest.onBeforeRequest listener on main_frame decides which container a
+  navigation belongs in; when it belongs in a different one, the request is
+  cancelled and the tab reopened in the target container. It has to be blocking
+  because the decision must happen before the request proceeds. <all_urls> because
+  the user's configuration may route any domain.
+- contextualIdentities — create, query and remove containers.
+- cookies — required by Firefox for tabs.create({ cookieStoreId }); without it
+  every container reopen throws "No permission for cookieStoreId". Also used by the
+  optional per-site cookie-seeding feature.
+- tabs — create, remove and update tabs when moving a navigation into a container.
+- storage — stores the user's configuration. storage.local only.
+
+USER-CONFIGURED CONTENT SCRIPTS — PLEASE NOTE
+
+The configuration format has an optional "scripts" key. If a user adds one, the
+add-on calls browser.contentScripts.register() with the JavaScript string from
+their own configuration so it runs on the domains they specified. This is why
+src/engine/script-injector.ts registers a content script from a code string.
+
+That code comes only from the user's own configuration in storage.local. It is
+never fetched from the network. There is no remote code execution anywhere in the
+add-on: no eval, no new Function, no remotely loaded scripts. The default
+configuration that ships with the add-on contains no "scripts" entries.
+
+PRIVACY
+
+The add-on collects and transmits nothing. There is no analytics or telemetry, and
+it makes no network requests of its own. The only stored data is the user's
+configuration in storage.local. The manifest declares
+data_collection_permissions: { required: ["none"] }.
+
+WHAT IT DOES
+
+Routes each site into a Firefox container according to a single YAML configuration
+the user edits in the add-on's options page. Anything no rule matches opens in a
+fresh temporary container. The shipped default configuration contains 18 rules,
+all of them exemptions (inherit / redirector / ignore) — it routes nothing into a
+named container.
+```
+
+### Reproducibility check
+
+Re-run this before a submission if the build changes. It is what the claim above rests on.
+
+```sh
+git archive --format=zip --output /tmp/src.zip HEAD
+mkdir -p /tmp/repro && unzip -q /tmp/src.zip -d /tmp/repro
+( cd /tmp/repro && npm ci && npm run package -- 2607.0.101 )
+npm run package -- 2607.0.101
+for f in background.js options.js choice.js manifest.json options.html choice.html; do
+  diff -q "dist/cc/$f" "/tmp/repro/dist/cc/$f" || echo "DIFFERS: $f"
+done
+```
+
+`tcp/` and `mac/` are git submodules and arrive as empty directories in the archive.
+They are read-only upstream reference only; the build never touches them.
+
 ## Claims to keep honest
 
 - **Do not advertise a management-overview UI.** `README.md` lists one as a goal, but the
