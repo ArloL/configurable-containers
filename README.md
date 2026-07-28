@@ -74,9 +74,12 @@ and stages them, with `extensions/cc/manifest.json` and the two HTML pages, into
 Only `background.js`, `options.js` and `choice.js` are generated; everything else is
 copied verbatim.
 
-Reproducible: a build from a `git archive` of the same commit produces byte-identical
-files. The `.xpi` checksum differs because zip records modification times — compare the
-extracted contents, not the archive.
+**Reproducible.** Entries are written in sorted order with fixed timestamps and no
+uid/gid or extended-timestamp fields, so the same commit produces a byte-identical
+`.xpi`. Set `BUILD_TIMESTAMP` (a unix epoch or any parsable date) to control the
+recorded time; it defaults to 1980-01-01. Releases stamp the build time and publish the
+value in the release notes, since zip stores mtimes and nothing in the source lets you
+derive them.
 
 The rest of the checks:
 

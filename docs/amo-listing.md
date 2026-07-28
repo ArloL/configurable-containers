@@ -81,21 +81,27 @@ are open source, installed from npm, and run locally: esbuild (bundler) and tsx
 From the root of the source archive:
 
     npm ci
-    npm run package -- VERSION
+    BUILD_TIMESTAMP=<value> npm run package -- VERSION
 
-replacing VERSION with the version string in the submitted manifest.json. This
-writes dist/configurable-containers-VERSION.xpi and the unpacked build in dist/cc/.
+replacing VERSION with the version string in the submitted manifest.json, and
+<value> with the BUILD_TIMESTAMP printed in the GitHub release notes for that
+version (https://github.com/ArloL/configurable-containers/releases). This writes
+dist/configurable-containers-VERSION.xpi and the unpacked build in dist/cc/.
 
 COMPARING THE RESULT
 
-The .xpi is a zip archive, and zip records file modification times, so the checksum
-of the .xpi file itself will NOT match. The contents are identical. Please compare
-the extracted files:
+The build is byte-for-byte reproducible: the .xpi itself should match the submitted
+file exactly, so comparing checksums is enough. Zip entries are written in sorted
+order with fixed timestamps and no uid/gid or extended-timestamp extra fields.
+
+BUILD_TIMESTAMP is the only input that is not in the source archive. It is the
+time the release was built, and it is published in the release notes because zip
+records modification times and nothing in the source lets you derive them.
+If you omit it the build still succeeds and every file inside is
+identical, but the .xpi checksum will differ — in that case compare the extracted
+contents instead:
 
     background.js  options.js  choice.js  manifest.json  options.html  choice.html
-
-All six are byte-identical between a build from this source archive and the
-submitted package.
 
 Only background.js, options.js and choice.js are generated: esbuild bundles three
 TypeScript entry points into three classic scripts. Output is NOT minified.
@@ -148,17 +154,22 @@ named container.
 
 ### Reproducibility check
 
-Re-run this before a submission if the build changes. It is what the claim above rests on.
+Re-run before a submission if the build changes. It is what the claim above rests on.
 
 ```sh
+TS=1785200000   # any fixed value; the release uses its build time
 git archive --format=zip --output /tmp/src.zip HEAD
 mkdir -p /tmp/repro && unzip -q /tmp/src.zip -d /tmp/repro
-( cd /tmp/repro && npm ci && npm run package -- 2607.0.101 )
-npm run package -- 2607.0.101
-for f in background.js options.js choice.js manifest.json options.html choice.html; do
-  diff -q "dist/cc/$f" "/tmp/repro/dist/cc/$f" || echo "DIFFERS: $f"
-done
+( cd /tmp/repro && npm ci && BUILD_TIMESTAMP=$TS npm run package -- 2607.0.101 )
+BUILD_TIMESTAMP=$TS npm run package -- 2607.0.101
+cmp dist/configurable-containers-2607.0.101.xpi \
+    /tmp/repro/dist/configurable-containers-2607.0.101.xpi && echo "identical"
 ```
+
+`test/extension/package.test.ts` guards the same properties without the network round
+trip. Note the test asserts the timestamp *recorded in the archive* rather than
+comparing two builds — two builds land inside zip's two-second granularity and match
+whether or not the mtimes were normalised, which made the obvious version a false green.
 
 `tcp/` and `mac/` are git submodules and arrive as empty directories in the archive.
 They are read-only upstream reference only; the build never touches them.

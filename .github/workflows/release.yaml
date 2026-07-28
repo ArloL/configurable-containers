@@ -45,10 +45,17 @@ jobs:
       - uses: ArloL/calver-tag-action@0e91bea86df7d9b445b6dbde498d30c273032ea0 # v2607.0.105
         id: version
 
+      # zip records mtimes, so the archive is only reproducible against a known
+      # timestamp. It is captured here and published in the release notes below —
+      # nobody can derive it, so it has to be told.
       - name: Package the xpi at the tagged version
         env:
           VERSION: ${{ steps.version.outputs.new_version }}
-        run: npm run package -- "$VERSION"
+        run: |
+          BUILD_TIMESTAMP="$(date --iso-8601=seconds)"
+          export BUILD_TIMESTAMP
+          echo "BUILD_TIMESTAMP=$BUILD_TIMESTAMP" | tee -a "$GITHUB_ENV"
+          npm run package -- "$VERSION"
 
       # AMO requires reviewable source whenever the shipped JS is bundled, and
       # background.js is an esbuild bundle.
@@ -74,8 +81,17 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.new_version }}
         run: |
+          # --notes is prepended to --generate-notes output. BUILD_TIMESTAMP is
+          # published because the source archive has no .git for anyone to derive it
+          # from, and without it the rebuild will not match byte for byte.
           gh release create "v${VERSION}" \
             --title "v${VERSION}" \
             --generate-notes \
+            --notes "Reproduce this build:
+          \`\`\`
+          npm ci
+          BUILD_TIMESTAMP=${BUILD_TIMESTAMP} npm run package -- ${VERSION}
+          \`\`\`
+          " \
             "dist/configurable-containers-${VERSION}.xpi" \
             "dist/configurable-containers-src-${VERSION}.zip"
