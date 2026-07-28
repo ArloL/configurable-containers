@@ -91,8 +91,10 @@ dist/configurable-containers-VERSION.xpi and the unpacked build in dist/cc/.
 COMPARING THE RESULT
 
 The build is byte-for-byte reproducible: the .xpi itself should match the submitted
-file exactly, so comparing checksums is enough. Zip entries are written in sorted
-order with fixed timestamps and no uid/gid or extended-timestamp extra fields.
+file exactly, so comparing checksums is enough. The archive is written by the fflate
+library (a devDependency, pinned in package-lock.json) rather than a system zip, with
+entries in sorted order and an explicit timestamp on each, so the output does not
+depend on which zip or zlib build the machine happens to have.
 
 BUILD_TIMESTAMP is the only input that is not in the source archive. It is the
 time the release was built, and it is published in the release notes because zip
