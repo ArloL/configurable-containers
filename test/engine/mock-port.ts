@@ -79,11 +79,13 @@ export function createMockPort(): MockPort {
   const cookieStore = new Map<string, Map<string, Cookie>>(); // storeId -> name -> cookie
   const registeredScripts: RegisterContentScriptDetails[] = [];
 
-  function makeTab(props: { url: string; cookieStoreId: string; index?: number; active?: boolean; openerTabId?: number }): Tab {
+  function makeTab(props: { url?: string; cookieStoreId: string; index?: number; active?: boolean; openerTabId?: number }): Tab {
     const id = ++tabId;
     const tab: Tab = {
       id,
-      url: props.url,
+      // No url means "the browser's new-tab page" — that is how the real
+      // tabs.create behaves, and the only legal way to land on about:newtab.
+      url: props.url ?? "about:newtab",
       cookieStoreId: props.cookieStoreId,
       index: props.index ?? id,
       active: props.active ?? true,
@@ -110,7 +112,16 @@ export function createMockPort(): MockPort {
     async createTab(props) {
       calls.createTab.push(props);
       if (createTabThrows) throw new Error("createTab failed");
-      return makeTab(props);
+      // Fidelity guard: Firefox refuses privileged about: URLs from an extension
+      // ("Illegal URL: about:newtab"). about:blank is the one exception. A mock that
+      // accepted them let auto-temp ship a containerize() that always threw in real
+      // Firefox while L3 stayed green — never relax this.
+      if (props.url?.startsWith("about:") && props.url !== "about:blank") {
+        throw new Error(`Illegal URL: ${props.url}`);
+      }
+      const tab = makeTab(props);
+      onTabCreatedH?.(tab); // real Firefox fires onCreated synchronously during tabs.create
+      return tab;
     },
     async removeTab(id) {
       calls.removeTab.push(id);
