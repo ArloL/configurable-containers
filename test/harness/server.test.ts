@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { startServer, REDIRECT_TARGET_HOST } from "../../harness/server";
+import {
+  startServer,
+  REDIRECT_TARGET_HOST,
+  OAUTH_CODE,
+  SAML_ASSERTION,
+  IDP_TARGET_HOST,
+} from "../../harness/server";
 
 describe("startServer", () => {
   it("serves an http page with a title and closes cleanly", async () => {
@@ -52,6 +58,47 @@ describe("startServer", () => {
       // real browser (the L4 test asserts "1"); here we just assert the probe ships.
       expect(body).toContain("data-cc-script-at-start");
       expect(body).toContain("<script>");
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("/authorize redirects to the matched host carrying an OAuth code", async () => {
+    const server = await startServer();
+    try {
+      const res = await fetch(new URL("/authorize", server.url), { redirect: "manual" });
+      expect(res.status).toBe(302);
+      const location = new URL(res.headers.get("location")!);
+      expect(location.hostname).toBe(IDP_TARGET_HOST);
+      expect(location.pathname).toBe("/callback");
+      expect(location.searchParams.get("code")).toBe(OAUTH_CODE);
+      expect(location.port).toBe(new URL(server.url).port);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("/saml serves a self-submitting POST-binding form aimed at the matched host", async () => {
+    const server = await startServer();
+    try {
+      const body = await (await fetch(new URL("/saml", server.url))).text();
+      expect(body).toContain(`action="http://${IDP_TARGET_HOST}:${new URL(server.url).port}/acs"`);
+      expect(body).toContain(`value="${SAML_ASSERTION}"`);
+      expect(body).toContain(".submit()");
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("reflects a urlencoded POST body into a body attribute", async () => {
+    const server = await startServer();
+    try {
+      const res = await fetch(new URL("/acs", server.url), {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: `SAMLResponse=${SAML_ASSERTION}`,
+      });
+      expect(await res.text()).toContain(`data-seen-post="SAMLResponse=${SAML_ASSERTION}"`);
     } finally {
       await server.close();
     }
