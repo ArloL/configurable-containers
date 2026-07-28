@@ -7,3 +7,4 @@
 - [No scratch notes in the repo](no-scratch-notes-in-repo.md) — fold findings into CLAUDE.md/TESTS.md/tests, then delete the notes file
 - [User runs manual Firefox](user-runs-manual-firefox.md) — never launch `npm run manual` yourself; verify headless, hand interactive checks over
 - [CalVer tag action for releases](calver-tag-action-for-releases.md) — their own ArloL/calver-tag-action versions GitHub Actions releases; versions injected at build time
+- [Comments only if they add value](comments-only-if-they-add-value.md) — cut comments that restate the code; keep non-obvious why
