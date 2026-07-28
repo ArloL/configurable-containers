@@ -17,6 +17,7 @@
     "storage",
     "tabs",
     "contextualIdentities",
+    "notifications",
     "<all_urls>"
   ],
   "background": {

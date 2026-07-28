@@ -56,6 +56,13 @@ export interface Cookie {
   value: string;
 }
 
+// A desktop notification. CC raises one when it declines to perform a routing action
+// it cannot perform losslessly — today, reopening a non-GET navigation (F9).
+export interface NotificationSpec {
+  title: string;
+  message: string;
+}
+
 export type RunAt = "document_start" | "document_end" | "document_idle";
 
 // A deliberately narrow slice of Firefox's RegisteredContentScriptOptions: only the
@@ -167,6 +174,10 @@ export interface BrowserPort {
 
   // The full moz-extension:// URL for a bundled resource (e.g. "choice.html").
   getURL(path: string): string;
+
+  // Loud surface for a routing action CC declined to take (F9). The real port raises a
+  // desktop notification; the mock records the call.
+  notify(n: NotificationSpec): Promise<void>;
 }
 
 // Injected timing seam so grace/GC delays are deterministic in tests. The disposer

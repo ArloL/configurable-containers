@@ -13,6 +13,10 @@ function mapTab(t: browser.tabs.Tab): Tab {
   };
 }
 
+// The extension id the harness build echoes notifications to, so an e2e can observe a
+// toast that lives in no DOM. "" in every shipped build, which esbuild folds away.
+declare const __CC_NOTIFY_ECHO_TO__: string;
+
 // Real BrowserPort over browser.*. Mechanical, logic-free — all decisions come from
 // resolve() inside the engine. The only Firefox-specific note: a blocking
 // onBeforeRequest listener may return a Promise<BlockingResponse>, which Firefox
@@ -155,6 +159,19 @@ export function createBrowserPort(): BrowserPort {
 
     getURL(path) {
       return browser.runtime.getURL(path);
+    },
+
+    async notify(n) {
+      await browser.notifications.create({ type: "basic", title: n.title, message: n.message });
+      // AFTER the create resolves, never before: a missing "notifications" permission
+      // must make the e2e assertion fail, not pass with the notification broken.
+      // `!== ""` rather than a bare truthiness check so esbuild folds the condition to
+      // a literal `false` in shipped bundles — the build does not minify (an AMO
+      // reviewer reads this file), so the branch itself survives either way, and
+      // `if (false)` is the readable proof that it is dead.
+      if (__CC_NOTIFY_ECHO_TO__ !== "") {
+        await browser.runtime.sendMessage(__CC_NOTIFY_ECHO_TO__, { cmd: "cc-notification", ...n });
+      }
     },
   };
 }
