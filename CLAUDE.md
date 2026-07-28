@@ -81,6 +81,47 @@ engine's reopen, not duplicating it.
   `src/engine/registry.ts`), not a stored set — durable across a background restart.
   The disposer removes only `tmp…` containers; it never touches permanent/user ones.
 
+## Config lives in storage, not in the bundle
+
+- **`__CC_CONFIG_YAML__` is the first-run SEED, not the live config.** `src/extension/config.ts`
+  exports it as `SEED_CONFIG_YAML`; the live config is `browser.storage.local.configYaml`,
+  written on first run and truth from then on. A later version shipping a different seed
+  **never** overrides an edited config — that is the point, not a bug. Three builds inject
+  three different seeds: e2e gets `TEST_CONFIG_YAML` (`harness/build-extension.ts`),
+  `npm run manual` gets the author's `configurable-containers.config.yaml`, and
+  `npm run package` gets the shipped `src/config/default.yaml`.
+- **First run seeds storage even when the seed does not parse.** Storing the broken text is
+  what lets the editor CC opens for it show that text *and* its parse error. An earlier
+  draft wrote storage only on a clean parse, and the editor came up blank and valid — the
+  config apparently vanished, with nothing to fix. `test/e2e/options.test.ts` covers this.
+- **A broken stored config must never fall back to the seed.** `loadConfig` (`src/config/load.ts`)
+  returns the *empty* config plus the error, so everything opens in a throwaway and the
+  editor is opened. Falling back would route against months-stale rules — a silent wrong
+  answer where temporary-only is a loud one. Note `parseConfig("")` does not throw: an
+  empty config is legal and means "nothing matches".
+- **Every `browser.*` listener must be registered SYNCHRONOUSLY as `background.ts`
+  evaluates — never after an `await`.** The storage read is async, and wiring the siblings
+  inside an async IIFE (as the 2026-07-28 design spec originally proposed) loses the
+  session's **first navigation** outright: Firefox dispatches it before
+  `webRequest.onBeforeRequest` exists, so that tab is never routed and sits in
+  `firefox-default` forever. It is not a millisecond window and not flake — all four
+  event-driven cases in `test/e2e/auto-temp.test.ts` went red, deterministically. Two
+  devices keep registration synchronous, and both are load-bearing:
+  1. `config` is a **single object filled in place** (`Object.assign`) once storage
+     resolves. Every sibling but the script-injector reads `config.rules` / `config.groups`
+     at *event* time, so they all observe the load through that shared reference. Don't
+     "clean this up" by passing a fresh parsed object — the siblings would keep the empty one.
+  2. `gatedPort` wraps `onBeforeRequest` so the blocking handler `await`s a `configReady`
+     promise. An early navigation is therefore **delayed**, not routed against the empty
+     config. This is safe only because Firefox awaits a blocking listener's returned
+     promise before the request proceeds (see `src/engine/browser-port.ts`).
+  `createScriptInjector` is the one sibling that consumes config eagerly, so it is the one
+  that legitimately waits.
+- **Saving reloads the extension** (`browser.runtime.reload()`), which is why the
+  `tmpSuffix` counter is raised past existing container names via `highestTmpSuffix`
+  (`src/engine/registry.ts`) instead of restarting at 0 — otherwise every save reissues
+  `tmp1` alongside a live `tmp1`.
+
 ## Testing reality
 
 - `npm test` runs everything (unit **and** e2e) under Vitest; `npm run typecheck`
@@ -129,6 +170,16 @@ engine's reopen, not duplicating it.
   probe-reported http(s) page** before issuing one. `listTabs` is also the only way to
   observe a new-tab page's container at all — `about:` pages take no content script, so
   the probe's usual title/attribute reporting can't see them.
+- **WebDriver cannot navigate to a `moz-extension://` URL** either — `driver.get` fails with
+  *"Navigation to moz-extension://… is not allowed in this context"*, Marionette's
+  non-web-scheme restriction, the same one that blocks `about:newtab`. Pinning the uuid
+  does not help. The driver can only *operate* an extension page something else opened.
+- **The probe opens extension pages; `extensions.webextensions.uuids` pins the origin.**
+  `launch()` sets that pref so CC's origin is the constant `ccExtensionUrl()` builds, and
+  the probe's `open` command does the `tabs.create`; `switchToUrl` then moves the driver
+  onto it. Firefox gates `web_accessible_resources` on *web content*, not on other
+  extensions, so CC must **not** list `options.html` there — doing so would expose the
+  config editor to every website, and it buys nothing for tests.
 - **An auto-temp e2e must not navigate.** Any unmatched http URL lands in a `tmp`
   container via the *engine's* disposable path, so "open a tab, navigate, assert tmp"
   passes whether or not auto-temp exists — three e2e tests once did exactly that. The
