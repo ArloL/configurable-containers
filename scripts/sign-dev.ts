@@ -15,10 +15,7 @@ import { packageExtension } from "./package";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = path.resolve(HERE, "../dist/dev");
-// The signed xpi web-ext downloads back lands in its OWN directory, because
-// packageExtension leaves an unsigned xpi in OUT_DIR as a byproduct of staging (it is
-// the staged DIRECTORY that gets signed, not that file). Sharing one directory would
-// leave two similarly-named archives where only one installs.
+// put the signed xpi web-ext downloads in this directory
 const SIGNED_DIR = path.join(OUT_DIR, "signed");
 const WEB_EXT = path.resolve(HERE, "../node_modules/.bin/web-ext");
 
@@ -46,9 +43,7 @@ async function main() {
     outDir: OUT_DIR
   });
 
-  // Emptied first so the xpi web-ext downloads back is the ONLY one here: the update
-  // manifest has to name that exact file, and picking it out of a directory that also
-  // holds previous runs' builds would eventually point Firefox at a stale version.
+  // clear signed directory of potential old builds
   rmSync(SIGNED_DIR, { recursive: true, force: true });
 
   const res = spawnSync(
@@ -75,9 +70,7 @@ async function main() {
   console.log("Install it via about:addons -> gear -> Install Add-on From File.");
 }
 
-// Guarded exactly as scripts/package.ts guards its CLI, and here it is crucial:
-// this module's side effect is an UPLOAD to AMO, so an unguarded
-// `main()` would sign and publish merely because a test imported devVersion.
+// Guard against accidental execution
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
   main().catch((err) => {
     console.error(err instanceof Error ? err.message : err);
