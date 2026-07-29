@@ -60,6 +60,7 @@ function main() {
   console.log(manifest);
 }
 
+// Guard against accidental execution
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
   try {
     main();

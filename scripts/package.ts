@@ -134,6 +134,7 @@ export async function packageExtension(
 
 // CLI: `npx tsx scripts/package.ts 2607.0.101`. Defaults to 0.0.0 for local builds,
 // which are never submitted — real versions come from the CalVer tag in CI.
+// Guard against accidental execution
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
   const version = process.argv[2] ?? process.env.CC_VERSION ?? "0.0.0";
   packageExtension({ version })
