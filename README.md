@@ -96,6 +96,54 @@ npm test          # unit + e2e; launches real Firefox via Selenium
 Releases are cut by `.github/workflows/release.yaml`, which stamps the version from a
 CalVer tag and submits to AMO.
 
+### Running an unreleased build
+
+Release Firefox permanently installs signed add-ons only — `xpinstall.signatures.required`
+is honoured on Developer Edition, Nightly and ESR, but ignored on release and beta. A
+listed submission is no help while it waits: AMO signs a listed version at **approval**,
+not at upload, so the queued file downloads back exactly as you sent it, without a
+`META-INF/`.
+
+Two ways around that:
+
+- **Temporary install.** `npm run package -- 0.0.0`, then `about:debugging#/runtime/this-firefox`
+  → Load Temporary Add-on → `dist/cc/manifest.json`. Full permissions, no signing, gone
+  at the next restart.
+- **The dev build**, which auto-updates. Every merge to `main` signs one on AMO's
+  **unlisted** channel — signed automatically in minutes, no review — and publishes it as
+  an immutable `v<version>` GitHub **prerelease**. Install the newest one by hand once;
+  Firefox picks up every later build on its own (about:addons → gear → Check for Updates
+  forces a poll). Locally it is `npm run sign:dev -- <version>`, which needs
+  `WEB_EXT_API_KEY` and `WEB_EXT_API_SECRET`.
+
+The dev build is a **separate add-on** (`configurable-containers-dev@k5d.de`), which is the
+point twice over: its uploads land on their own AMO record and cannot disturb a listed
+version under review, and it gets its own `storage.local`, so installing it beside the real
+add-on cannot overwrite your config. It also means it starts from the shipped seed config
+rather than yours.
+
+Versions come from `ArloL/calver-tag-action`, the same action that versions releases, so
+dev builds and listed releases draw from **one** `v<YYMM>.0.<micro>` tag sequence and a
+version is never reused — which AMO requires, since it rejects a version string it has
+already seen for an add-on. The consequence is that the tag cannot tell you which channel
+a release belongs to: the **prerelease flag** does, and it is what `scripts/dev-updates.ts`
+filters on. Signing locally takes an explicit version for the same reason — nothing
+outside the tag action may allocate one.
+
+Self-distribution splits across two places for one reason: **releases are immutable, and
+the update manifest is not.** This repo has GitHub's immutable releases enabled, so a
+published release and its assets cannot be changed at all — the asset is uploaded in the
+same call that creates the release, and the URL Firefox downloads from can never serve
+different bytes than it did before. The
+manifest that points at those releases has to change on every merge, so it lives on
+GitHub Pages at a constant URL (`scripts/dev-updates.ts` rebuilds it from the releases
+API and `ci.yml` deploys it). Rolling back means **deleting** a dev release and
+re-running the manifest job, never editing a published one.
+
+That Pages URL is baked into every signed build and polled forever, so it cannot be
+changed retroactively — moving it would strand every installed dev build on a URL nothing
+publishes to. `test/extension/sign-dev.test.ts` pins it as a literal for that reason.
+
 ## Status
 
 Published, and still shaped by the author's daily use. Built on Firefox's container

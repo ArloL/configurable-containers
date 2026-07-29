@@ -246,6 +246,49 @@ single-container rule kept it. Add a caller rather than a second copy.
   (`src/engine/registry.ts`) instead of restarting at 0 — otherwise every save reissues
   `tmp1` alongside a live `tmp1`.
 
+## AMO facts that look like bugs
+
+- **AMO REPACKS what you upload, so a file downloaded from AMO is not byte-comparable
+  with a local rebuild.** `scripts/package.ts` writes entries sorted with a fixed 1980
+  mtime; the same archive fetched back from AMO has filesystem order and real mtimes.
+  Measured on two independent uploads, one of them built by the current script minutes
+  earlier — so this is AMO's ingestion, not a reproducibility regression. Verify the
+  README's byte-identical claim by rebuilding from the tag with the release's
+  `BUILD_TIMESTAMP` and comparing to the **GitHub release** asset, never to AMO's copy.
+- **A listed version is signed at APPROVAL, not at upload.** While it sits in the review
+  queue its file downloads back without a `META-INF/`, so there is nothing to install
+  permanently on release Firefox. The unlisted channel *is* signed automatically within
+  a few minutes — that is what `npm run sign:dev` exists for. Status goes `unreviewed` →
+  `public` and the file grows by ~10KB when the signature lands; the API's `file.url`
+  extension flips `.zip` → `.xpi` at the same moment.
+- **`update_url` is legal on the unlisted dev build and REJECTED on the listed one.**
+  Self-distribution is the unlisted channel's business; AMO refuses a listed submission
+  that carries one. It also has to be stamped *before* signing — it lives inside the
+  signed manifest, so a build that shipped without it can never learn about its
+  successors and has to be replaced by hand. `test/extension/package.test.ts` asserts
+  both directions.
+- **The dev channel and the listed channel share ONE tag sequence, so the tag does not
+  say which is which — the `prerelease` flag does.** Both are versioned by
+  `ArloL/calver-tag-action` (`v<YYMM>.0.<micro>`, first free micro), so `ci.yml` and
+  `release.yaml` interleave in the same `v…` namespace and release versions have gaps.
+  `scripts/dev-updates.ts` filters on `prerelease` to decide what goes in the update
+  manifest; filtering on a tag prefix would match nothing, and matching everything would
+  push the *listed* add-on's xpi to dev users under the dev add-on's id.
+- **Never derive a dev version from the clock.** `YYMM.DD.HHMM` sorts above every
+  `YYMM.0.<micro>` for the rest of the month, so one locally-signed build would own the
+  update channel until the month rolled over. `sign:dev` requires the version for this
+  reason; `test/extension/sign-dev.test.ts` pins the refusal.
+- **GitHub's immutable releases are ENABLED on this repo**, so a published release and
+  its assets cannot be edited — the dev xpi is uploaded in the same `gh release create`
+  call, and a rollback is *deleting* a release plus republishing the manifest, never
+  editing one.
+- **`npm run sign:dev` UPLOADS.** Its credential guard is not a dry-run switch, and `npm`
+  under mise carries the AMO credentials even when a plain shell shows them unset — so
+  "it will just fail without secrets" is not a safe assumption. To exercise the build
+  half without touching AMO, call `packageExtension` with the dev id directly (as
+  `test/extension/package.test.ts` does); the module's CLI tail is argv-guarded so an
+  import cannot publish.
+
 ## Testing reality
 
 - `npm test` runs everything (unit **and** e2e) under Vitest; `npm run typecheck`
