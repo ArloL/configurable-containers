@@ -5,6 +5,7 @@ import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { packageExtension, zipTimestamp } from "../../scripts/package";
+import { UPDATE_URL } from "../../scripts/sign-dev";
 
 // Decode the DOS timestamp out of the archive's first local file header (which always
 // starts at offset 0): 2 bytes of time at offset 10, 2 of date at 12.
@@ -33,6 +34,9 @@ describe("packageExtension", () => {
       const manifest = JSON.parse(readFileSync(path.join(stageDir, "manifest.json"), "utf8"));
       expect(manifest.version).toBe("2607.0.101");
       expect(manifest.browser_specific_settings.gecko.id).toBe("configurable-containers@k5d.de");
+      // AMO REJECTS a listed submission carrying an update_url — self-distribution is
+      // the unlisted channel's business. Only the dev build sets one.
+      expect(manifest.browser_specific_settings.gecko.update_url).toBeUndefined();
       // addons-linter warns without this, and it will become a hard requirement.
       // "none" is the honest answer: CC transmits nothing and stores only the config.
       expect(manifest.browser_specific_settings.gecko.data_collection_permissions)
@@ -55,6 +59,32 @@ describe("packageExtension", () => {
       // folded to `if (false)`: the build does not minify, so dead statements survive.
       expect(bundle).not.toContain("probe@configurable-containers.test");
       expect(bundle).toContain("if (false)");
+    } finally {
+      rmSync(outDir, { recursive: true, force: true });
+    }
+  });
+
+  it("stamps a dev id and name when asked, so a dev build is a separate add-on", async () => {
+    const outDir = mkdtempSync(path.join(tmpdir(), "cc-pkg-"));
+    try {
+      const { stageDir } = await packageExtension({
+        version: "2607.29.1432",
+        id: "configurable-containers-dev@k5d.de",
+        name: "configurable-containers (dev)",
+        updateUrl: UPDATE_URL,
+        outDir,
+      });
+      const manifest = JSON.parse(readFileSync(path.join(stageDir, "manifest.json"), "utf8"));
+      // The id is what keeps an unlisted dev upload off the AMO record under review,
+      // and what gives the installed dev build its own storage.local — so a dev build
+      // installed beside the real one cannot overwrite the user's config.
+      expect(manifest.browser_specific_settings.gecko.id)
+        .toBe("configurable-containers-dev@k5d.de");
+      expect(manifest.name).toBe("configurable-containers (dev)");
+      expect(manifest.browser_specific_settings.gecko.update_url).toBe(UPDATE_URL);
+      // Overriding must not drop the rest of the gecko block.
+      expect(manifest.browser_specific_settings.gecko.data_collection_permissions)
+        .toEqual({ required: ["none"] });
     } finally {
       rmSync(outDir, { recursive: true, force: true });
     }
