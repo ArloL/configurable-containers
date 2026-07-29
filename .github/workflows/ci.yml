@@ -58,8 +58,141 @@ jobs:
           FIREFOX_BIN: ${{ steps.firefox.outputs.firefox-path }}
         run: npm test
 
+  publish-dev:
+    name: Publish unlisted dev build
+    # Gated on the suite, because a dev build people install is not a place to find
+    # out the tests were red. Push-to-main only: a pull request's head commit may
+    # never land, and signing one would spend an AMO version on it.
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # creates the dev-<version> release
+    # AMO rejects a version string it has already seen for an add-on, and the version
+    # is derived from the clock at minute resolution. Serialising the job keeps two
+    # merges from signing in the same minute; queued rather than cancelled, so every
+    # merge yields an installable build instead of the last one winning.
+    concurrency:
+      group: publish-dev
+      cancel-in-progress: false
+    steps:
+      # No submodules: this job builds and signs, and neither the bundle nor the
+      # manifest reads anything out of mac/ or tcp/. Credentials are KEPT and history is
+      # complete because calver-tag-action pushes a tag with them and scans the existing
+      # v<YYMM>.* tags to pick a free micro — same reasons as release.yaml.
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Unlike release.yaml, the tag CANNOT be allocated after everything that might
+      # fail: the version goes inside the manifest that gets signed, so it has to exist
+      # first. A signing failure therefore leaves a pushed tag with no release against
+      # it. That is accepted here and not there — the next run simply takes the next
+      # micro, and no dev tag is a promise to anyone.
+      - uses: ArloL/calver-tag-action@0e91bea86df7d9b445b6dbde498d30c273032ea0 # v2607.0.105
+        id: version
+
+      # Signs under configurable-containers-dev@k5d.de on the UNLISTED channel, which
+      # AMO signs automatically within minutes and no human reviews. That is the whole
+      # point: it is a separate add-on record, so nothing here can disturb a listed
+      # version sitting in the review queue, and the installed dev build gets its own
+      # storage.local rather than sharing the real add-on's config.
+      - name: Build and sign the unlisted dev build
+        env:
+          WEB_EXT_API_KEY: ${{ secrets.WEB_EXT_API_KEY }}
+          WEB_EXT_API_SECRET: ${{ secrets.WEB_EXT_API_SECRET }}
+          VERSION: ${{ steps.version.outputs.new_version }}
+        run: npm run sign:dev -- "$VERSION"
+
+      # web-ext downloads the SIGNED xpi back into the artifacts dir, so this is the
+      # installable file and not the unsigned upload.
+      #
+      # The asset is uploaded in the SAME call that creates the release, because this
+      # repo has GitHub's immutable releases enabled: once published, a release and its
+      # assets cannot be changed, so there is no adding a file afterwards. That is the
+      # property the update channel is built on — the url in the manifest can never
+      # start serving different bytes.
+      #
+      # --prerelease is what marks this as a dev build. Dev and listed versions share one
+      # calver sequence, so the tag cannot say which is which; the flag both keeps the
+      # dev channel out of the repo's "Latest" and is what scripts/dev-updates.ts filters
+      # on to build the manifest.
+      - name: Publish the immutable dev release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.new_version }}
+        run: |
+          xpi="dist/dev/signed/$(jq --raw-output .xpi dist/dev/signed/build.json)"
+          gh release create "v${VERSION}" "$xpi" \
+            --prerelease \
+            --title "dev v${VERSION}" \
+            --notes "Unlisted dev build of ${GITHUB_SHA}. Installs and updates itself via the dev channel; see README, 'Running an unreleased build'."
+
+  publish-dev-updates:
+    name: Publish the dev update manifest
+    # Rebuilt from the releases API rather than carried forward, so the manifest is a
+    # pure function of what is published. Deleting a bad dev release and re-running this
+    # is the whole rollback story — the releases themselves are never edited.
+    needs: publish-dev
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    # Pages allows one deployment at a time; without this a queued second merge fails
+    # the deploy rather than superseding it. Cancel-in-progress is safe HERE and not in
+    # publish-dev: a superseded manifest run is rebuilt from scratch by the next one,
+    # whereas a cancelled signing run has already spent its AMO version.
+    concurrency:
+      group: pages
+      cancel-in-progress: true
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build updates.json from the dev releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # --slurp is what makes --paginate emit ONE json document; without it each
+          # page is a separate array and the parse fails as soon as there are more than
+          # 100 dev releases. flatten(1) is a no-op on a already-flat array, so it costs
+          # nothing and covers both shapes.
+          gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --paginate --slurp \
+            | jq 'flatten(1)' \
+            | npx tsx scripts/dev-updates.ts site
+
+      - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
+        with:
+          path: site
+
+      - uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
+        id: deploy
+
   required-status-check:
     name: ci.required-status-check
+    # Deliberately NOT depending on publish-dev: it is skipped on every pull request,
+    # and this job's own comment explains why that would break it — a skip is not a
+    # success to `all(.result == "success")`, so every PR would fail its required check.
     needs:
     - test
     # GitHub Actions skips this job when any of the dependents fail. And skips
