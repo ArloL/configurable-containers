@@ -2,7 +2,7 @@
 // this repo's prereleases
 //
 // Run: npx tsx scripts/dev-updates.ts
-// (writes to site/ by default)
+// (writes to _site/ by default)
 import { execSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -50,7 +50,7 @@ function fetchReleases(): Release[] {
 }
 
 function main() {
-  const outDir = process.argv[2] ?? "site";
+  const outDir = process.argv[2] ?? "_site";
 
   const releases = fetchReleases();
   const manifest = updatesManifest(releases);
