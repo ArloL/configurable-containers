@@ -29,26 +29,14 @@ const DEV_NAME = "configurable-containers (dev)";
 // and cannot be changed — a build that shipped keeps asking here forever
 export const UPDATE_URL = "https://arlol.github.io/configurable-containers/updates.json";
 
-export function resolveVersion(args: string[]): string {
-  const version = args.find((a) => !a.startsWith("--"));
-  if (!version) {
-    throw new Error(
-      "usage: npm run sign:dev -- <version>\n" +
-        "CI passes the version calver-tag-action allocated; pass one explicitly here.",
-    );
-  }
-  return version;
-}
-
 async function main() {
-  for (const name of ["WEB_EXT_API_KEY", "WEB_EXT_API_SECRET"]) {
+  for (const name of ["WEB_EXT_API_KEY", "WEB_EXT_API_SECRET", "VERSION"]) {
     if (!process.env[name]?.trim()) {
-      throw new Error(`${name} is not set; signing needs your AMO API credentials`);
+      throw new Error(`${name} is not set`);
     }
   }
 
-  const args = process.argv.slice(2);
-  const version = resolveVersion(args);
+  const version = process.env["VERSION"] ?? "";
 
   const { stageDir } = await packageExtension({
     version,
