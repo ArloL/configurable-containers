@@ -151,8 +151,8 @@ home of F1, F2, F7, F8, F10.
   one piece that is genuinely **persisted** rather than re-queried — see
   `EMPTY_SINCE_KEY`), auto-temp's container check standing in for the `processed` set it
   no longer has, and the already-contained guard once a tab has committed. Each is
-  revert-verified — back it out and at least one case goes red (the disposer's stored
-  map reds seven).
+  revert-verified — back it out and at least one case goes red (the disposer's map reds
+  seven).
 
   Not a hypothetical MV3 concern: `src/extension/options.ts` calls `runtime.reload()` on
   every config save, so a user triggers this in the shipping MV2 build. What that costs
@@ -199,7 +199,11 @@ create/dispose, real redirects.
 - **Real-delay disposal (F10), nightly** — `test/e2e/disposal.realtime.test.ts` takes
   the grace CC actually ships (`PRODUCTION_GRACE_MS`, imported from the builder so it
   cannot drift from the bundle) and watches one throwaway across it: still there a
-  minute after its last tab closed, gone by the grace. It is the only case that can
+  minute after its last tab closed, gone by the grace. Under MV3 it earns its keep twice
+  over: it is also the **only** case that leaves the background idle long enough for
+  Firefox to suspend the event page, and so the only one that can tell a deadline backed
+  by a browser alarm from one backed by a `setTimeout` that died with the page. It caught
+  exactly that, once, at eight minutes into a five-minute grace. It is the only case that can
   fail when a long background-page timer is throttled, coalesced or dropped — a fake
   clock cannot lie about a duration it invents, and 500ms is too short to be treated
   that way. Excluded from `npm test` by filename (`*.realtime.test.ts`) and run by

@@ -179,12 +179,34 @@ single-container rule kept it. Add a caller rather than a second copy.
   tab is wedged — every WebDriver call against it blocks, so the failure is a bare
   timeout. That timeout is the regression signature, not flake, and nothing test-side
   can improve it.
+- **MV3 (this branch) is an event page, not a service worker**, so the bundle format,
+  `globalThis.setTimeout` and the whole `browser.*` surface survive — and so does
+  **`webRequestBlocking`**, which Chrome removed and the engine's cancel-and-reopen
+  design depends on entirely. Firefox kept it; addons-linter reports 0 errors. The
+  migration was a change to the *adapter* behind `port.ts` and nothing else: the
+  resolver, matcher, engine, `reopenedNav` guard and picker were untouched.
+- **MV3 removed `contentScripts.register`, and `scripting.registerContentScripts` is NOT
+  its replacement here** — that API's `js` is `ExtensionURL[]`, file paths only, so it
+  cannot carry an inline `run:` string out of the user's config. `userScripts` is the one
+  MV3 API that still takes code. Firefox types `userScripts` as an **`OptionalOnlyPermission`**:
+  it cannot sit in `permissions`, so a fresh profile does not have it, and
+  `permissions.request` needs a user gesture a background script never has. Hence the
+  grant button on the options page, and hence the adapter checking before it registers —
+  the injector runs in `background.ts`'s floated async tail, where a throw is swallowed
+  and the overlay would break with no diagnostic. addons-linter's `UNSUPPORTED_API`
+  warning on `userScripts.register` is stale: it knows only the MV2 `register(options)`
+  overload, not the MV3 `register(scripts[])` one we call.
+- **An MV3 e2e that grants a permission must poll, not sleep.** The grant triggers
+  `runtime.reload()`, and the injector registers on the *next* startup's async tail. A
+  fixed wait raced it and made a working injection read as an MV3 failure;
+  `test/e2e/scripts.test.ts` polls `userScripts.getScripts()`. The reload also discards
+  the extension page the driver is parked on — re-`switchTo` a surviving handle or every
+  later call throws `NoSuchWindowError`.
 - **The disposer's grace is a STORED FACT, not a timer, and that is not a refactor to
-  undo.** A pending `setTimeout` dies with the background context, and `options.ts` calls
-  `runtime.reload()` on every config save — so the old version lost every pending grace
-  when the user hit Save, and its startup sweep (which reclaimed orphans at grace **0**)
-  then removed the container on the spot. Saving your config destroyed the throwaways
-  that were mid-grace (F10, "disposed too early").
+  undo.** A pending `setTimeout` dies with the background context, and an event page is
+  suspended whenever idle — so the old version lost every pending grace and its startup
+  sweep (which reclaimed orphans at grace **0**) then removed the container on the very
+  next wake: a five-minute keep-alive that was really zero (F10, "disposed too early").
   `src/engine/disposer.ts` now writes `cookieStoreId -> emptySince` to
   `storage.local` and re-derives the *remaining* grace on each sweep, so every sweep is
   idempotent and depends only on browser state plus that map. Timers are kept purely to
@@ -194,11 +216,16 @@ single-container rule kept it. Add a caller rather than a second copy.
   previous browser session therefore lives one extra grace. That is deliberate. Emptiness
   that was never written down is indistinguishable from a grace still running, and
   reclaiming those immediately is exactly what disposed live throwaways early.
-  A persistent MV2 background page keeps its timers for the life of the browser session,
-  so the stored map is what covers the reload; it is also what an event page would need,
-  which is the point. **Don't trust a green `npm test` on a change to disposal timing** —
-  every fast case keeps browsing, and browsing is itself what re-triggers the sweep.
-  `disposal.realtime.test.ts` is the only one that leaves the background alone.
+  **The `alarms` permission is load-bearing, not belt-and-braces.** A wake re-runs the
+  whole background script, so the startup sweep reclaims anything whose deadline passed
+  while suspended — but only if *something wakes it*, and in a browser nobody is touching,
+  nothing does. `setTimeout` dies with the page; only a browser-held alarm survives to
+  re-run it. Every fast test hides this, because they all keep browsing and so keep
+  waking the page by accident: the L3 clock is fake, and both e2e disposal cases sat well
+  inside the ~30s idle timeout. This was shipped once with the alarm removed as
+  "unused", and **only `disposal.realtime.test.ts` caught it** — a throwaway still alive
+  eight minutes into a five-minute grace. Don't remove it again, and don't trust a green
+  `npm test` on a change to disposal timing.
 - Temporary containers are identified **by the `tmp` name prefix** (`TMP_PREFIX` in
   `src/engine/registry.ts`), not a stored set — durable across a background restart.
   The disposer removes only `tmp…` containers; it never touches permanent/user ones.
