@@ -28,35 +28,22 @@ rules:
   #
   # A bare host also covers its subdomains, which is why one okta.com line is enough
   # to cover every customer's <tenant>.okta.com.
-  - match: accounts.google.com
-    inherit: true
-  - match: login.microsoftonline.com
-    inherit: true
-  - match: login.live.com
-    inherit: true
-  - match: appleid.apple.com
-    inherit: true
-  - match: okta.com
-    inherit: true
-  - match: okta-emea.com
-    inherit: true
-  - match: auth0.com
-    inherit: true
-  - match: onelogin.com
-    inherit: true
-  - match: pingone.com
-    inherit: true
-  - match: duosecurity.com
-    inherit: true
-  - match: login.salesforce.com
-    inherit: true
-  - match: id.atlassian.com
-    inherit: true
-  - match: login.yahoo.com
-    inherit: true
-  - match: accounts.spotify.com
-    inherit: true
-  - match: challenge.spotify.com
+  - match:
+    - accounts.google.com
+    - login.microsoftonline.com
+    - login.live.com
+    - appleid.apple.com
+    - okta.com
+    - okta-emea.com
+    - auth0.com
+    - onelogin.com
+    - pingone.com
+    - duosecurity.com
+    - login.salesforce.com
+    - id.atlassian.com
+    - login.yahoo.com
+    - accounts.spotify.com
+    - challenge.spotify.com
     inherit: true
   # A card payment's "verify with your bank" step is the same situation: it must stay
   # in the container that started the checkout. Those hosts are issuer-specific, so
@@ -81,9 +68,9 @@ rules:
 
   # Left completely alone — no routing, no isolation, no side-effects. Firefox's own
   # add-on and account pages break in confusing ways when moved between containers.
-  - match: addons.mozilla.org
-    ignore: true
-  - match: accounts.firefox.com
+  - match:
+    - addons.mozilla.org
+    - accounts.firefox.com
     ignore: true
 
   # ---------------------------------------------------------------------------

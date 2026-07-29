@@ -13,38 +13,28 @@
 rules:
 
   # SSO / auth / shared payment redirectors: stay in the initiating container.
-  - match: "login.microsoftonline.com"
-    inherit: true
-  - match: "accounts.google.com"
-    inherit: true
-  - match: "id.bund.de"
-    inherit: true
-  - match: "secure.kps-payment.de"
-    inherit: true
-  - match: "threedssvc.pay1.de"
-    inherit: true
-  - match: "threeds.upcgw.com"
-    inherit: true
-  - match: "payment.unzer.com"
-    inherit: true
-  - match: "acs.3dsecure-atruvia.de"
-    inherit: true
-  - match: "credorax.net"
-    inherit: true
-  - match: "heidelpay.hpcgw.net"
-    inherit: true
-  # "Log in with Spotify" SSO: must stay in the initiating container. Kept above the
-  # spotify.com rule below, which would otherwise route these into the Spotify container.
-  - match: "accounts.spotify.com"
-    inherit: true
-  - match: "challenge.spotify.com"
+  - match:
+    - login.microsoftonline.com
+    - accounts.google.com
+    - id.bund.de
+    - secure.kps-payment.de
+    - threedssvc.pay1.de
+    - threeds.upcgw.com
+    - payment.unzer.com
+    - acs.3dsecure-atruvia.de
+    - credorax.net
+    - heidelpay.hpcgw.net
+    # "Log in with Spotify" SSO: must stay in the initiating container. Kept above the
+    # spotify.com rule below, which would otherwise route these into the Spotify container.
+    - accounts.spotify.com
+    - challenge.spotify.com
     inherit: true
 
   # Ignored: engine does nothing — never route, isolate, or run side-effects; the
   # tab is left exactly as-is (was TC `ignoreRequests`).
-  - match: "getpocket.com"
-    ignore: true
-  - match: "addons.mozilla.org"
+  - match:
+    - getpocket.com
+    - addons.mozilla.org
     ignore: true
 
   # Redirectors: transient link shims. Not isolated (like inherit for the hop); the
