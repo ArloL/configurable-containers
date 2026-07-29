@@ -70,7 +70,7 @@ jobs:
           VERSION: ${{ steps.version.outputs.new_version }}
         run: npm run sign:dev
       # --prerelease is what tells a dev build from a listed one
-      # scripts/dev-updates.ts filters on it
+      # scripts/dev-updates.js filters on it
       - name: Publish the immutable dev release
         env:
           GH_TOKEN: ${{ github.token }}

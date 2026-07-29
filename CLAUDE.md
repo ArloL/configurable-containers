@@ -271,7 +271,7 @@ single-container rule kept it. Add a caller rather than a second copy.
   say which is which — the `prerelease` flag does.** Both are versioned by
   `ArloL/calver-tag-action` (`v<YYMM>.0.<micro>`, first free micro), so `ci.yml` and
   `release.yaml` interleave in the same `v…` namespace and release versions have gaps.
-  `scripts/dev-updates.ts` filters on `prerelease` to decide what goes in the update
+  `scripts/dev-updates.js` filters on `prerelease` to decide what goes in the update
   manifest; filtering on a tag prefix would match nothing, and matching everything would
   push the *listed* add-on's xpi to dev users under the dev add-on's id.
 - **Never derive a dev version from the clock.** `YYMM.DD.HHMM` sorts above every

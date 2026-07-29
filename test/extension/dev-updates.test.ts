@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { updatesManifest, type Release } from "../../scripts/dev-updates";
+import { updatesManifest } from "../../scripts/dev-updates.js";
+
+interface Release {
+  tag_name: string;
+  prerelease: boolean;
+  assets: { name: string; browser_download_url: string }[];
+}
 
 const asset = (name: string) => ({
   name,

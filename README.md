@@ -126,7 +126,7 @@ Versions come from `ArloL/calver-tag-action`, the same action that versions rele
 dev builds and listed releases draw from **one** `v<YYMM>.0.<micro>` tag sequence and a
 version is never reused — which AMO requires, since it rejects a version string it has
 already seen for an add-on. The consequence is that the tag cannot tell you which channel
-a release belongs to: the **prerelease flag** does, and it is what `scripts/dev-updates.ts`
+a release belongs to: the **prerelease flag** does, and it is what `scripts/dev-updates.js`
 filters on. Signing locally takes an explicit version for the same reason — nothing
 outside the tag action may allocate one.
 
@@ -136,7 +136,7 @@ published release and its assets cannot be changed at all — the asset is uploa
 same call that creates the release, and the URL Firefox downloads from can never serve
 different bytes than it did before. The
 manifest that points at those releases has to change on every merge, so it lives on
-GitHub Pages at a constant URL (`scripts/dev-updates.ts` rebuilds it from the releases
+GitHub Pages at a constant URL (`scripts/dev-updates.js` rebuilds it from the releases
 API and `ci.yml` deploys it). Rolling back means **deleting** a dev release and
 re-running the manifest job, never editing a published one.
 

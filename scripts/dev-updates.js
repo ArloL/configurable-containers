@@ -1,7 +1,7 @@
 // Build the Firefox update manifest ("updates.json") for the unlisted dev channel from
 // this repo's prereleases
 //
-// Run: npx tsx scripts/dev-updates.ts
+// Run: node scripts/dev-updates.js
 // (writes to _site/ by default)
 import { execSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -10,26 +10,20 @@ import * as path from "node:path";
 
 export const DEV_ID = "configurable-containers-dev@k5d.de";
 
-export interface Release {
-  tag_name: string;
-  prerelease: boolean;
-  assets: { name: string; browser_download_url: string }[];
-}
-
 const OWNER_REPO = "ArloL/configurable-containers";
 
-function fetchReleases(): Release[] {
+function fetchReleases() {
   const json = execSync(
     `gh api "repos/${OWNER_REPO}/releases?per_page=100" --paginate --slurp`,
     { encoding: "utf8" },
   );
   // --paginate --slurp outputs an array of page arrays; flatten once
-  return (JSON.parse(json) as Release[][]).flat();
+  return JSON.parse(json).flat();
 }
 
 // Every dev release is listed: Firefox picks the highest version it can install
 // rollbacks are done by deleting the release and republishing the manifest
-export function updatesManifest(releases: Release[]): string {
+export function updatesManifest(releases) {
   const updates = releases
     // Dev builds are identified by the prerelease flag
     .filter((r) => r.prerelease)
