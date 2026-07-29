@@ -20,7 +20,7 @@ const SIGNED_DIR = path.join(OUT_DIR, "signed");
 const WEB_EXT = path.resolve(HERE, "../node_modules/.bin/web-ext");
 
 const DEV_ID = "configurable-containers-dev@k5d.de";
-const DEV_NAME = "configurable-containers (dev)";
+const DEV_NAME = "Configurable Containers Dev";
 
 // Where Firefox polls for a newer build. This URL is baked into every signed build
 // and cannot be changed — a build that shipped keeps asking here forever
