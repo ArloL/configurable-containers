@@ -16,6 +16,17 @@ export interface Release {
   assets: { name: string; browser_download_url: string }[];
 }
 
+const OWNER_REPO = "ArloL/configurable-containers";
+
+function fetchReleases(): Release[] {
+  const json = execSync(
+    `gh api "repos/${OWNER_REPO}/releases?per_page=100" --paginate --slurp`,
+    { encoding: "utf8" },
+  );
+  // --paginate --slurp outputs an array of page arrays; flatten once
+  return (JSON.parse(json) as Release[][]).flat();
+}
+
 // Every dev release is listed: Firefox picks the highest version it can install
 // rollbacks are done by deleting the release and republishing the manifest
 export function updatesManifest(releases: Release[]): string {
@@ -36,17 +47,6 @@ export function updatesManifest(releases: Release[]): string {
     });
 
   return JSON.stringify({ addons: { [DEV_ID]: { updates } } }, null, 2) + "\n";
-}
-
-const OWNER_REPO = "ArloL/configurable-containers";
-
-function fetchReleases(): Release[] {
-  const json = execSync(
-    `gh api "repos/${OWNER_REPO}/releases?per_page=100" --paginate --slurp`,
-    { encoding: "utf8" },
-  );
-  // --paginate --slurp outputs an array of page arrays; flatten once
-  return (JSON.parse(json) as Release[][]).flat();
 }
 
 function main() {
