@@ -42,7 +42,7 @@ reopen, and (d) exposing the engine's F1-guarded reopen so the picker can trigge
 ### In scope
 
 - **Expose `reopen` from `createEngine`** — the F1-guarded reopen effect (the
-  `freshlyReopened` guard is load-bearing; the picker's reopen *must* go through it).
+  `freshlyReopened` guard is crucial; the picker's reopen *must* go through it).
 - A new **`picker`** sibling (`src/engine/picker.ts`): owns the `onChoice` flow, the
   reopen-picker command, and the selection-message listener. Wired at `background.ts`
   beside the engine, disposer, cookie-seeder, script-injector, and redirector-closer.
@@ -141,7 +141,7 @@ swallow) so callers can react:
 
 1. `const store = await registry.toStoreId(target);`
 2. `const created = await port.createTab({ url, cookieStoreId: store, index: tab.index, active: tab.active, openerTabId: tab.openerTabId });`
-3. `freshlyReopened.add(created.id);` — **the load-bearing F1 guard** (CLAUDE.md).
+3. `freshlyReopened.add(created.id);` — **the crucial F1 guard** (CLAUDE.md).
 4. `await port.removeTab(tab.id);`
 
 The engine's own `case "reopen"` calls `this.reopen(tab, d.url, decision.into)` inside

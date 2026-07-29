@@ -14,7 +14,7 @@ declare const __CC_REDIRECTOR_DELAY_MS__: number;
 
 // Synchronous by contract: every browser.* listener is registered while this script
 // evaluates, before the async tail below can lose the session's first navigation.
-// See src/extension/wiring.ts for why that ordering is load-bearing.
+// See src/extension/wiring.ts for why that ordering is crucial.
 const background = wireBackground({
   port: createBrowserPort(),
   clock: realClock,

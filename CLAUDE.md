@@ -89,7 +89,7 @@ single-container rule kept it. Add a caller rather than a second copy.
   target=_blank / window.open / engine-reopen tabs before they load. Cost of the rule:
   users with `browser.newtabpage.enabled=false` get `about:blank` on Ctrl+T and are not
   auto-containerized — same limitation as TCP.
-- **The engine's `reopenedNav` guard is load-bearing.** When the engine reopens a tab,
+- **The engine's `reopenedNav` guard is crucial.** When the engine reopens a tab,
   the *new* tab's `onBeforeRequest` fires **before its url commits** (it still reads as
   `about:blank`), so `resolve()` can't tell it is already in the target container and
   would reopen forever (the F1 loop). The guard leaves the navigation the engine
@@ -109,7 +109,7 @@ single-container rule kept it. Add a caller rather than a second copy.
   that stale marker absorbed whatever navigation came next — returning no `cancel`, so
   the site loaded **unrouted inside the container we had just reopened into**: an
   unmatched site in a permanent container's cookie jar, F11 by way of F1 machinery.
-  Comparing by site rather than by exact url is load-bearing in the other direction:
+  Comparing by site rather than by exact url is crucial in the other direction:
   Firefox rewrites the url *before* `onBeforeRequest` when **HSTS upgrades the scheme**,
   so the tab's own first request legitimately arrives on a url we never asked for, and
   exact-url matching bought a second throwaway on every such reopen. Both directions
@@ -229,7 +229,7 @@ single-container rule kept it. Add a caller rather than a second copy.
   `webRequest.onBeforeRequest` exists, so that tab is never routed and sits in
   `firefox-default` forever. It is not a millisecond window and not flake — all four
   event-driven cases in `test/e2e/auto-temp.test.ts` went red, deterministically. Two
-  devices keep registration synchronous, and both are load-bearing:
+  devices keep registration synchronous, and both are crucial:
   1. `config` is a **single object filled in place** (`Object.assign`) once storage
      resolves. Every sibling but the script-injector reads `config.rules` / `config.groups`
      at *event* time, so they all observe the load through that shared reference. Don't
@@ -320,7 +320,7 @@ single-container rule kept it. Add a caller rather than a second copy.
   and L3 tests that asserted the bug itself. Both looked fine. Back the fix out, watch
   the test go red, restore it — and restore from an editor edit or a copy, **not**
   `git checkout`, which silently discards uncommitted work.
-- **`test/engine/mock-port.ts` fidelity is load-bearing.** When L3 is green but real
+- **`test/engine/mock-port.ts` fidelity is crucial.** When L3 is green but real
   Firefox misbehaves, suspect the mock accepts something Firefox rejects. It now fires
   `onTabCreated` from `createTab` (as Firefox does, which is what makes a listener
   re-enter its own handler) and throws on privileged `about:` URLs. Never relax those
@@ -328,7 +328,7 @@ single-container rule kept it. Add a caller rather than a second copy.
   reason: Firefox does not care whether the user or the extension closed the tab. While
   it did not, a tab **CC itself closed** — a reopen superseding its source, a stranded
   redirector — was invisible to every `onTabRemoved` listener, so the disposer never
-  learned that the container it had just emptied was empty. That gap was load-bearing in
+  learned that the container it had just emptied was empty. That gap was crucial in
   the wrong direction: the restart case covering an abandoned throwaway passed only
   because the old startup sweep reclaimed it at grace 0, i.e. the F10 bug was what made
   the test green.

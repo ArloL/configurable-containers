@@ -65,7 +65,7 @@ commit, because a rename that misses a call site does not compile:
 ### Mock fidelity survives the rename
 
 `emitTabCreated` names the Firefox event it simulates. That correspondence is
-load-bearing: CLAUDE.md's stated debugging move when L3 is green but real Firefox
+crucial: CLAUDE.md's stated debugging move when L3 is green but real Firefox
 misbehaves is to suspect the mock, which requires knowing which `browser.*` event each
 call fakes.
 

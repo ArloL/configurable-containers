@@ -55,7 +55,7 @@ export function wireBackground(opts: WiringOptions): Background;
 - [ ] `resumeTmpSuffix()` does its own `queryIdentities()` and raises the counter via `highestTmpSuffix`. It owns the port, so the caller has no names to pass and nothing to get wrong.
 - [ ] `injectScripts()` wraps `createScriptInjector({ port, config })` — the one sibling that reads config eagerly, hence the one that genuinely has to wait.
 - [ ] `background.ts` keeps `createBrowserPort()`, the `__CC_*` defines, and the async config tail (storage read, seed write, editor-on-parse-error), calling the four methods in the order above.
-- [ ] Carry the load-bearing comments with the code they explain — especially the synchronous-registration paragraph, which now documents `wireBackground`'s contract.
+- [ ] Carry the crucial comments with the code they explain — especially the synchronous-registration paragraph, which now documents `wireBackground`'s contract.
 
 **Verification:**
 - [ ] `npm run typecheck`.

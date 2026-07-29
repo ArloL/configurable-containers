@@ -124,7 +124,7 @@ describe("loadConfig", () => {
     expect(r.config).toEqual({ rules: [], groups: [] });
   });
 
-  // The load-bearing one: a broken stored config must NOT silently revert to the
+  // The crucial one: a broken stored config must NOT silently revert to the
   // seed, which would route against rules the user has not seen in months.
   it("does not fall back to the seed when the stored config is broken", () => {
     const r = loadConfig(BROKEN, SEED);
