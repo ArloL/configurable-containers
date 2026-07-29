@@ -9,7 +9,7 @@ import { startServer, BEACON_PATH, type TestServer } from "./server";
 import { buildExtension } from "./build-extension";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-// `mac` is the upstream Multi-Account Containers submodule, loaded UNBUILT: its src/ is
+// `mac` is the upstream Multi-Account Containers, loaded UNBUILT: its src/ is
 // plain JS with no bundle step (its own build is just `web-ext build -s src/`).
 const EXT_DIRS: Record<"probe" | "cc" | "mac", string> = {
   probe: path.resolve(HERE, "../extensions/probe"),
@@ -102,8 +102,7 @@ function zipDir(
 // submodule (mozilla-l10n/multi-account-containers-l10n) we deliberately do not check
 // out — Firefox then rejects the add-on outright ("Extension is invalid"). Every string
 // it supplies is display text; the background logic under test uses none of it. So the
-// harness synthesises the handful of keys the manifest interpolates, which keeps CI to
-// `submodules: true` instead of dragging in a whole localisation repo for six labels.
+// harness synthesises the handful of keys the manifest interpolates, which keeps CI light
 function ensureMacLocale(entries: Record<string, Uint8Array>): void {
   const file = "_locales/en/messages.json";
   if (entries[file]) return;
@@ -116,7 +115,7 @@ function ensureMacLocale(entries: Record<string, Uint8Array>): void {
 }
 
 // Seed a MAC site assignment by appending one script to MAC's background PAGE inside
-// the .xpi we build. The submodule on disk is never touched — the rewrite happens on
+// the .xpi we build. The checkout on disk is never touched — the rewrite happens on
 // the in-memory zip entries, the same spirit as CC's build-time config injection.
 //
 // This substitutes for the ONE step of a real MAC setup that cannot be scripted: an

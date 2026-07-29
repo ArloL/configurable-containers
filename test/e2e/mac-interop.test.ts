@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { launch, awaitContainerTab, type Session } from "../../harness/firefox";
 
-// F2/F7 against the REAL Multi-Account Containers (the mac/ submodule, loaded unbuilt
+// F2/F7 against the REAL Multi-Account Containers (the mac/ checkout, loaded unbuilt
 // alongside CC). The L3 mock already proves "truthy getAssignment ⇒ defer"; what only
 // real Firefox can prove is that the handshake works at all against MAC's actual code:
 // that cross-extension sendMessage reaches it, that MAC's permission gate accepts CC
