@@ -191,11 +191,26 @@ export interface BrowserPort {
   // Loud surface for a routing action CC declined to take (F9). The real port raises a
   // desktop notification; the mock records the call.
   notify(n: NotificationSpec): Promise<void>;
+
+  // Durable key/value, backed by storage.local. The ONE thing here that outlives the
+  // background context, which is what makes it worth a seam: a pending timer does not,
+  // and `options.ts` calls runtime.reload() on every config save. Any deadline that has
+  // to be honoured across one of those must be stored as a FACT ("empty since T") and
+  // re-derived on the next startup, rather than held in a closure that dies with the
+  // page. Deliberately untyped: the seam stores plain JSON, and each caller owns the
+  // shape under its own key.
+  readStored(key: string): Promise<unknown>;
+  writeStored(key: string, value: unknown): Promise<void>;
 }
 
 // Injected timing seam so grace/GC delays are deterministic in tests. The disposer
 // only ever schedules (never cancels — keep-alive is the empty re-check), so a single
 // void-returning method is enough and avoids @types/node timer-handle friction.
+//
+// `now` is part of the seam for the same reason the storage is: a grace that survives a
+// background restart is arithmetic on two timestamps, and the test clock has to supply
+// both halves or the fake time and the stored time would disagree.
 export interface Clock {
   setTimeout(fn: () => void, ms: number): void;
+  now(): number;
 }
