@@ -65,6 +65,27 @@ or regex match has no host to name the container after, so it needs `open:`.
 auto-opens; the others become manual **switch / reopen** targets. Omit it to get a
 choice screen instead.
 
+### What a `match` list means depends on the action
+
+Under `open` (including the auto-named form) the listed hosts **share the one
+container** the rule names — that is the point of `- match: [notion.com, notion.so]`.
+Under `inherit` / `ignore` / `redirector` there is no container to share, so a list is
+a plain **enumeration**: each host is treated exactly as if it had its own rule, and
+the hosts share nothing with each other. Sites that should stay in the *same*
+throwaway as you move between them are a `groups` entry, never a `match` list.
+
+Two things a collapsed rule does still share, and they are the reason to keep hosts
+in separate rules when either applies:
+
+- **Overlays.** `cookies` / `scripts` have no `match` of their own — they fire whenever
+  their rule matches, so they apply to *every* host in the list. Giving one host its own
+  cookie seed means splitting it back out into its own rule.
+- **Position.** One rule occupies one slot in the first-match-wins order, so the hosts
+  cannot be interleaved with more specific rules between them.
+
+Neither bites for a block of exemptions kept above the routing rules, which is why the
+shipped default groups its SSO hosts, link shims and ignored hosts into one rule each.
+
 **`Temporary` is a reserved value**, not a container you define. It may appear
 anywhere a container name is accepted (`open: Temporary`, `open: [Temporary, X]`,
 `default: Temporary`) and means "a fresh throwaway container." You cannot create a
@@ -218,6 +239,24 @@ Because there is no automatic inheritance, every auth / payment domain must opt 
 explicitly. In the author's data this is a real list: `accounts.google.com`,
 `login.microsoftonline.com`, `credorax.net`, `payment.unzer.com`, and other 3DS
 processors.
+
+Since an `inherit` list shares nothing between its hosts
+([above](#what-a-match-list-means-depends-on-the-action)), that whole list belongs in
+**one** rule — which is how the shipped default carries its identity providers:
+
+```yaml
+- match:
+  - accounts.google.com
+  - login.microsoftonline.com
+  - appleid.apple.com
+  - okta.com                 # a bare host covers <tenant>.okta.com too
+  - payment.unzer.com
+  inherit: true
+```
+
+Keep that rule **above** any rule for the same site's main domain: an SSO host like
+`accounts.spotify.com` has to win over a later `spotify.com` rule, or the login lands
+in the Spotify container instead of the one that started it and fails.
 
 ### A form submission is never moved between containers
 
