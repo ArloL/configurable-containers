@@ -72,6 +72,17 @@ export interface PackageOptions {
   version: string;
   seedPath?: string;
   outDir?: string;
+  // A dev build overrides both, so it becomes a SEPARATE add-on: its own AMO record
+  // (nothing it does can perturb a listed version under review) and its own
+  // storage.local, so installing it alongside the real one cannot touch that config.
+  // Both default to the shipped values — a release build passes neither.
+  id?: string;
+  name?: string;
+  // Self-distribution: where Firefox polls for a newer build. It has to be stamped
+  // BEFORE signing, because it lives inside the signed manifest — a build shipped
+  // without it can never learn about its successors, and has to be replaced by hand.
+  // Only ever set for the dev build: AMO REJECTS a listed submission that carries one.
+  updateUrl?: string;
 }
 
 export async function packageExtension(
@@ -97,6 +108,12 @@ export async function packageExtension(
   const manifestPath = path.join(stageDir, "manifest.json");
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as Record<string, unknown>;
   manifest.version = opts.version;
+  if (opts.name) manifest.name = opts.name;
+  if (opts.id || opts.updateUrl) {
+    const settings = manifest.browser_specific_settings as { gecko: Record<string, unknown> };
+    if (opts.id) settings.gecko.id = opts.id;
+    if (opts.updateUrl) settings.gecko.update_url = opts.updateUrl;
+  }
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
 
   const xpiPath = path.join(outDir, `configurable-containers-${opts.version}.xpi`);
