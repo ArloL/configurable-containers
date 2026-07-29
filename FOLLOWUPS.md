@@ -28,7 +28,7 @@ they are coverage gaps, not renames.
 `test/engine/registry.test.ts` imports `TMP_PREFIX` and interpolates it, so changing
 `"tmp"` to anything else moves both sides of every assertion and the suite stays green
 (verified by mutation). The behaviour — prefix-based identification — *is* covered; the
-value is not. That value is load-bearing across a background restart: CC recognises its
+value is not. That value is crucial across a background restart: CC recognises its
 own throwaways by name, so changing the prefix would silently orphan every `tmp…`
 container in a live profile. A test asserting the literal would catch it.
 

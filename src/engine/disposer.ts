@@ -97,7 +97,7 @@ export function createDisposer(opts: DisposerOptions): void {
 
   void (async () => {
     await sweep();
-    // Safety net for anything the events missed. No longer load-bearing for correctness
+    // Safety net for anything the events missed. No longer crucial for correctness
     // — the deadline re-arm inside sweep() is — but it also restarts the chain if a
     // sweep ever throws.
     const tick = (): void => {

@@ -21,7 +21,7 @@ function isAutoTempCandidate(tab: Tab): boolean {
 // temporary container. Mirrors TCP's `maybeReopenInTmpContainer` automatic-mode
 // path. We listen on BOTH events because a tab's url is not final at onCreated.
 //
-// about:blank is deliberately NOT a candidate, and the reason is load-bearing: in
+// about:blank is deliberately NOT a candidate, and the reason is crucial: in
 // Firefox a tab reads as about:blank for its whole pre-commit life, so a tab that is
 // on its way to a real page is indistinguishable from a genuinely blank one. Observed
 // event stream for `tabs.create({ url: "http://…" })` with no container:
