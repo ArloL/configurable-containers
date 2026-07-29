@@ -11,3 +11,7 @@ extensions/cc/options.js
 
 # Packaged xpi + staged extension (npm run package)
 dist/
+
+# checkouts of existing extensions
+mac/
+tcp/
