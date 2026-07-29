@@ -87,6 +87,12 @@ jobs:
             --prerelease \
             ./dist/dev/signed/*.xpi
 
+  publish-dev-manifest:
+    name: Publish dev update manifest
+    needs: prerelease
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/publish-dev-manifest.yml
+
   required-status-check:
     name: ci.required-status-check
     needs:
