@@ -22,17 +22,41 @@ export const IDP_TARGET_HOST = "work.example";
 export const OAUTH_CODE = "cc-test-code-42";
 export const SAML_ASSERTION = "cc-test-assertion";
 
+// The path an extension fetches to tell the harness that a step only it can see has
+// finished — `?name=` labels which one. Node cannot look inside the browser, and a
+// background page's own state is reachable from no DOM, so this is the one seam a
+// setup step can report readiness through. Waited on with `awaitBeacon`.
+export const BEACON_PATH = "/__beacon";
+
 export interface TestServer {
   url: string;
+  // Resolve once an extension has fetched BEACON_PATH?name=<name>; rejects on timeout.
+  // Already-arrived beacons resolve immediately, so a caller cannot lose the race by
+  // waiting after the fact.
+  awaitBeacon: (name: string, timeoutMs?: number) => Promise<void>;
   close: () => Promise<void>;
 }
 
 export async function startServer(): Promise<TestServer> {
   let port = 0; // filled in by listen() below, before any request can arrive
 
+  const arrived = new Set<string>();
+  const waiting = new Map<string, (() => void)[]>();
+
   const server = createServer((req, res) => {
     const requested = new URL(req.url ?? "/", "http://127.0.0.1");
     const params = requested.searchParams;
+
+    // A beacon carries no page: it is answered 204 and only its arrival matters.
+    if (requested.pathname === BEACON_PATH) {
+      const name = params.get("name") ?? "";
+      arrived.add(name);
+      for (const resolve of waiting.get(name) ?? []) resolve();
+      waiting.delete(name);
+      res.writeHead(204);
+      res.end();
+      return;
+    }
 
     // /redirect answers 302 to REDIRECT_TARGET_HOST on this same server, so a test can
     // drive a real cross-host redirect chain — the browser keeps the tab pre-commit
@@ -121,6 +145,19 @@ export async function startServer(): Promise<TestServer> {
 
   return {
     url: `http://127.0.0.1:${port}/`,
+    awaitBeacon: (name, timeoutMs = 30_000) =>
+      new Promise<void>((resolve, reject) => {
+        if (arrived.has(name)) return resolve();
+        const timer = setTimeout(
+          () => reject(new Error(`no "${name}" beacon within ${timeoutMs}ms`)),
+          timeoutMs,
+        );
+        const done = () => {
+          clearTimeout(timer);
+          resolve();
+        };
+        waiting.set(name, [...(waiting.get(name) ?? []), done]);
+      }),
     close: () =>
       new Promise<void>((resolve, reject) =>
         server.close((err) => (err ? reject(err) : resolve())),
