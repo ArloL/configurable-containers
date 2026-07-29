@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   startServer,
+  BEACON_PATH,
   REDIRECT_TARGET_HOST,
   OAUTH_CODE,
   SAML_ASSERTION,
@@ -85,6 +86,42 @@ describe("startServer", () => {
       expect(body).toContain(`action="http://${IDP_TARGET_HOST}:${new URL(server.url).port}/acs"`);
       expect(body).toContain(`value="${SAML_ASSERTION}"`);
       expect(body).toContain(".submit()");
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("resolves awaitBeacon when the named beacon is fetched", async () => {
+    const server = await startServer();
+    try {
+      const waited = server.awaitBeacon("mac-assigned", 5_000);
+      const res = await fetch(`${server.url.replace(/\/$/, "")}${BEACON_PATH}?name=mac-assigned`);
+      expect(res.status).toBe(204);
+      await expect(waited).resolves.toBeUndefined();
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("resolves a beacon that arrived before anyone waited for it", async () => {
+    const server = await startServer();
+    try {
+      // The seeding script fetches as soon as it is done, which can be before launch()
+      // gets around to waiting. A beacon that only counted while someone listened
+      // would hang the caller it was meant to release.
+      await fetch(`${server.url.replace(/\/$/, "")}${BEACON_PATH}?name=early`);
+      await expect(server.awaitBeacon("early", 5_000)).resolves.toBeUndefined();
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("rejects awaitBeacon when nothing reports in", async () => {
+    const server = await startServer();
+    try {
+      // The seeding gave up (its container never resolved), so launch() must fail
+      // loudly rather than hand back a session whose assignment is not there.
+      await expect(server.awaitBeacon("never-sent", 50)).rejects.toThrow(/no "never-sent" beacon/);
     } finally {
       await server.close();
     }

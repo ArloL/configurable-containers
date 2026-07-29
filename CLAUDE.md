@@ -401,6 +401,23 @@ single-container rule kept it. Add a caller rather than a second copy.
      Verifying the write landed is **not** enough; the seeding loop gates on the `get`.
      Reproduce by seeding a `userContextId` that does not exist — the signature is "no
      container tab" for the full timeout, never a wrong container.
+  5. **Nothing may navigate until the assignment is READABLE, and `launch` blocks on
+     that.** The seeding is a loop inside MAC's background page; the test's first
+     navigation used to race it. Both extensions answer that navigation from the same
+     storage but read it at *different instants* — MAC in its `onBeforeRequest`, CC one
+     `getAssignment` roundtrip later — so a write landing mid-flight is seen by one and
+     missed by the other. Miss it in CC and the tab goes to a throwaway (`expected
+     'tmp1' to be 'Personal'`); miss it in MAC while CC defers and **nothing** routes
+     the tab (`no container tab`, the CI failure of 2026-07-29, green on a re-run of
+     the same commit). Both are one race, and neither is fixable test-side after the
+     fact. The seeding script therefore `fetch`es a **beacon** on the harness server
+     (`BEACON_PATH`, `harness/server.ts`) once MAC's own `storageArea.get` reads the
+     assignment back, and `launch()` awaits it before handing over the session — a
+     background page's storage is in no DOM, so a request to the test server is the
+     only way Node can learn this happened. Give-up sends no beacon, so a seeding that
+     never lands fails `launch` loudly instead of yielding a session that flakes.
+     Verify by delaying the seed (a `setTimeout` at the top of the injected script):
+     ≥200ms reproduces the throwaway failure before the wait, and passes after it.
 - **An unassigned domain cannot test the MAC handshake.** `macOwns` swallows a throw and
   returns false, so a broken handshake and "no assignment" are observationally identical
   — CC routes normally either way. Only an **assigned** domain separates them, and it is

@@ -5,7 +5,7 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "n
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { zipSync } from "fflate";
-import { startServer, type TestServer } from "./server";
+import { startServer, BEACON_PATH, type TestServer } from "./server";
 import { buildExtension } from "./build-extension";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -20,6 +20,12 @@ const EXT_DIRS: Record<"probe" | "cc" | "mac", string> = {
 // MAC's own extension id (mac/src/manifest.json). CC addresses it by this id for the
 // getAssignment handshake — see MAC_ID in src/engine/engine.ts, which must match.
 export const MAC_EXTENSION_ID = "@testpilot-containers";
+
+// The beacon the seeded MAC assignment reports itself through (harness/server.ts).
+// A background page's storage is in no DOM, so a fetch to the test server is the only
+// way Node learns the seeding finished — and launch() must know before it hands the
+// session to a test that will navigate.
+const MAC_ASSIGNED_BEACON = "mac-assigned";
 
 // CC's extension id (must match extensions/cc/manifest.json) and a FIXED uuid for
 // its moz-extension:// origin, pinned via the extensions.webextensions.uuids pref in
@@ -121,7 +127,7 @@ function ensureMacLocale(entries: Record<string, Uint8Array>): void {
 // mirrored here, and CC still reads it back through MAC's real `getAssignment` path.
 function injectMacAssignment(
   entries: Record<string, Uint8Array>,
-  assign: { url: string; userContextId: string },
+  assign: { url: string; userContextId: string; beaconUrl: string },
 ): void {
   const page = "js/background/index.html";
   const hook = "js/background/cc-harness-assign.js";
@@ -147,10 +153,21 @@ function injectMacAssignment(
       // the tab on its confirm-page interstitial instead of reopening, and no container
       // tab ever appears (assignManager.js reloadPageInContainer).
       `      await assignManager.storageArea.set(url, { userContextId, neverAsk: true });\n` +
-      `      if (await assignManager.storageArea.get(url)) return;\n` +
+      // The beacon is what stops a test navigating into the middle of this seeding.
+      // Until the assignment is readable, MAC has nothing to route on and CC has
+      // nothing to defer to, and BOTH answers are read per-request: a write landing
+      // mid-navigation is read by one extension and missed by the other, so the tab
+      // ends up in a throwaway (CC missed it) or uncontained (MAC missed it, CC
+      // deferred). launch() awaits this before returning, so neither can happen.
+      `      if (await assignManager.storageArea.get(url)) {\n` +
+      `        await fetch(${JSON.stringify(assign.beaconUrl)}).catch(() => {});\n` +
+      `        return;\n` +
+      `      }\n` +
       `    } catch (e) { /* MAC still initialising, or the container not provisioned — retry */ }\n` +
       `    await new Promise((r) => setTimeout(r, 100));\n` +
       `  }\n` +
+      // No beacon is sent on this path on purpose: launch() then fails with its own
+      // timeout instead of handing back a session whose assignment never landed.
       `  console.error("[cc-harness] could not seed the MAC assignment");\n` +
       `})();\n`,
   );
@@ -167,7 +184,7 @@ async function buildXpiFor(
     redirectorDelayMs?: number;
     configYaml?: string;
     notifyEchoTo?: string;
-    macAssign?: { url: string; userContextId: string };
+    macAssign?: { url: string; userContextId: string; beaconUrl: string };
   },
 ): Promise<{ xpiPath: string; cleanup: () => void }> {
   if (ext === "cc") await buildExtension(opts);
@@ -196,6 +213,7 @@ export async function launch(opts: LaunchOptions = {}): Promise<Session> {
         macAssign: opts.macAssign && {
           url: `http://${opts.macAssign.host}:${new URL(server.url).port}/`,
           userContextId: opts.macAssign.userContextId,
+          beaconUrl: `${server.url.replace(/\/$/, "")}${BEACON_PATH}?name=${MAC_ASSIGNED_BEACON}`,
         },
       }),
     );
@@ -237,6 +255,22 @@ export async function launch(opts: LaunchOptions = {}): Promise<Session> {
     await server.close();
     cleanupXpis();
     throw err;
+  }
+
+  // A seeded assignment is a PRECONDITION of the session, not a background chore: MAC
+  // reads it per request and CC asks MAC per request, so a navigation started while the
+  // seeding is still running is read differently by the two extensions and lands the
+  // tab in whichever container lost the race. Hold the session back until MAC's own
+  // storage says the assignment is there.
+  if (opts.macAssign) {
+    try {
+      await server.awaitBeacon(MAC_ASSIGNED_BEACON);
+    } catch (err) {
+      await driver.quit();
+      await server.close();
+      cleanupXpis();
+      throw err;
+    }
   }
 
   return {
