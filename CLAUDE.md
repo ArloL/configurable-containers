@@ -179,6 +179,26 @@ single-container rule kept it. Add a caller rather than a second copy.
   tab is wedged — every WebDriver call against it blocks, so the failure is a bare
   timeout. That timeout is the regression signature, not flake, and nothing test-side
   can improve it.
+- **The disposer's grace is a STORED FACT, not a timer, and that is not a refactor to
+  undo.** A pending `setTimeout` dies with the background context, and `options.ts` calls
+  `runtime.reload()` on every config save — so the old version lost every pending grace
+  when the user hit Save, and its startup sweep (which reclaimed orphans at grace **0**)
+  then removed the container on the spot. Saving your config destroyed the throwaways
+  that were mid-grace (F10, "disposed too early").
+  `src/engine/disposer.ts` now writes `cookieStoreId -> emptySince` to
+  `storage.local` and re-derives the *remaining* grace on each sweep, so every sweep is
+  idempotent and depends only on browser state plus that map. Timers are kept purely to
+  make disposal punctual while the page is alive; losing one costs lateness, never
+  earliness. Consequence worth knowing: an empty `tmp` container CC has **no stored note
+  about** starts its grace now rather than being reclaimed on the spot — an orphan from a
+  previous browser session therefore lives one extra grace. That is deliberate. Emptiness
+  that was never written down is indistinguishable from a grace still running, and
+  reclaiming those immediately is exactly what disposed live throwaways early.
+  A persistent MV2 background page keeps its timers for the life of the browser session,
+  so the stored map is what covers the reload; it is also what an event page would need,
+  which is the point. **Don't trust a green `npm test` on a change to disposal timing** —
+  every fast case keeps browsing, and browsing is itself what re-triggers the sweep.
+  `disposal.realtime.test.ts` is the only one that leaves the background alone.
 - Temporary containers are identified **by the `tmp` name prefix** (`TMP_PREFIX` in
   `src/engine/registry.ts`), not a stored set — durable across a background restart.
   The disposer removes only `tmp…` containers; it never touches permanent/user ones.
@@ -261,7 +281,14 @@ single-container rule kept it. Add a caller rather than a second copy.
   Firefox misbehaves, suspect the mock accepts something Firefox rejects. It now fires
   `onTabCreated` from `createTab` (as Firefox does, which is what makes a listener
   re-enter its own handler) and throws on privileged `about:` URLs. Never relax those
-  to make a test pass.
+  to make a test pass. It also fires `onTabRemoved` from `removeTab`, for the same
+  reason: Firefox does not care whether the user or the extension closed the tab. While
+  it did not, a tab **CC itself closed** — a reopen superseding its source, a stranded
+  redirector — was invisible to every `onTabRemoved` listener, so the disposer never
+  learned that the container it had just emptied was empty. That gap was load-bearing in
+  the wrong direction: the restart case covering an abandoned throwaway passed only
+  because the old startup sweep reclaimed it at grace 0, i.e. the F10 bug was what made
+  the test green.
 - **The restart harness (`test/engine/restart.ts`) rests on two fidelity rules, and the
   second is the one whose absence would make the suite lie.** (1) Re-wiring is all it
   takes to retire the old listeners, because `mock-port.ts` holds ONE handler slot per
