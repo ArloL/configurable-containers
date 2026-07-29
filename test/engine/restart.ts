@@ -25,6 +25,9 @@ function aSessionClock(clock: Clock): { clock: Clock; stop: () => void } {
           if (live) fn();
         }, ms);
       },
+      // Time itself is not per-session: it keeps running while the background is dead,
+      // which is exactly the interval a restored deadline has to account for.
+      now: () => clock.now(),
     },
     stop: () => void (live = false),
   };

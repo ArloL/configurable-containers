@@ -168,12 +168,23 @@ export function createBrowserPort(): BrowserPort {
         await browser.runtime.sendMessage(__CC_NOTIFY_ECHO_TO__, { cmd: "cc-notification", ...n });
       }
     },
+
+    async readStored(key) {
+      return (await browser.storage.local.get(key))[key];
+    },
+
+    async writeStored(key, value) {
+      await browser.storage.local.set({ [key]: value });
+    },
   };
 }
 
 // Production clock: schedules on the extension's global timer (return value unused).
+// `now` is wall-clock on purpose — a stored deadline is compared against it after a
+// background restart that a monotonic counter would not have been running for.
 export const realClock: Clock = {
   setTimeout: (fn, ms) => {
     globalThis.setTimeout(fn, ms);
   },
+  now: () => Date.now(),
 };

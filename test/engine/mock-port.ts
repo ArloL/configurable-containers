@@ -114,6 +114,10 @@ export function aFakeBrowser(): MockPort {
   let activeTab: Tab | null = null;
   const cookieStore = new Map<string, Map<string, Cookie>>(); // storeId -> name -> cookie
   const registeredScripts: RegisterContentScriptDetails[] = [];
+  // storage.local. Lives on the BROWSER, not the background session, which is the whole
+  // point: it is what a restart is allowed to still find. Values are held as JSON text
+  // for the same reason the real one does.
+  const stored = new Map<string, string>();
 
   function makeTab(props: TabProps): Tab {
     const id = ++tabId;
@@ -233,6 +237,15 @@ export function aFakeBrowser(): MockPort {
     async notify(n) {
       notifications.push(n);
     },
+    async readStored(key) {
+      // Round-trips through JSON like the real storage does, so a test cannot pass by
+      // handing back the very object the caller still holds a reference to.
+      const raw = stored.get(key);
+      return raw === undefined ? undefined : JSON.parse(raw);
+    },
+    async writeStored(key, value) {
+      stored.set(key, JSON.stringify(value));
+    },
   };
 
   return {
@@ -300,6 +313,9 @@ export function aFakeClock(): { clock: Clock; advance(ms: number): Promise<void>
     setTimeout(fn, ms) {
       timers.set(++seq, { dueAt: now + ms, fn });
     },
+    // The same `now` the timers are scheduled against, so a stored deadline and a fired
+    // timer can never disagree about what time it is.
+    now: () => now,
   };
   return {
     clock,
