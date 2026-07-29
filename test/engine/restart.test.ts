@@ -160,6 +160,41 @@ describe("a background restart — state that cannot be", () => {
     expect([...browser.containers.values()].map((c) => c.name)).toEqual(["tmp2"]);
   });
 
+  // The restart here is the one users actually cause: a config save calls
+  // runtime.reload(). Before the grace was written down, that reload lost every pending
+  // one AND ran a startup sweep that reclaimed empty containers at grace 0 — so hitting
+  // Save destroyed whichever throwaways happened to be mid-grace, which is F10's
+  // "disposed too early" arriving by the most ordinary route there is. The remaining
+  // grace is what has to survive; both halves are asserted, because a disposer that
+  // simply never removed anything would also pass the first one.
+  it("resumes the remaining grace of a throwaway emptied before the restart", async () => {
+    const { browser, clock, advance } = aBrowserWithFakeClock();
+    const sourceTab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
+    let session = await startTheBackground(browser, clock, workConfig());
+
+    await browser.navigates(aNavigationTo({ tabId: sourceTab.id }));
+    const throwaway = [...browser.containers.values()].find((c) => c.name === "tmp1")!;
+    const onlyTabInTheThrowaway = theTabOtherThan(browser, sourceTab.id);
+
+    // The last tab closes: the grace starts, and the cookies are meant to outlive it by
+    // five minutes so an undo-close lands back in the same session.
+    await browser.closesTab(onlyTabInTheThrowaway);
+    await advance(1000); // one second in — nowhere near GRACE_MS
+    expect(browser.removedContainers).toEqual([]);
+
+    // A suspend/wake cycle. Nothing the user did, and nothing they can see.
+    session = await restartTheBackground(session, browser, clock, workConfig());
+    await advance(0);
+    expect(browser.removedContainers).toEqual([]); // the grace is NOT restarted from zero
+
+    // Still nothing at one tick short of the ORIGINAL deadline — the second the tab
+    // closed, not the second the background came back.
+    await advance(GRACE_MS - 1000 - 1);
+    expect(browser.removedContainers).toEqual([]);
+    await advance(1);
+    expect(browser.removedContainers).toEqual([throwaway.cookieStoreId]);
+  });
+
   it("drops a redirector close it had already scheduled", async () => {
     const { browser, clock, advance } = aBrowserWithFakeClock();
     const redirectorConfig = parseConfig("rules:\n  - match: t.co\n    redirector: true\n");

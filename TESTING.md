@@ -147,9 +147,12 @@ home of F1, F2, F7, F8, F10.
   class unit tests structurally cannot see. Guard state must therefore be
   reconstructible from `browser.*` queries or persisted, and the tests enforce that one
   mechanism at a time: the throwaway counter resuming past a live `tmp<N>`, the
-  disposer's startup `tabContainer` reseed, auto-temp's container check standing in for
-  the `processed` set it no longer has, and the already-contained guard once a tab has
-  committed. Each is revert-verified — back it out and exactly one case goes red.
+  disposer resuming the *remaining* grace of a container emptied before the restart (the
+  one piece that is genuinely **persisted** rather than re-queried — see
+  `EMPTY_SINCE_KEY`), auto-temp's container check standing in for the `processed` set it
+  no longer has, and the already-contained guard once a tab has committed. Each is
+  revert-verified — back it out and at least one case goes red (the disposer's stored
+  map reds seven).
 
   Not a hypothetical MV3 concern: `src/extension/options.ts` calls `runtime.reload()` on
   every config save, so a user triggers this in the shipping MV2 build. What that costs
