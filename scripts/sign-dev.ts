@@ -82,10 +82,6 @@ async function main() {
   if (signed.length !== 1) {
     throw new Error(`expected exactly one signed xpi in ${SIGNED_DIR}, found ${signed.length}`);
   }
-  writeFileSync(
-    path.join(SIGNED_DIR, "build.json"),
-    JSON.stringify({ version, xpi: signed[0] }, null, 2) + "\n",
-  );
 
   console.log(`\nSigned ${DEV_NAME} ${version} -> ${SIGNED_DIR}`);
   console.log("Install it via about:addons -> gear -> Install Add-on From File.");

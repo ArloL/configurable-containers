@@ -76,11 +76,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.new_version }}
         run: |
-          xpi="dist/dev/signed/$(jq --raw-output .xpi dist/dev/signed/build.json)"
           gh release create "v${VERSION}" \
             --title "Release v${VERSION}" \
             --prerelease \
-            "$xpi"
+            ./dist/dev/signed/*.xpi
 
   required-status-check:
     name: ci.required-status-check
