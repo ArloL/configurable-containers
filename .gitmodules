@@ -1,8 +1,0 @@
-[submodule "mac"]
-	path = mac
-	url = https://github.com/mozilla/multi-account-containers
-	ignore = dirty
-[submodule "tcp"]
-	path = tcp
-	url = https://github.com/GodKratos/temporary-containers
-	ignore = dirty
