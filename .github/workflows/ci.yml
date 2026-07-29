@@ -67,11 +67,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write # pushes the tag, creates the release
-    # One signing at a time; queued rather than cancelled, so every merge still
-    # produces a build.
-    concurrency:
-      group: publish-dev
-      cancel-in-progress: false
     steps:
       # calver-tag-action pushes a tag with these credentials and scans the existing
       # v<YYMM>.* tags for a free micro, so unlike the test job both are needed.
