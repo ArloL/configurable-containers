@@ -2,7 +2,6 @@
 - [No Gherkin DSL for tests](no-gherkin-dsl.md) — no prose spec at all; the tests are the spec, read via naming
 - [Compare tooling before deciding](compare-tooling-before-deciding.md) — wants detailed tool comparisons before being asked to pick
 - [E2E driver is Selenium not Playwright](e2e-driver-selenium-not-playwright.md) — Playwright can't see WebExtension container tabs; harness uses selenium/geckodriver
-- [Upstream reference submodules](upstream-reference-submodules.md) — tcp/ and mac/ track upstream Temporary Containers + Multi-Account Containers for reference
 - [Logical commits](logical-commits.md) — split by reason for the change, dependency-ordered, each one green; conventional prefixes
 - [No scratch notes in the repo](no-scratch-notes-in-repo.md) — fold findings into CLAUDE.md/tests, then delete the notes file
 - [User runs manual Firefox](user-runs-manual-firefox.md) — never launch `npm run manual` yourself; verify headless, hand interactive checks over
