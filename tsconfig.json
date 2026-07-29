@@ -5,6 +5,7 @@
     "moduleResolution": "Bundler",
     "strict": true,
     "esModuleInterop": true,
+    "allowJs": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "types": ["node", "firefox-webext-browser"],
