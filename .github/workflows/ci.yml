@@ -68,7 +68,7 @@ jobs:
           WEB_EXT_API_KEY: ${{ secrets.WEB_EXT_API_KEY }}
           WEB_EXT_API_SECRET: ${{ secrets.WEB_EXT_API_SECRET }}
           VERSION: ${{ steps.version.outputs.new_version }}
-        run: npm run sign:dev -- "$VERSION"
+        run: npm run sign:dev
       # --prerelease is what tells a dev build from a listed one
       # scripts/dev-updates.ts filters on it
       - name: Publish the immutable dev release
