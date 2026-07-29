@@ -415,12 +415,11 @@ single-container rule kept it. Add a caller rather than a second copy.
   with a **cache-busting** query param so the probe re-reports into a new document.
 - **Real MAC is loadable from `mac/src` unbuilt, but four things bite** (all handled in
   `buildXpiFor`/`launch`, see `test/e2e/mac-interop.test.ts`):
-  1. `mac/src/_locales` is a **nested submodule** (mozilla-l10n) we do not check out, and
+  1. `mac/src/_locales` is a **submodule** (mozilla-l10n) we do not check out, and
      MAC's manifest declares `default_locale: "en"` — Firefox then refuses the add-on
      with a bare *"Extension is invalid"* that names nothing. The harness synthesises the
      six `__MSG_` keys the manifest interpolates; they are display strings the background
-     logic never reads. This is why CI checks out `submodules: true` and **not**
-     `recursive` — recursive would drag in a localisation repo for six labels.
+     logic never reads.
   2. **A MAC site assignment cannot be scripted.** It is created from MAC's
      browser-action popup or context menu — chrome UI Selenium cannot drive, the same
      limit as `commands.onCommand` — and MAC's external API exposes only `getAssignment`,
@@ -428,7 +427,7 @@ single-container rule kept it. Add a caller rather than a second copy.
      `popup.html` as a tab assigns the popup's own `moz-extension:` url; and WebDriver
      must activate a tab to script it, so there is no arrangement that works. The harness
      instead appends one script to MAC's background **page** inside the `.xpi` it builds
-     (the submodule on disk is untouched) which calls MAC's **own** `storageArea.set`, so
+     (the checkout on disk is untouched) which calls MAC's **own** `storageArea.set`, so
      the storage-key format lives in MAC's code and is never mirrored here.
   3. **Seed the assignment with `neverAsk: true`.** Otherwise MAC parks the tab on its
      confirm-page interstitial instead of reopening (`assignManager.js`,
@@ -477,8 +476,7 @@ single-container rule kept it. Add a caller rather than a second copy.
 
 ## tcp/ and mac/
 
-Git submodules tracking upstream Temporary Containers and Multi-Account Containers as
+Git checkouts tracking upstream Temporary Containers and Multi-Account Containers as
 **read-only reference** (we re-implement both). Consult them for patterns — TCP's
 `src/background/cleanup.ts` shaped the disposer; its `getAssignment` handshake shaped
-the F7 MAC-defer logic. `submodule.*.ignore=dirty` hides their CRLF↔LF working-tree
-churn; don't "fix" those files.
+the F7 MAC-defer logic.
