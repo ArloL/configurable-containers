@@ -206,6 +206,11 @@ export async function launch(opts: LaunchOptions = {}): Promise<Session> {
   if (opts.headless !== false) options.addArguments("-headless");
   options.setPreference("privacy.userContext.enabled", true);
   options.setPreference("xpinstall.signatures.required", false);
+  // MV3 makes "userScripts" an optional-only permission, so the scripts overlay is
+  // gated behind a permissions.request() from the options page. The request still
+  // needs a user gesture (Selenium supplies that with a real click) but the doorhanger
+  // it raises is browser chrome Selenium cannot dismiss — this pref auto-approves it.
+  options.setPreference("extensions.webextOptionalPermissionPrompts", false);
   // Pin CC's moz-extension:// origin so ccExtensionUrl() addresses a real page.
   options.setPreference(
     "extensions.webextensions.uuids",

@@ -9,6 +9,8 @@
     #cc-error { color: #a00; white-space: pre-wrap; min-height: 1.2em; }
     #cc-status { color: #555; }
     button { font-size: 14px; padding: 4px 12px; }
+    #cc-grant-scripts { border: 1px solid #c60; background: #fff8f0; padding: 8px 12px; }
+    #cc-grant-scripts[hidden] { display: none; }
   </style>
 </head>
 <body>
@@ -16,6 +18,18 @@
   <textarea id="cc-config" spellcheck="false"></textarea>
   <p id="cc-error"></p>
   <p><button id="cc-save">Save</button> <span id="cc-status"></span></p>
+  <!-- Shown only when the config actually uses `scripts:` and the permission is
+       missing. Firefox allows "userScripts" as an optional permission only, and
+       permissions.request needs a user gesture — so this button is the only place
+       the grant can happen. -->
+  <div id="cc-grant-scripts" hidden>
+    <p>
+      Your config uses <code>scripts:</code> overlays, which need the
+      <strong>user scripts</strong> permission. Until it is granted, no scripts are
+      injected — routing is unaffected.
+    </p>
+    <p><button id="cc-grant">Grant permission</button> <span id="cc-grant-status"></span></p>
+  </div>
   <script src="options.js"></script>
 </body>
 </html>

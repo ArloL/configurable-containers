@@ -70,13 +70,22 @@ function fakeBrowser() {
       },
       _set: null as unknown,
     },
-    contentScripts: {
-      register: async (d: unknown) => {
-        f.contentScripts._registered = d;
-        return { unregister: async () => { f.contentScripts._unregistered = true; } };
+    // MV3: contentScripts.register is gone and scripting.registerContentScripts takes
+    // files only, so inline `run:` code goes through userScripts — which is granted at
+    // runtime, hence the permissions stub alongside it.
+    userScripts: {
+      register: async (scripts: { id: string }[]) => {
+        f.userScripts._registered = scripts;
+      },
+      unregister: async (filter: unknown) => {
+        f.userScripts._unregistered = filter;
       },
       _registered: null as unknown,
-      _unregistered: false,
+      _unregistered: null as unknown,
+    },
+    permissions: {
+      contains: async (_p: unknown) => f.permissions._granted,
+      _granted: true,
     },
     notifications: {
       create: async (opts: Record<string, unknown>) => {
@@ -184,21 +193,42 @@ describe("createBrowserPort", () => {
     expect(await port.getCookie({ name: "absent", url: "https://a.test/", storeId: "firefox-container-2" })).toBeNull();
   });
 
-  it("registerContentScript delegates to browser.contentScripts.register and returns a handle", async () => {
+  it("registerContentScript registers the code as a user script and unregisters it by id", async () => {
     const port = createBrowserPort();
     const handle = await port.registerContentScript({
       matches: ["*://work.example/*"],
       js: [{ code: "localStorage.setItem('cc_script','1');" }],
       runAt: "document_start",
     });
-    expect(f.contentScripts._registered).toMatchObject({
+    const registered = f.userScripts._registered as { id: string }[];
+    expect(registered).toHaveLength(1);
+    expect(registered[0]).toMatchObject({
       matches: ["*://work.example/*"],
       js: [{ code: "localStorage.setItem('cc_script','1');" }],
       runAt: "document_start",
     });
-    expect(f.contentScripts._unregistered).toBe(false);
+    // The id is ours to generate, and unregister has to name the SAME one — an
+    // unregister that missed would leave the script injecting forever.
+    expect(f.userScripts._unregistered).toBeNull();
     await handle.unregister();
-    expect(f.contentScripts._unregistered).toBe(true);
+    expect(f.userScripts._unregistered).toEqual({ ids: [registered[0].id] });
+  });
+
+  // "userScripts" is optional-only in Firefox, so a first run genuinely may not hold it.
+  // Registering anyway throws, inside background.ts's floated async tail where the throw
+  // is swallowed — so the adapter must check first and stay quiet on the wire.
+  it("registerContentScript injects nothing when the userScripts permission is absent", async () => {
+    f.permissions._granted = false;
+    const port = createBrowserPort();
+    const handle = await port.registerContentScript({
+      matches: ["*://work.example/*"],
+      js: [{ code: "localStorage.setItem('cc_script','1');" }],
+      runAt: "document_start",
+    });
+    expect(f.userScripts._registered).toBeNull();
+    // The handle is still a working no-op: a caller that unregisters must not throw.
+    await handle.unregister();
+    expect(f.userScripts._unregistered).toBeNull();
   });
 });
 

@@ -18,6 +18,9 @@ function mapTab(t: browser.tabs.Tab): Tab {
 // toast that lives in no DOM. "" in every shipped build, which esbuild folds away.
 declare const __CC_NOTIFY_ECHO_TO__: string;
 
+// Counter behind the userScripts registration ids in registerContentScript below.
+let userScriptSeq = 0;
+
 // Real BrowserPort over browser.*. Mechanical, logic-free — all decisions come from
 // resolve() inside the engine. The only Firefox-specific note: a blocking
 // onBeforeRequest listener may return a Promise<BlockingResponse>, which Firefox
@@ -133,9 +136,44 @@ export function createBrowserPort(): BrowserPort {
       return c ? { name: c.name, value: c.value } : null;
     },
 
+    // MV3 removed contentScripts.register (addons-linter: UNSUPPORTED_API), and its
+    // successor scripting.registerContentScripts takes FILE paths only — there is no
+    // inline-code form, so it cannot carry a `run:` string out of the user's config.
+    // userScripts is the one MV3 API that still accepts code, which is what it exists
+    // for. Two deliberate consequences:
+    //   - The default world is USER_SCRIPT, not the extension's content-script world.
+    //     Same DOM, separate JS globals, and a CSP that forbids eval. The overlay only
+    //     ever needed page DOM (F11 is unaffected: still no cookieStoreId, so the script
+    //     runs wherever the URL loads), and user-supplied code has no business holding
+    //     extension-adjacent privileges.
+    //   - Registrations now need an `id`. It is ours to generate and must be stable
+    //     enough to unregister by; the injector registers once per startup, so a
+    //     per-call counter is sufficient and collision-free within a session.
     async registerContentScript(details): Promise<RegisteredContentScript> {
-      const reg = await browser.contentScripts.register(details);
-      return { unregister: () => reg.unregister() };
+      // "userScripts" is an OptionalOnlyPermission in Firefox: it cannot sit in
+      // `permissions`, so at startup we may simply not have it. Registering without it
+      // throws, and this runs inside background.ts's floated async tail where a throw
+      // would be swallowed — so check first and fail LOUDLY but harmlessly, leaving the
+      // rest of routing untouched. Asking for it needs a user gesture, which a
+      // background script does not have; that request belongs on the options page.
+      if (!(await browser.permissions.contains({ permissions: ["userScripts"] }))) {
+        console.error(
+          "[cc] the config declares scripts: overlays, but the \"userScripts\" permission " +
+            "has not been granted — no scripts were injected. Grant it in the add-on's " +
+            "preferences.",
+        );
+        return { unregister: () => Promise.resolve() };
+      }
+      const id = `cc-${++userScriptSeq}`;
+      await browser.userScripts.register([
+        {
+          id,
+          matches: details.matches,
+          js: details.js.map((s) => ({ code: s.code })),
+          runAt: details.runAt,
+        },
+      ]);
+      return { unregister: () => browser.userScripts.unregister({ ids: [id] }) };
     },
 
     onMessage(handler) {
