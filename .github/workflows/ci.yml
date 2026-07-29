@@ -43,7 +43,7 @@ jobs:
           FIREFOX_BIN: ${{ steps.firefox.outputs.firefox-path }}
         run: npm test
 
-  publish-dev:
+  prerelease:
     name: Publish unlisted dev build
     needs: test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -56,24 +56,19 @@ jobs:
           fetch-depth: 0
           # calver-tag-action pushes a tag with these
           persist-credentials: true
-
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: 22
           cache: npm
-
       - run: npm ci
-
       - uses: ArloL/calver-tag-action@0e91bea86df7d9b445b6dbde498d30c273032ea0 # v2607.0.105
         id: version
-
       - name: Build and sign the unlisted dev build
         env:
           WEB_EXT_API_KEY: ${{ secrets.WEB_EXT_API_KEY }}
           WEB_EXT_API_SECRET: ${{ secrets.WEB_EXT_API_SECRET }}
           VERSION: ${{ steps.version.outputs.new_version }}
         run: npm run sign:dev -- "$VERSION"
-
       # --prerelease is what tells a dev build from a listed one
       # scripts/dev-updates.ts filters on it
       - name: Publish the immutable dev release
@@ -86,48 +81,6 @@ jobs:
             --title "Release v${VERSION}" \
             --prerelease \
             "$xpi"
-
-  publish-dev-updates:
-    name: Publish the dev update manifest
-    # Rebuilt from the releases API every time, so withdrawing a bad dev build is
-    # deleting its release and re-running this.
-    needs: publish-dev
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    # Pages permits one deployment at a time, and a superseded run is rebuilt from
-    # scratch by the next one.
-    concurrency:
-      group: pages
-      cancel-in-progress: true
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
-
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
-        with:
-          node-version: 22
-          cache: npm
-
-      - run: npm ci
-
-      - name: Build updates.json from the dev releases
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: npx tsx scripts/dev-updates.ts
-
-      - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
-        with:
-          path: site
-
-      - uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
-        id: deploy
 
   required-status-check:
     name: ci.required-status-check
