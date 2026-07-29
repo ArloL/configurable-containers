@@ -68,11 +68,21 @@ describe("disposer — targeted grace disposal", () => {
 });
 
 describe("disposer — GC sweep + startup", () => {
-  it("startup sweep removes a pre-existing empty tmp container immediately", async () => {
+  // An empty tmp container CC has no stored note about gets its grace started NOW rather
+  // than being reclaimed on the spot. That costs an orphan from a previous browser
+  // session one extra grace before it goes — and buys the thing the old
+  // reclaim-immediately rule made impossible: an empty container whose grace is still
+  // running is indistinguishable from an orphan unless the emptiness was written down,
+  // so reclaiming unrecorded ones at once is what destroyed live throwaways on every
+  // config save. Lateness on an empty container is invisible; earliness loses a
+  // session (F10).
+  it("startup sweep gives a pre-existing empty tmp container its grace, then removes it", async () => {
     const { browser, clock, advance } = aBrowserWithFakeClock();
     const throwaway = browser.addContainerNamed({ name: "tmp1" }); // exists, no tabs
     createDisposer({ port: browser.port, clock, graceMs: GRACE });
-    await advance(0); // startup sweep uses skipDelay (0ms)
+    await advance(0); // startup sweep: notices it is empty, writes the note
+    expect(browser.removedContainers).toEqual([]);
+    await advance(GRACE);
     expect(browser.removedContainers).toEqual([throwaway.cookieStoreId]);
   });
 
