@@ -214,6 +214,22 @@ export function createBrowserPort(): BrowserPort {
     async writeStored(key, value) {
       await browser.storage.local.set({ [key]: value });
     },
+
+    async scheduleWake(name, delayMs) {
+      // `when` rather than `delayInMinutes`: the deadline is already absolute, and
+      // minutes cannot express a wound-down test grace. Firefox may fire a short alarm
+      // late — harmless here, because the alarm is only the backstop for a suspension
+      // and the setTimeout beside it is what keeps disposal punctual while alive.
+      browser.alarms.create(name, { when: Date.now() + delayMs });
+    },
+
+    async cancelWake(name) {
+      await browser.alarms.clear(name);
+    },
+
+    onWake(handler) {
+      browser.alarms.onAlarm.addListener((alarm) => handler(alarm.name));
+    },
   };
 }
 

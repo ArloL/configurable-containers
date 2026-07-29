@@ -193,14 +193,25 @@ export interface BrowserPort {
   notify(n: NotificationSpec): Promise<void>;
 
   // Durable key/value, backed by storage.local. The ONE thing here that outlives the
-  // background context, which is what makes it worth a seam: a pending timer does not,
-  // and `options.ts` calls runtime.reload() on every config save. Any deadline that has
-  // to be honoured across one of those must be stored as a FACT ("empty since T") and
-  // re-derived on the next startup, rather than held in a closure that dies with the
-  // page. Deliberately untyped: the seam stores plain JSON, and each caller owns the
-  // shape under its own key.
+  // background context, which is what makes it worth a seam: a pending timer does not
+  // survive an MV3 suspension, so any deadline that must be honoured across one has to
+  // be stored as a FACT ("empty since T") and re-derived on the next startup, rather
+  // than held in a closure that dies with the page. Deliberately untyped: the seam
+  // stores plain JSON, and each caller owns the shape under its own key.
   readStored(key: string): Promise<unknown>;
   writeStored(key: string, value: unknown): Promise<void>;
+
+  // Wake the extension at a deadline, backed by browser.alarms. A `setTimeout` CANNOT do
+  // this: it dies with the background context, and an MV3 event page is suspended
+  // whenever it is idle — so in a browser nobody is touching, a pending grace has
+  // nothing left to fire it and the throwaway sits there. Alarms are held by the browser
+  // rather than the page, so they survive the suspension and re-run the background
+  // script. Verified the hard way: with only a timer, the nightly real-delay case found
+  // a throwaway still alive eight minutes into a five-minute grace.
+  // Re-scheduling the same name replaces the pending wake.
+  scheduleWake(name: string, delayMs: number): Promise<void>;
+  cancelWake(name: string): Promise<void>;
+  onWake(handler: (name: string) => void): void;
 }
 
 // Injected timing seam so grace/GC delays are deterministic in tests. The disposer
@@ -208,8 +219,8 @@ export interface BrowserPort {
 // void-returning method is enough and avoids @types/node timer-handle friction.
 //
 // `now` is part of the seam for the same reason the storage is: a grace that survives a
-// background restart is arithmetic on two timestamps, and the test clock has to supply
-// both halves or the fake time and the stored time would disagree.
+// restart is arithmetic on two timestamps, and the test clock has to supply both halves
+// or the fake time and the stored time would disagree.
 export interface Clock {
   setTimeout(fn: () => void, ms: number): void;
   now(): number;

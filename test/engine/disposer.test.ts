@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { aFakeBrowser, aFakeClock } from "./mock-port";
-import { createDisposer } from "../../src/engine/disposer";
+import { createDisposer, WAKE_NAME } from "../../src/engine/disposer";
 
 const GRACE = 300_000;
 const GC_INTERVAL_MS = 600_000;
@@ -73,8 +73,8 @@ describe("disposer — GC sweep + startup", () => {
   // session one extra grace before it goes — and buys the thing the old
   // reclaim-immediately rule made impossible: an empty container whose grace is still
   // running is indistinguishable from an orphan unless the emptiness was written down,
-  // so reclaiming unrecorded ones at once is what destroyed live throwaways on every
-  // config save. Lateness on an empty container is invisible; earliness loses a
+  // so reclaiming unrecorded ones at once is what disposed live throwaways early on
+  // every MV3 wake. Lateness on an empty container is invisible; earliness loses a
   // session (F10).
   it("startup sweep gives a pre-existing empty tmp container its grace, then removes it", async () => {
     const { browser, clock, advance } = aBrowserWithFakeClock();
@@ -84,6 +84,49 @@ describe("disposer — GC sweep + startup", () => {
     expect(browser.removedContainers).toEqual([]);
     await advance(GRACE);
     expect(browser.removedContainers).toEqual([throwaway.cookieStoreId]);
+  });
+
+  // A setTimeout is not enough on its own. An MV3 event page is suspended whenever it is
+  // idle, taking every pending timer with it — and in a browser nobody is touching,
+  // nothing else will ever re-run the disposer. Only a browser-held alarm can. This went
+  // unarmed once and the nightly real-delay case found a throwaway still alive eight
+  // minutes into a five-minute grace, because the fast tests all happen to keep browsing
+  // and so keep waking the page by accident.
+  it("arms a browser alarm for the deadline, not only a timer", async () => {
+    const { browser, clock, advance } = aBrowserWithFakeClock();
+    browser.addContainerNamed({ name: "tmp1" }); // empty from the start
+    createDisposer({ port: browser.port, clock, graceMs: GRACE });
+    await advance(0);
+    expect(browser.scheduledWakes.get(WAKE_NAME)).toBe(GRACE);
+  });
+
+  it("disposes on the alarm alone, when the suspension took every timer with it", async () => {
+    const { browser, clock, advance } = aBrowserWithFakeClock();
+    const throwaway = browser.addContainerNamed({ name: "tmp1" });
+    // A background whose timers never fire: precisely what a suspended event page is.
+    // Time still passes, which is the whole point — the deadline arrives while nothing
+    // is running to notice.
+    const suspendedPage = { setTimeout: () => {}, now: () => clock.now() };
+    createDisposer({ port: browser.port, clock: suspendedPage, graceMs: GRACE });
+    await advance(0);
+
+    await advance(GRACE * 2);
+    expect(browser.removedContainers).toEqual([]); // nothing fired — the timer really is dead
+
+    await browser.wakes(WAKE_NAME);
+    expect(browser.removedContainers).toEqual([throwaway.cookieStoreId]);
+  });
+
+  it("drops the alarm once nothing is pending, so an idle browser is not woken for nothing", async () => {
+    const { browser, clock, advance } = aBrowserWithFakeClock();
+    const throwaway = browser.addContainerNamed({ name: "tmp1" });
+    createDisposer({ port: browser.port, clock, graceMs: GRACE });
+    await advance(0);
+    expect(browser.scheduledWakes.has(WAKE_NAME)).toBe(true);
+
+    await advance(GRACE);
+    expect(browser.removedContainers).toEqual([throwaway.cookieStoreId]);
+    expect(browser.scheduledWakes.has(WAKE_NAME)).toBe(false);
   });
 
   it("startup sweep leaves a permanent container alone", async () => {

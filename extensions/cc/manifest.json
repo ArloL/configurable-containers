@@ -18,7 +18,8 @@
     "storage",
     "tabs",
     "contextualIdentities",
-    "notifications"
+    "notifications",
+    "alarms"
   ],
   "optional_permissions": [
     "userScripts"

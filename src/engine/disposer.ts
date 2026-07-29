@@ -8,6 +8,10 @@ const GC_INTERVAL_MS = 600_000; // 10 min, matches TCP
 // held in a timer.
 export const EMPTY_SINCE_KEY = "tmpEmptySince";
 
+// browser.alarms name for the disposal deadline. One alarm, re-pointed at the nearest
+// pending deadline on every sweep.
+export const WAKE_NAME = "cc-dispose";
+
 type EmptySince = Record<string, number>;
 
 export interface DisposerOptions {
@@ -19,14 +23,14 @@ export interface DisposerOptions {
 // Removes tmp containers once empty. A sibling of the engine — no routing.
 //
 // The grace is a STORED FACT ("tmp3 has been empty since T"), not a pending timer, and
-// that is the whole design. A timer dies with the background context, and options.ts
-// calls runtime.reload() on every config save — so the previous version lost every
-// pending grace whenever the user hit Save, and its startup sweep, which reclaimed
-// orphans at grace 0, then removed the container on the spot. Saving your config
-// destroyed the throwaways that were mid-grace (F10, "disposed too early"). Storing the
-// timestamp means a restart re-derives how much grace is actually LEFT instead of
-// assuming none, and every sweep is idempotent: the answer depends only on the browser's
-// current state plus the stored map, never on what this session happens to remember.
+// that is the whole design. A timer dies with the background context, and an MV3 event
+// page is suspended whenever it is idle — so the previous version lost every pending
+// grace on suspension, and the startup sweep, which reclaimed orphans at grace 0, then
+// removed the container on the very next wake. The five-minute keep-alive was
+// effectively zero (F10, "disposed too early"). Storing the timestamp means a wake
+// re-derives how much grace is actually LEFT instead of assuming none, and every sweep
+// is idempotent: the answer depends only on the browser's current state plus the stored
+// map, never on what this session happens to remember.
 //
 // Timers are still used, but only as an optimisation — they make disposal punctual while
 // the page is alive. Losing one now costs lateness, never early removal: the safe
@@ -86,14 +90,32 @@ export function createDisposer(opts: DisposerOptions): void {
     // leaves no entry behind — the map cannot accumulate garbage across sessions.
     if (!sameMap(before, after)) await port.writeStored(EMPTY_SINCE_KEY, after);
 
-    if (soonestDeadline < Infinity) clock.setTimeout(() => void sweep(), soonestDeadline - now);
+    if (soonestDeadline < Infinity) {
+      // Both, and they cover different failures. The timer is punctual but dies with the
+      // page; the alarm survives a suspension but the browser may fire it late. In a
+      // browser nobody is touching, the alarm is the ONLY thing that will ever run this
+      // again — with just the timer, a throwaway outlived a five-minute grace by eight
+      // minutes and counting.
+      clock.setTimeout(() => void sweep(), soonestDeadline - now);
+      await port.scheduleWake(WAKE_NAME, soonestDeadline - now);
+    } else {
+      // Nothing pending: drop the alarm rather than let it keep waking an idle browser
+      // to do nothing.
+      await port.cancelWake(WAKE_NAME);
+    }
   }
 
   // A tab closing is the only way a container becomes empty, so it is the only trigger
   // needed beyond startup. WHICH container the tab was in does not matter: the sweep asks
-  // the browser. That is what lets this survive a restart — the previous version kept a
-  // tabId -> container map and had no answer for a tab it never saw created.
+  // the browser. That is what lets this survive a suspension — the previous version kept
+  // a tabId -> container map and had no answer for a tab it never saw created.
   port.onTabRemoved(() => void sweep());
+
+  // The alarm set above, coming back after a suspension. Named rather than anonymous
+  // because the browser holds alarms per extension, not per listener.
+  port.onWake((name) => {
+    if (name === WAKE_NAME) void sweep();
+  });
 
   void (async () => {
     await sweep();

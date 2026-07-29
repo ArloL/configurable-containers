@@ -57,10 +57,19 @@ export interface MockPort {
   seededCookies: SetCookieDetails[];
   notifications: NotificationSpec[];
   registeredScripts: RegisterContentScriptDetails[];
+  /** Pending browser.alarms, name -> the delay it was scheduled with. */
+  scheduledWakes: Map<string, number>;
 
   // The engine floats its notification rather than awaiting it (a navigation must not
   // wait on a toast), so a test asserting on notifications must settle first.
   settle(): Promise<void>;
+
+  /**
+   * Fire a scheduled alarm, as the browser does after suspending the page that set it.
+   * The one thing a fake clock cannot stand in for: a timer dies with the context, an
+   * alarm does not.
+   */
+  wakes(name: string): Promise<void>;
 
   /** A tab that is already open. Fires nothing. */
   existingTab(props: TabProps & { url: string }): Tab;
@@ -118,6 +127,10 @@ export function aFakeBrowser(): MockPort {
   // point: it is what a restart is allowed to still find. Values are held as JSON text
   // for the same reason the real one does.
   const stored = new Map<string, string>();
+  // browser.alarms. Also browser-held rather than session-held — an alarm outliving the
+  // page that set it is the entire reason the disposer uses one.
+  const scheduledWakes = new Map<string, number>();
+  let onWakeH: ((name: string) => void) | null = null;
 
   function makeTab(props: TabProps): Tab {
     const id = ++tabId;
@@ -172,7 +185,7 @@ export function aFakeBrowser(): MockPort {
       const wasOpen = openTabs.delete(id);
       // Firefox fires tabs.onRemoved for a tab closed through tabs.remove, exactly as it
       // does for one the user closed — the same reason createTab fires onTabCreated here.
-      // Without this a tab CC itself closed (a reopen superseding its source, a stranded
+      // Without this a tab CC itself closes (a reopen superseding its source, a stranded
       // redirector) was invisible to every onTabRemoved listener, so the disposer never
       // learned that the container it emptied had gone empty.
       if (wasOpen) onTabRemovedH?.(id);
@@ -252,6 +265,15 @@ export function aFakeBrowser(): MockPort {
     async writeStored(key, value) {
       stored.set(key, JSON.stringify(value));
     },
+    async scheduleWake(name, delayMs) {
+      scheduledWakes.set(name, delayMs);
+    },
+    async cancelWake(name) {
+      scheduledWakes.delete(name);
+    },
+    onWake(handler) {
+      onWakeH = handler;
+    },
   };
 
   return {
@@ -306,6 +328,15 @@ export function aFakeBrowser(): MockPort {
     },
     activeTabIs(tab) {
       activeTab = tab;
+    },
+    scheduledWakes,
+    // Fire a scheduled alarm, as the browser would after the page it was set from has
+    // been suspended. Deliberately does NOT consume the entry the way a real one-shot
+    // alarm does — a caller that wants that can delete it — because what the tests care
+    // about is that the handler still runs.
+    async wakes(name: string) {
+      onWakeH?.(name);
+      await flushMicrotasks();
     },
     settle: flushMicrotasks,
   };
