@@ -169,7 +169,13 @@ export function aFakeBrowser(): MockPort {
     },
     async removeTab(id) {
       closedTabIds.push(id);
-      openTabs.delete(id);
+      const wasOpen = openTabs.delete(id);
+      // Firefox fires tabs.onRemoved for a tab closed through tabs.remove, exactly as it
+      // does for one the user closed — the same reason createTab fires onTabCreated here.
+      // Without this a tab CC itself closed (a reopen superseding its source, a stranded
+      // redirector) was invisible to every onTabRemoved listener, so the disposer never
+      // learned that the container it emptied had gone empty.
+      if (wasOpen) onTabRemovedH?.(id);
     },
     async queryIdentities() {
       return [...containers.values()];
