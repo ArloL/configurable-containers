@@ -70,7 +70,7 @@ describe("packageExtension", () => {
       const { stageDir } = await packageExtension({
         version: "2607.29.1432",
         id: "configurable-containers-dev@k5d.de",
-        name: "configurable-containers (dev)",
+        name: "Configurable Containers Dev",
         updateUrl: UPDATE_URL,
         outDir,
       });
@@ -80,7 +80,7 @@ describe("packageExtension", () => {
       // installed beside the real one cannot overwrite the user's config.
       expect(manifest.browser_specific_settings.gecko.id)
         .toBe("configurable-containers-dev@k5d.de");
-      expect(manifest.name).toBe("configurable-containers (dev)");
+      expect(manifest.name).toBe("Configurable Containers Dev");
       expect(manifest.browser_specific_settings.gecko.update_url).toBe(UPDATE_URL);
       // Overriding must not drop the rest of the gecko block.
       expect(manifest.browser_specific_settings.gecko.data_collection_permissions)
