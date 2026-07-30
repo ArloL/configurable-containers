@@ -86,6 +86,27 @@ flight at the restart (a floated `containerize` mid-`await`). Firefox kills it; 
 harness lets it land. Every current case drives the restart from a settled state, so
 nothing is in flight — a future case that needs it has to close this first.
 
+## No per-machine opt-out for config sync (2026-07-30)
+
+`src/extension/config-sync.ts` publishes the config from every install; there is no
+switch. The config carries the hostnames a person visits and the names they gave their
+containers, and `storage.sync` carries it to every machine on the account. What makes
+on-by-default defensible is that it goes nowhere else — the user's own Firefox Account,
+end-to-end encrypted, no server of ours — but "defensible" is not "always what the user
+wants": a shared or work machine is the obvious case where it is not.
+
+The switch is a checkbox, a third `storage.local` key, and one branch in `start()`. It is
+deferred because a setting added before its first user is a setting shaped by guesswork,
+and because the interesting half is not the flag but what an *off* machine should do with
+a record it can already see (keep adopting? go fully local? forget the record?). Build it
+when someone wants it, and decide that question then rather than now.
+
+Related, and cheaper to answer: the L4 suite proves a config reaches the sync area but
+never that one is adopted, because nothing in a test profile can write CC's sync area
+from outside (see CLAUDE.md). If that gap ever matters more than it does today, the
+lever is a second Firefox profile in the harness sharing a sync backend — a much larger
+harness change than it sounds, and not obviously possible without an account.
+
 ## Notification volume on declined POSTs (2026-07-28)
 
 Every cross-site form POST that would change container now raises a notification,

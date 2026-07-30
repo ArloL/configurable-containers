@@ -397,6 +397,38 @@ crosses it — that is what containers exist to prevent. Practical consequences:
   and the login is discarded when the container is disposed. Disposable identity,
   on demand, no permanent Google session anywhere.
 
+## Syncing between machines
+
+The config follows you. CC mirrors it into `browser.storage.sync`, so editing it on one
+machine publishes it to every other machine signed into the same Firefox Account, where
+it is picked up and applied — the same reload a Save does locally. There is nothing to
+turn on, and no file to copy.
+
+What travels is the config text and nothing else. Container *contents* — cookies,
+logins, the throwaways themselves — are Firefox's containers, not CC's, and never leave
+the machine; neither does the disposer's record of which throwaway went empty when.
+`storage.sync` is the user's own account, end-to-end encrypted between their own
+machines. The add-on has no server and sends nothing anywhere else.
+
+Three consequences worth knowing before they surprise you:
+
+- **The last edit wins, and the one it replaced is kept.** There is no merge — the
+  config is a hand-written file with comments, and merging two of them means conflict
+  markers in a textarea. If an incoming config replaces yours, the editor says so and
+  offers the replaced text back with one click, so nothing is lost that a Save cannot
+  undo. Conflicts are decided by wall-clock time, so a machine with a badly wrong clock
+  can win an edit it should have lost.
+- **A machine that has never been edited always loses.** A fresh install joining an
+  established account pulls the real config rather than pushing the shipped seed over
+  it.
+- **There is a size limit.** Firefox caps extension sync storage; the config is split
+  across as many entries as it needs, up to about 48 000 characters. The editor shows
+  how many it is using, and says plainly when a config is too large to sync rather than
+  syncing part of it.
+
+A machine not signed into Firefox Sync is not broken — Firefox keeps the record locally
+and uploads it if an account is ever connected.
+
 ## Importing from MAC + Temporary Containers
 
 - Site assignments live in MAC's storage under `siteContainerMap@@_*`; container
@@ -413,6 +445,9 @@ crosses it — that is what containers exist to prevent. Practical consequences:
 
 **Config surface**
 - **Config format** — YAML / JSON / JSON5 / TOML. YAML is provisional.
+- **A per-machine sync opt-out** — syncing is on for every install and has no off
+  switch. A machine that should keep its config to itself has no way to say so short of
+  uninstalling. Deferred until something says the default is wrong.
 
 **Vocabulary / schema**
 - **`default` vs `auto`** — the rule-level auto-select key reuses `default`, a word
