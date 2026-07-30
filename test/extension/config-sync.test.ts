@@ -1,0 +1,249 @@
+import { describe, it, expect } from "vitest";
+import { createConfigSync, type SyncPorts } from "../../src/extension/config-sync";
+import {
+  CHUNK_CHARS,
+  MAX_PARTS,
+  META_KEY,
+  decodeRecord,
+  encodeRecord,
+  partKey,
+} from "../../src/config/sync-record";
+
+// An in-memory stand-in for browser.storage.sync plus the one local config. It fires the
+// change handler on every write, exactly as Firefox does — which is what makes the
+// anti-ping-pong case real rather than asserted by inspection.
+function aMachine(opts: { text: string; updatedAt: number }) {
+  const area: Record<string, unknown> = {};
+  const listeners: (() => void)[] = [];
+  const warnings: string[] = [];
+  const local = { text: opts.text, updatedAt: opts.updatedAt };
+  const applied: { text: string; updatedAt: number }[] = [];
+  let failReads = false;
+  let failWrites = false;
+  let writes = 0;
+
+  const ports: SyncPorts = {
+    readLocal: () => Promise.resolve({ ...local }),
+    adopt(text, updatedAt) {
+      applied.push({ text, updatedAt });
+      local.text = text;
+      local.updatedAt = updatedAt;
+      return Promise.resolve();
+    },
+    readSync() {
+      if (failReads) return Promise.reject(new Error("no account"));
+      return Promise.resolve({ ...area });
+    },
+    async writeSync(items, remove) {
+      if (failWrites) throw new Error("QuotaExceededError");
+      // A write feeds itself back as a change event below, so a lost convergence
+      // property is an infinite loop rather than a wrong answer. Without this cap the
+      // suite HANGS instead of going red — verified by backing the equal-text guard out
+      // of reconcile().
+      if (++writes > 20) throw new Error("runaway: storage.sync written 20 times");
+      Object.assign(area, items);
+      for (const key of remove) delete area[key];
+      // Firefox delivers our own write back as a change event too.
+      await Promise.resolve();
+      for (const listener of listeners) listener();
+    },
+    onSyncChanged(handler) {
+      listeners.push(handler);
+    },
+    warn(message) {
+      warnings.push(message);
+    },
+  };
+
+  return {
+    ports,
+    area,
+    local,
+    applied,
+    warnings,
+    writes: () => writes,
+    changeEvents: () => listeners.length,
+    fireChange: () => listeners.forEach((l) => l()),
+    publish(text: string, updatedAt: number) {
+      Object.assign(area, encodeRecord(text, updatedAt));
+    },
+    breakReads() {
+      failReads = true;
+    },
+    fixReads() {
+      failReads = false;
+    },
+    breakWrites() {
+      failWrites = true;
+    },
+    sync: createConfigSync(ports),
+  };
+}
+
+// Reconciliations are serialised on one chain, and a write feeds itself back as a change
+// event — so awaiting one more pass is what guarantees the queue is empty before a test
+// changes the world underneath it.
+async function settle(machine: { sync: { sync: () => Promise<unknown> } }): Promise<void> {
+  await machine.sync.sync();
+}
+
+describe("mirroring the config into storage.sync", () => {
+  it("publishes the local config when nothing has ever been published", async () => {
+    const machine = aMachine({ text: "rules: []", updatedAt: 100 });
+
+    expect(await machine.sync.start()).toBe("pushed");
+
+    expect(decodeRecord(machine.area)).toEqual({
+      state: "ok",
+      text: "rules: []",
+      updatedAt: 100,
+      parts: 1,
+    });
+  });
+
+  it("registers for changes before its first pass, so a change during it is not lost", async () => {
+    const machine = aMachine({ text: "rules: []", updatedAt: 100 });
+    await machine.sync.start();
+    expect(machine.changeEvents()).toBe(1);
+  });
+
+  it("reports the two copies as agreeing once they do", async () => {
+    const machine = aMachine({ text: "rules: []", updatedAt: 100 });
+    await machine.sync.start();
+    expect(await machine.sync.sync()).toBe("in-sync");
+  });
+
+  it("does not react to its own publication, so two machines cannot reload each other", async () => {
+    // The push above fires a change event through the same path Firefox uses. If that
+    // event could produce another adopt, a converged pair would restart forever.
+    const machine = aMachine({ text: "rules: []", updatedAt: 100 });
+    await machine.sync.start();
+    await machine.sync.sync();
+    expect(machine.applied).toEqual([]);
+  });
+
+  it("stops writing once the two copies agree", async () => {
+    // A push is itself a change event, so a lost convergence property shows up here as
+    // an unbounded write loop — the shape "both machines republish forever" takes.
+    const machine = aMachine({ text: "rules: []", updatedAt: 100 });
+    await machine.sync.start();
+    await settle(machine);
+    await settle(machine);
+    expect(machine.writes()).toBe(1);
+  });
+});
+
+describe("adopting a config from another machine", () => {
+  it("applies a newer published config", async () => {
+    const machine = aMachine({ text: "old rules", updatedAt: 100 });
+    machine.publish("new rules", 200);
+
+    expect(await machine.sync.start()).toBe("adopted");
+
+    expect(machine.applied).toEqual([{ text: "new rules", updatedAt: 200 }]);
+  });
+
+  it("applies it exactly once, however many change events follow", async () => {
+    const machine = aMachine({ text: "old rules", updatedAt: 100 });
+    machine.publish("new rules", 200);
+    await machine.sync.start();
+
+    machine.fireChange();
+    await machine.sync.sync();
+
+    expect(machine.applied).toHaveLength(1);
+  });
+
+  it("publishes over an older config rather than adopting it", async () => {
+    const machine = aMachine({ text: "my rules", updatedAt: 300 });
+    machine.publish("stale rules", 200);
+
+    expect(await machine.sync.start()).toBe("pushed");
+
+    expect(machine.applied).toEqual([]);
+    expect(decodeRecord(machine.area)).toMatchObject({ text: "my rules" });
+  });
+});
+
+describe("a published record that is only half there", () => {
+  it("waits instead of publishing over it", async () => {
+    // Reading `absent` here would roll the other machine's update back, and it would then
+    // adopt the rollback.
+    const machine = aMachine({ text: "my rules", updatedAt: 100 });
+    machine.publish("x".repeat(CHUNK_CHARS * 2), 500);
+    delete machine.area[partKey(1)];
+
+    expect(await machine.sync.start()).toBe("waiting");
+
+    expect(machine.applied).toEqual([]);
+    expect(machine.area[partKey(0)]).toBe("x".repeat(CHUNK_CHARS));
+  });
+
+  it("adopts it once the rest arrives", async () => {
+    const machine = aMachine({ text: "my rules", updatedAt: 100 });
+    const whole = encodeRecord("y".repeat(CHUNK_CHARS + 5), 500);
+    machine.area[META_KEY] = whole[META_KEY];
+    machine.area[partKey(0)] = whole[partKey(0)];
+    expect(await machine.sync.start()).toBe("waiting");
+
+    machine.area[partKey(1)] = whole[partKey(1)];
+    expect(await machine.sync.sync()).toBe("adopted");
+  });
+});
+
+describe("when storage.sync cannot do its job", () => {
+  it("leaves the local config alone when the area cannot be read", async () => {
+    const machine = aMachine({ text: "my rules", updatedAt: 100 });
+    machine.breakReads();
+
+    expect(await machine.sync.start()).toBe("failed");
+
+    expect(machine.local.text).toBe("my rules");
+    expect(machine.warnings).toEqual(["could not read storage.sync"]);
+  });
+
+  it("leaves the local config alone when the area cannot be written", async () => {
+    const machine = aMachine({ text: "my rules", updatedAt: 100 });
+    machine.breakWrites();
+
+    expect(await machine.sync.start()).toBe("failed");
+
+    expect(machine.local.text).toBe("my rules");
+    expect(machine.warnings).toEqual(["could not write storage.sync"]);
+  });
+
+  it("refuses a config too large for the area without writing anything", async () => {
+    const machine = aMachine({ text: "x".repeat(CHUNK_CHARS * MAX_PARTS + 1), updatedAt: 100 });
+
+    expect(await machine.sync.start()).toBe("too-large");
+
+    expect(machine.area).toEqual({});
+  });
+
+  it("publishes on a later pass once the area works again", async () => {
+    const machine = aMachine({ text: "my rules", updatedAt: 100 });
+    machine.breakReads();
+    expect(await machine.sync.start()).toBe("failed");
+    expect(machine.area).toEqual({});
+
+    machine.fixReads();
+    expect(await machine.sync.sync()).toBe("pushed");
+  });
+});
+
+describe("publishing a config that shrank", () => {
+  it("removes the parts the longer config left behind", async () => {
+    const machine = aMachine({ text: "x".repeat(CHUNK_CHARS * 3), updatedAt: 100 });
+    await machine.sync.start();
+    await settle(machine);
+    expect(Object.keys(machine.area)).toContain(partKey(2));
+
+    machine.local.text = "tiny";
+    machine.local.updatedAt = 200;
+    expect(await machine.sync.sync()).toBe("pushed");
+
+    expect(Object.keys(machine.area)).not.toContain(partKey(1));
+    expect(Object.keys(machine.area)).not.toContain(partKey(2));
+    expect(decodeRecord(machine.area)).toMatchObject({ text: "tiny", parts: 1 });
+  });
+});
