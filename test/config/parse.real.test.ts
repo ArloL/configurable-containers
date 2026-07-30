@@ -26,7 +26,12 @@ describe("parseConfig — real configurable-containers.config.yaml", () => {
     const r = ruleForHost("haegerconsulting.atlassian.net");
     expect(r).toBeTruthy();
     expect(r!.action).toEqual({ kind: "open", containers: ["Haeger"] });
-    expect(r!.match.length).toBe(4);
+    // What this pins is that SEVERAL unrelated hosts collapse onto ONE curated
+    // container name — not how many. The exact host list is config churn (adding a
+    // work domain is not a parser regression), so an `=== 4` here just fails CI on
+    // every edit; assert the shape and a host that must not silently drop out.
+    expect(r!.match.length).toBeGreaterThan(1);
+    expect(r!.match.map(hostOf)).toContain("haeger-consulting.atlassian.net");
   });
 
   it("keeps outlook.cloud.microsoft as a choice (open [Haeger, HSP], no default)", () => {
