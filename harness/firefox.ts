@@ -311,6 +311,31 @@ export async function readContainerList(driver: WebDriver): Promise<string[]> {
   return raw ? raw.split(",") : [];
 }
 
+// Block until the probe has reported on the document the driver is CURRENTLY on.
+//
+// Every read below is of an attribute the probe writes from an async
+// `tabs.executeScript`, issued only after two awaited `cookies.getAll` round-trips — so
+// the attributes land some time AFTER `driver.get` resolves, while server-rendered
+// markup (`data-seen-cookie`) is there the instant the document parses. Reading the two
+// in the same breath is therefore a race, and it reads as "the cookie is missing" rather
+// than as "nobody has answered yet".
+//
+// Almost every case in the suite is already covered, because `awaitContainerTab` polls
+// `document.title` and the probe writes the title in the SAME injected script as the
+// attributes. This is for the case that has no reopen to wait for: a same-site
+// navigation CC deliberately leaves alone.
+export async function awaitProbeReport(driver: WebDriver, timeoutMs = 10_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const reported = await driver.executeScript(
+      "return document.documentElement.hasAttribute('data-cc-cookies-here');"
+    );
+    if (reported === true) return;
+    await driver.sleep(100);
+  }
+  throw new Error(`probe never reported on ${await driver.getCurrentUrl()}`);
+}
+
 // The Cookie header the server received (F12 wire side), reflected into the body.
 export async function readSeenCookie(driver: WebDriver): Promise<string> {
   return (await driver.executeScript(

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import {
-  launch, awaitContainerTab, readCookieNamesHere, readCookieNamesDefault, readSeenCookie,
-  type Session,
+  launch, awaitContainerTab, awaitProbeReport, readCookieNamesHere, readCookieNamesDefault,
+  readSeenCookie, type Session,
 } from "../../harness/firefox";
 
 // F11, the one thing containers must prevent: a cookie set in one throwaway is
@@ -51,6 +51,10 @@ describe("cookie boundary (real Firefox, CC + probe)", () => {
     // boundary is being tested on the wire, not just in document.cookie.
     await firefox.driver.get(again);
     expect(await readSeenCookie(firefox.driver)).toContain("f11=secret");
+    // Nothing was reopened here — same site, so CC keeps the tab — which means there is
+    // no awaitContainerTab to have waited out the probe's async report. Wait for it
+    // explicitly, or an unanswered probe reads as a cookie that is not there.
+    await awaitProbeReport(firefox.driver);
     expect(await readCookieNamesHere(firefox.driver)).toContain("f11");
 
     // WHEN the same site is visited afresh, it lands in a DIFFERENT throwaway.

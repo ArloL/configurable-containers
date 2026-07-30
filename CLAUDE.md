@@ -403,6 +403,17 @@ single-container rule kept it. Add a caller rather than a second copy.
   the probe's usual title/attribute reporting can't see them. It reports each tab's
   `windowId` too, which is the only way to tell "the popup survived" from "the routed tab
   reappeared in the main window" — window handles alone don't distinguish them.
+- **The probe's data attributes land AFTER `driver.get` resolves, and an unanswered probe
+  reads as an empty answer.** `reportTab` awaits two `cookies.getAll` calls before its
+  `tabs.executeScript`, while server-rendered markup (`data-seen-cookie`) is in the
+  document the moment it parses — so asserting on both in the same breath is a race that
+  reports "the cookie is not there". Almost every case is covered for free, because
+  `awaitContainerTab` polls `document.title` and the probe writes the title in the *same*
+  injected script as the attributes. The exception is a navigation with **no reopen to wait
+  for** — a same-site hop CC deliberately leaves alone — which needs `awaitProbeReport`.
+  `cookie-boundary.test.ts` carried that race latently and only lost it once config sync
+  added a `storage.sync` round-trip to startup; the signature was the *control* arm failing
+  (`expected [] to include 'f11'`) while the wire-side assertion on the line above passed.
 - **Two tests in one session must not share a URL.** The choice-screen cases each leave a
   `figma.example` tab open, so a later `tabs.find(t => t.url.startsWith(host))` matched the
   *earlier* test's tab and read its index. Give a case its own query string. Tab indices
