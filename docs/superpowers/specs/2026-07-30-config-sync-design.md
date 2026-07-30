@@ -292,15 +292,23 @@ reports `too-large` without writing; survives a throwing area. This is the level
 adoption, because L4 cannot reach it (below).
 
 **L4 — `test/e2e/config-sync.test.ts`.** Two cases, both about what only real Firefox can
-answer:
+answer, and both driven by the *startup* push rather than by a Save:
 
-1. **A saved config reaches the sync area.** Edit, Save, and after the reload the options
-   page reports the config as synced. This proves the whole chain — local write, reload,
-   background push, `browser.storage.sync.set` accepted by Firefox — rather than a mock's
-   opinion of it.
-2. **A config larger than one item still round-trips.** A config past `CHUNK_CHARS` reports
+1. **A config reaches the sync area.** Park, open the editor, and it reports the config as
+   published — so Firefox accepted a `storage.sync.set` of this shape and it reads back
+   byte-identical to `storage.local`.
+2. **A config larger than one item still round-trips.** A seed past `CHUNK_CHARS` reports
    more than one part. Firefox enforces the per-item quota; a single-item implementation
    fails here and nowhere else in the suite.
+
+**Neither case saves anything, and that is deliberate.** The background is the only writer
+and it publishes in its startup tail, so a config reaches the sync area with nobody
+touching the editor. Driving a Save instead would mean observing the result *after*
+`runtime.reload()` — which means re-parking the driver on a window handle that is by then a
+torn-down extension page. The first version of this file did exactly that and both cases
+timed out, taking `afterAll` down with them: a wedged driver fails as a bare timeout, not
+as an assertion. The save-to-publish handoff is one `readLocal` away from what these cases
+already prove, and the fake-ports level owns it.
 
 **What L4 cannot cover, and why.** Adoption needs a change to appear in the sync area from
 *outside* this profile. A test profile has no Firefox Account, WebDriver cannot navigate to

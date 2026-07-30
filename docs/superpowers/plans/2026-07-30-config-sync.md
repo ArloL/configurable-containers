@@ -103,7 +103,7 @@
 **Files:** Create `test/e2e/config-sync.test.ts`.
 
 - [x] Reuse `test/e2e/options.test.ts`'s park-on-probe-page / open-editor helpers.
-- [x] Case 1: edit, Save, and after the reload the status reports the config synced.
+- [x] Case 1: park, open the editor, and the status reports the config published. Drive it from the **startup** push, not a Save — observing after `runtime.reload()` means re-parking on a torn-down extension page, which wedges the driver.
 - [x] Case 2: a config past `CHUNK_CHARS` reports more than one part.
 - [x] Poll the status element rather than sleeping — the push happens in the background's tail.
 

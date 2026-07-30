@@ -8,118 +8,88 @@ import {
 
 const OPTIONS_URL = ccExtensionUrl("options.html");
 
-const ONE_PART_CONFIG = `
+// Both cases keep work.example routed to Work, so parking the driver on a probe-reported
+// page behaves exactly as it does in test/e2e/options.test.ts — matched, so CC leaves the
+// tab alone after the first visit rather than churning it.
+const SMALL_CONFIG = `
 rules:
-  - match: nomatch.example
-    open: Editor
+  - match: work.example
+    open: Work
 `;
 
-// Comfortably past CHUNK_CHARS (3000), so it cannot fit in one storage.sync item.
-// Firefox enforces QUOTA_BYTES_PER_ITEM = 8192 over the JSON encoding of the value, and
-// this is the only place in the suite where that enforcement is real rather than modelled.
+// Comfortably past CHUNK_CHARS (3000), so it cannot fit in one storage.sync item. Firefox
+// enforces QUOTA_BYTES_PER_ITEM = 8192 over the JSON encoding of the value, and this is
+// the only place in the suite where that enforcement is real rather than modelled — every
+// L1 case interpolates CHUNK_CHARS and would stay green with chunking removed.
 const MANY_PART_CONFIG =
-  ONE_PART_CONFIG +
+  SMALL_CONFIG +
   Array.from({ length: 100 }, (_, i) => `# padding ${i} ${"filler-".repeat(8)}`).join("\n") +
   "\n";
 
-describe("config sync (real Firefox, CC + probe)", () => {
-  let firefox: Session;
-  let serverPort: string;
+// The background is the only writer of the sync area and it publishes in its startup
+// tail, so a config reaches storage.sync without anyone saving anything. That is what
+// makes these two cases cheap: park once, open the editor once, read what it found.
+// Driving a Save instead would mean re-parking after runtime.reload(), on a window handle
+// that is by then a torn-down extension page — which hangs the driver rather than failing.
+// The save-to-publish handoff is covered at test/extension/config-sync.test.ts.
+function syncCase(name: string, configYaml: string, want: RegExp, check: (status: string) => void) {
+  describe(name, () => {
+    let firefox: Session;
+    let serverPort: string;
 
-  beforeAll(async () => {
-    firefox = await launch({ extensions: ["probe", "cc"] });
-    serverPort = new URL(firefox.serverUrl).port;
-  });
+    beforeAll(async () => {
+      firefox = await launch({ extensions: ["probe", "cc"], configYaml });
+      serverPort = new URL(firefox.serverUrl).port;
+    });
 
-  afterAll(async () => {
-    await firefox?.close();
-  });
+    afterAll(async () => {
+      await firefox?.close();
+    });
 
-  // Park on a probe-reported page so the cc-probe-cmd relay exists. work.example is
-  // matched, so CC leaves it in Work rather than churning; the cache-buster forces a
-  // fresh probe report.
-  async function parkOnProbePage(tag: string) {
-    const url = `http://work.example:${serverPort}/?cb=${tag}-${Date.now()}`;
-    try {
-      await firefox.driver.get(url);
-    } catch {
-      // First visit reopens the tab into Work, tearing this one down — expected.
-    }
-    await awaitContainerTab(firefox.driver, url);
-  }
-
-  async function openEditor(tag: string) {
-    await parkOnProbePage(tag);
-    await openExtensionPage(firefox.driver, OPTIONS_URL);
-    await switchToUrl(firefox.driver, OPTIONS_URL);
-  }
-
-  // Set the textarea and fire `input` — assigning .value alone does not, so
-  // validation would never run.
-  async function typeConfig(text: string) {
-    await firefox.driver.executeScript(
-      "const t = document.getElementById('cc-config');" +
-      `t.value = ${JSON.stringify(text)};` +
-      "t.dispatchEvent(new Event('input'));"
-    );
-  }
-
-  async function saveAndWaitForReload() {
-    await firefox.driver.findElement(By.id("cc-save")).click();
-    // runtime.reload() tears down every extension page, this tab included. Get off it
-    // before touching the driver again.
-    await firefox.driver.sleep(2000);
-    const handles = await firefox.driver.getAllWindowHandles();
-    await firefox.driver.switchTo().window(handles[0]);
-  }
-
-  // The status line is rendered from a live read of storage.sync, so polling it is how a
-  // test observes what Firefox actually accepted. Every options tab is tried because a
-  // reload leaves the previous one behind and only the fresh one answers.
-  async function awaitSyncStatus(driver: WebDriver, want: RegExp, timeoutMs = 15_000) {
-    const deadline = Date.now() + timeoutMs;
-    let seen = "";
-    while (Date.now() < deadline) {
-      for (const handle of await driver.getAllWindowHandles()) {
-        try {
-          await driver.switchTo().window(handle);
-          if (!(await driver.getCurrentUrl()).startsWith(OPTIONS_URL)) continue;
-          const text = await driver.findElement(By.id("cc-sync")).getText();
-          if (text !== "") seen = text;
-          if (want.test(text)) return text;
-        } catch {
-          // A dead options tab from the reload before this one — keep looking.
-        }
+    it("reports the config as published to Firefox Sync", async () => {
+      // Park on a probe-reported page so the cc-probe-cmd relay exists; the cache-buster
+      // forces a fresh probe report.
+      const url = `http://work.example:${serverPort}/?cb=sync-${Date.now()}`;
+      try {
+        await firefox.driver.get(url);
+      } catch {
+        // First visit reopens the tab into Work, tearing this one down — expected.
       }
-      await driver.sleep(300);
-    }
-    throw new Error(`sync status never matched ${want}; last saw ${JSON.stringify(seen)}`);
+      await awaitContainerTab(firefox.driver, url);
+
+      await openExtensionPage(firefox.driver, OPTIONS_URL);
+      await switchToUrl(firefox.driver, OPTIONS_URL);
+
+      check(await awaitSyncStatus(firefox.driver, want));
+    });
+  });
+}
+
+// The status line is rendered from a live read of storage.sync on load and re-rendered on
+// change, so polling it is how a test observes what Firefox actually accepted.
+async function awaitSyncStatus(driver: WebDriver, want: RegExp, timeoutMs = 15_000) {
+  const deadline = Date.now() + timeoutMs;
+  let seen = "";
+  while (Date.now() < deadline) {
+    seen = await driver.findElement(By.id("cc-sync")).getText();
+    if (want.test(seen)) return seen;
+    await driver.sleep(300);
   }
+  throw new Error(`sync status never matched ${want}; last saw ${JSON.stringify(seen)}`);
+}
 
-  it("publishes a saved config to Firefox Sync", async () => {
-    await openEditor("sync-save");
-    await typeConfig(ONE_PART_CONFIG);
-    await saveAndWaitForReload();
-
-    // The background publishes in its startup tail, after the reload — so the proof is
-    // the freshly opened editor reading the record back out of storage.sync.
-    await openEditor("sync-verify");
-    const status = await awaitSyncStatus(firefox.driver, /Synced via Firefox Sync — 1 part,/);
-
-    expect(status).toMatch(/last change/);
+describe("config sync (real Firefox, CC + probe)", () => {
+  syncCase("a config that fits in one sync item", SMALL_CONFIG, /Synced via Firefox Sync/, (status) => {
+    // Proves the whole chain against Firefox rather than a mock of it: the background
+    // encoded the config, browser.storage.sync accepted the write, and it reads back
+    // byte-identical to what is in storage.local.
+    expect(status).toMatch(/1 part\b/);
   });
 
-  it("publishes a config too large for a single sync item", async () => {
-    await openEditor("sync-large");
-    await typeConfig(MANY_PART_CONFIG);
-    await saveAndWaitForReload();
-
-    await openEditor("sync-large-verify");
-    const status = await awaitSyncStatus(firefox.driver, /Synced via Firefox Sync — \d+ parts,/);
-
+  syncCase("a config too large for one sync item", MANY_PART_CONFIG, /Synced via Firefox Sync/, (status) => {
+    const parts = Number(/(\d+) parts?\b/.exec(status)![1]);
     // A single-item implementation is rejected by Firefox's per-item quota and fails
     // here and nowhere else in the suite.
-    const parts = Number(/— (\d+) parts/.exec(status)![1]);
     expect(parts).toBeGreaterThan(1);
   });
 });

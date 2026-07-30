@@ -275,6 +275,12 @@ single-container rule kept it. Add a caller rather than a second copy.
   (fake in-memory area) owns the *policy* and `test/e2e/config-sync.test.ts` owns only what
   Firefox has to answer: that a write of this shape is accepted, and that a config past one
   item still round-trips. Don't "fix" the gap by relaxing the fake into the e2e.
+  **Both e2e cases observe the STARTUP push and save nothing** — the background is the only
+  writer, so a config reaches the sync area with nobody touching the editor. Driving a Save
+  means observing after `runtime.reload()`, which means re-parking the driver on a handle
+  that is by then a torn-down extension page: the first version did that and both cases
+  timed out and took `afterAll` with them. A wedged driver fails as a bare timeout, never
+  as an assertion, so this is the signature to recognise rather than to debug.
 - **Saving reloads the extension** (`browser.runtime.reload()`), which is why the
   `tmpSuffix` counter is raised past existing container names via `highestTmpSuffix`
   (`src/engine/registry.ts`) instead of restarting at 0 — otherwise every save reissues

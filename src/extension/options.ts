@@ -11,6 +11,7 @@
 import { parseConfig, ConfigError } from "../config/parse";
 import { MAX_PARTS, decodeRecord, splitParts } from "../config/sync-record";
 import {
+  PRE_SYNC_EDIT,
   clearReplacedConfigYaml,
   onSyncStorageChanged,
   readReplacedConfigYaml,
@@ -86,9 +87,14 @@ async function renderSyncStatus(): Promise<void> {
         syncEl.textContent = "A different config is in Firefox Sync; reconciling.";
         return;
       }
-      const when = new Date(remote.updatedAt).toLocaleString();
       const unit = remote.parts === 1 ? "part" : "parts";
-      syncEl.textContent = `Synced via Firefox Sync — ${remote.parts} ${unit}, last change ${when}.`;
+      // A config nobody has edited carries a reserved stamp, not a time. Rendering it
+      // would date every fresh install to 1970.
+      const when =
+        remote.updatedAt > PRE_SYNC_EDIT
+          ? `, last change ${new Date(remote.updatedAt).toLocaleString()}`
+          : "";
+      syncEl.textContent = `Synced via Firefox Sync — ${remote.parts} ${unit}${when}.`;
     }
   }
 }
