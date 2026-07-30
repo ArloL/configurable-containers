@@ -3,10 +3,12 @@ import { loadConfig } from "../config/load";
 import { wireBackground } from "./wiring";
 import {
   SEED_CONFIG_YAML,
+  UNEDITED,
   readStoredConfigYaml,
   writeStoredConfigYaml,
   openConfigEditor,
 } from "./config";
+import { browserSyncPorts, createConfigSync } from "./config-sync";
 
 // Injected at bundle time by esbuild (harness/build-extension.ts).
 declare const __CC_GRACE_MS__: number;
@@ -32,7 +34,9 @@ void (async () => {
   // This happens even when the seed does NOT parse: storing the broken text is what
   // lets the editor (opened below) show it with its parse error, so the user can fix
   // it. Skipping the write would greet them with a blank textarea and no clue.
-  if (loaded.seeded) await writeStoredConfigYaml(SEED_CONFIG_YAML);
+  // Stamped UNEDITED so a fresh install joining an established Firefox Sync account
+  // pulls the real config rather than pushing the shipped default over it.
+  if (loaded.seeded) await writeStoredConfigYaml(SEED_CONFIG_YAML, UNEDITED);
 
   background.useConfig(loaded.config);
 
@@ -48,4 +52,9 @@ void (async () => {
   await background.resumeTmpSuffix();
 
   await background.injectScripts();
+
+  // Last, because it is the only step that can end in runtime.reload(): a config that
+  // arrived from another machine is applied by restarting, and there is no point doing
+  // that while this startup is still finishing. Everything routing needs is already live.
+  await createConfigSync(browserSyncPorts()).start();
 })();
