@@ -59,6 +59,11 @@ alone. Commented examples below them show the syntax. Edit the config in the
 add-on's preferences (about:addons → Configurable Containers → Preferences), which
 opens a full-tab text editor. Saving reloads the extension.
 
+The config follows your Firefox Account: an edit on one machine reaches every other
+machine signed into the same account, with nothing to turn on and no file to copy. The
+last edit wins, and if an incoming one replaces yours the editor offers the replaced text
+back. See [CONFIG.md](CONFIG.md#syncing-between-machines).
+
 ## Building from source
 
 Requires Node 22 or newer (verified on 24). Building needs nothing else; the

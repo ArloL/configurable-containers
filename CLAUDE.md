@@ -241,6 +241,40 @@ single-container rule kept it. Add a caller rather than a second copy.
   `createScriptInjector` is the one sibling that consumes config eagerly, so it is the one
   that legitimately waits. `useConfig` folds the `Object.assign` and the gate release into
   one call for the same reason: they must happen together, so a caller cannot do one alone.
+- **`storage.sync` is a MIRROR, never the truth.** `src/extension/config-sync.ts` reads
+  the sync area, compares it with `storage.local.configYaml`, and either overwrites one
+  from the other. Nothing in the engine, the wiring, `loadConfig` or the resolver learns
+  that sync exists — which is exactly what keeps this out of `wireBackground`'s
+  synchronous-listener contract. It starts in `background.ts`'s async tail, *last*,
+  because it is the only step that can end in `runtime.reload()`. The **background is the
+  only writer**: the options page writes `storage.local` and reloads, and the fresh
+  background publishes. Two writers would race a dying options page against a starting
+  background.
+- **`decodeRecord` distinguishing `incomplete` from `absent` is the whole ballgame.**
+  The config is chunked across `ccConfigPart<i>` keys (Firefox enforces
+  `QUOTA_BYTES_PER_ITEM = 8192`, and the author's config is already 5.7KB), and those
+  keys reach the other machine as independent storage changes. `absent` means *push*, so
+  a machine that read a half-arrived record and called it absent would publish its own
+  older config over the update still landing — and the sender would then **adopt the
+  rollback**. `incomplete` waits. The integrity check is a hash, not a length: swapping
+  one host for another of the same width is an ordinary edit, and the check exists to
+  reject a *mixture* of an old part and a new one.
+- **Two convergence properties in `reconcile` (`src/config/sync-record.ts`), and both
+  fail as a loop rather than as a wrong answer.** (1) Equal text never returns `adopt` —
+  adoption ends in `runtime.reload()`, so adopting identical text has two machines
+  restarting each other forever. (2) The tie-break for equal stamps compares the **texts**,
+  so both machines compute *opposite* actions and exactly one publishes; "local wins"
+  would have both push forever. The tie is not hypothetical — every config edited before
+  this slice is backfilled to the same stamp (`PRE_SYNC_EDIT`), so the first startup after
+  the update has exactly that shape. Comparing texts rather than hashes means no collision
+  can reintroduce it.
+- **Adoption has no L4 test and cannot have one.** It needs a change to appear in CC's
+  sync area from *outside* the profile: a test profile has no Firefox Account, WebDriver
+  cannot navigate to `moz-extension:` to script an extension page, and the probe is a
+  different extension with a different sync namespace. So `test/extension/config-sync.test.ts`
+  (fake in-memory area) owns the *policy* and `test/e2e/config-sync.test.ts` owns only what
+  Firefox has to answer: that a write of this shape is accepted, and that a config past one
+  item still round-trips. Don't "fix" the gap by relaxing the fake into the e2e.
 - **Saving reloads the extension** (`browser.runtime.reload()`), which is why the
   `tmpSuffix` counter is raised past existing container names via `highestTmpSuffix`
   (`src/engine/registry.ts`) instead of restarting at 0 — otherwise every save reissues
