@@ -96,12 +96,21 @@ rules:
   # ---------------------------------------------------------------------------
 
   # Curated names: `open:` because the container name differs from the host.
+
   - match:
-    - haegerconsulting.atlassian.net
-    - haeger-consulting.atlassian.net
+    - aws.amazon.com
+    - signin.aws
+    - awsapps.com
+    open: AWS
+
+  - match:
+    - haeger-consulting.de
     - haeger-consulting.app.personio.com
+    - haeger-consulting.atlassian.net
+    - haegerconsulting.atlassian.net
     - haegerconsulting2006.sharepoint.com
     open: Haeger
+
   - match: "goflink.com"
     open: Flink
 
