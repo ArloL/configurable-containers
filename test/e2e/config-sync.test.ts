@@ -32,7 +32,13 @@ const MANY_PART_CONFIG =
 // Driving a Save instead would mean re-parking after runtime.reload(), on a window handle
 // that is by then a torn-down extension page — which hangs the driver rather than failing.
 // The save-to-publish handoff is covered at test/extension/config-sync.test.ts.
-function syncCase(name: string, configYaml: string, want: RegExp, check: (status: string) => void) {
+function syncCase(
+  name: string,
+  behaviour: string,
+  configYaml: string,
+  want: RegExp,
+  check: (status: string) => void,
+) {
   describe(name, () => {
     let firefox: Session;
     let serverPort: string;
@@ -46,7 +52,7 @@ function syncCase(name: string, configYaml: string, want: RegExp, check: (status
       await firefox?.close();
     });
 
-    it("reports the config as published to Firefox Sync", async () => {
+    it(behaviour, async () => {
       // Park on a probe-reported page so the cc-probe-cmd relay exists; the cache-buster
       // forces a fresh probe report.
       const url = `http://work.example:${serverPort}/?cb=sync-${Date.now()}`;
@@ -79,17 +85,29 @@ async function awaitSyncStatus(driver: WebDriver, want: RegExp, timeoutMs = 15_0
 }
 
 describe("config sync (real Firefox, CC + probe)", () => {
-  syncCase("a config that fits in one sync item", SMALL_CONFIG, /Synced via Firefox Sync/, (status) => {
-    // Proves the whole chain against Firefox rather than a mock of it: the background
-    // encoded the config, browser.storage.sync accepted the write, and it reads back
-    // byte-identical to what is in storage.local.
-    expect(status).toMatch(/1 part\b/);
-  });
+  syncCase(
+    "a config that fits in one sync item",
+    "publishes it to Firefox Sync as a single part",
+    SMALL_CONFIG,
+    /Synced via Firefox Sync/,
+    (status) => {
+      // Proves the whole chain against Firefox rather than a mock of it: the background
+      // encoded the config, browser.storage.sync accepted the write, and it reads back
+      // byte-identical to what is in storage.local.
+      expect(status).toMatch(/1 part\b/);
+    },
+  );
 
-  syncCase("a config too large for one sync item", MANY_PART_CONFIG, /Synced via Firefox Sync/, (status) => {
-    const parts = Number(/(\d+) parts?\b/.exec(status)![1]);
-    // A single-item implementation is rejected by Firefox's per-item quota and fails
-    // here and nowhere else in the suite.
-    expect(parts).toBeGreaterThan(1);
-  });
+  syncCase(
+    "a config too large for one sync item",
+    "splits it across several parts rather than failing the quota",
+    MANY_PART_CONFIG,
+    /Synced via Firefox Sync/,
+    (status) => {
+      const parts = Number(/(\d+) parts?\b/.exec(status)![1]);
+      // A single-item implementation is rejected by Firefox's per-item quota and fails
+      // here and nowhere else in the suite.
+      expect(parts).toBeGreaterThan(1);
+    },
+  );
 });
