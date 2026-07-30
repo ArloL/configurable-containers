@@ -1,46 +1,99 @@
-# Real config, generated from the MAC + Temporary Containers exports.
-# Format: YAML (provisional). A bare host is shorthand for *://*.<host>/*
+# Configurable Containers — my routing config.
+# Seeded from the shipped default (src/config/default.yaml), then merged with my
+# own rules, which were generated from the MAC + Temporary Containers exports.
 #
-# Routing-only: maps sites to containers; does not own container lifecycle.
-# Containers are created on demand by name; unlisted ones are left alone.
-# Unmatched sites open in a fresh Temporary container (no `default` needed).
+# Anything that matches no rule opens in a fresh temporary container, so the
+# exemption block below is the only part that has to be right: it marks the hosts
+# where isolating would BREAK something. Everything under "My rules" is routing.
 #
-# A rule with only `match` opens in a container NAMED after the host. When `match`
+# A bare host is shorthand for *://*.<host>/* and so covers its subdomains.
+# A rule with only `match` opens in a container NAMED after the host; when `match`
 # is a list, the FIRST host is used (e.g. [notion.com, notion.so] -> "notion.com").
-# `open:` is only needed to give the container a name that differs from that host.
-# First matching rule wins. A rule may also carry `cookies` / `scripts` overlays
-# (within-container side-effects). Isolation-continuity `groups` are a separate list.
+# `open:` is only needed for a name that differs from that host. First match wins.
+#
+# Full reference: https://github.com/ArloL/configurable-containers/blob/main/CONFIG.md
+#
+# Saving reloads the extension.
+
 rules:
 
-  # SSO / auth / shared payment redirectors: stay in the initiating container.
+  # ---------------------------------------------------------------------------
+  # Exemptions. First match wins, so these stay ABOVE my own rules: an SSO host
+  # like accounts.spotify.com must win over the spotify.com rule further down, or
+  # the login lands in the wrong container and fails.
+  # ---------------------------------------------------------------------------
+
+  # SSO / identity providers: stay in whichever container started the login.
+  #
+  # This is what makes "Sign in with …" work at all. Without it the auth hop counts
+  # as a cross-site navigation and gets a FRESH throwaway, so the provider can't see
+  # the session it just created. It does not widen exposure: if a site in a throwaway
+  # sends you to accounts.google.com, the login page runs in THAT throwaway and still
+  # can't reach the Google cookies in your other containers.
+  #
+  # A bare host also covers its subdomains, which is why one okta.com line is enough
+  # to cover every customer's <tenant>.okta.com.
   - match:
-    - login.microsoftonline.com
     - accounts.google.com
+    - accounts.spotify.com
+    - appleid.apple.com
+    - auth0.com
+    - challenge.spotify.com
+    - duosecurity.com
+    - id.atlassian.com
     - id.bund.de
-    - secure.kps-payment.de
-    - threedssvc.pay1.de
-    - threeds.upcgw.com
-    - payment.unzer.com
+    - login.live.com
+    - login.microsoftonline.com
+    - login.salesforce.com
+    - login.yahoo.com
+    - okta-emea.com
+    - okta.com
+    - onelogin.com
+    - pingone.com
+    inherit: true
+
+  # A card payment's "verify with your bank" step is the same situation: it must
+  # stay in the container that started the checkout. These hosts are issuer-specific
+  # — add one here whenever a payment bounces you to a blank page or an endless
+  # verification loop.
+  - match:
     - acs.3dsecure-atruvia.de
     - credorax.net
     - heidelpay.hpcgw.net
-    # "Log in with Spotify" SSO: must stay in the initiating container. Kept above the
-    # spotify.com rule below, which would otherwise route these into the Spotify container.
-    - accounts.spotify.com
-    - challenge.spotify.com
+    - payment.unzer.com
+    - secure.kps-payment.de
+    - threeds.upcgw.com
+    - threedssvc.pay1.de
     inherit: true
 
-  # Ignored: engine does nothing — never route, isolate, or run side-effects; the
-  # tab is left exactly as-is (was TC `ignoreRequests`).
+  # Link shims: transient hops that exist only to bounce you somewhere else. Not
+  # isolated (so the hop doesn't burn a container), and the tab closes itself if it
+  # strands you on the shim after redirecting (was TC closeRedirectorTabs).
   - match:
-    - getpocket.com
+    - away.vk.com
+    - href.li
+    - l.facebook.com
+    - l.instagram.com
+    - l.messenger.com
+    - lm.facebook.com
+    - out.reddit.com
+    - outgoing.prod.mozaws.net
+    - slack-redir.net
+    - t.co
+    redirector: true
+
+  # Left completely alone — no routing, no isolation, no side-effects; the tab is
+  # left exactly as-is (was TC `ignoreRequests`). Firefox's own add-on and account
+  # pages break in confusing ways when moved between containers.
+  - match:
+    - accounts.firefox.com
     - addons.mozilla.org
+    - getpocket.com
     ignore: true
 
-  # Redirectors: transient link shims. Not isolated (like inherit for the hop); the
-  # tab auto-closes ~2s after it redirects (was TC closeRedirectorTabs).
-  - match: [t.co, slack-redir.net, outgoing.prod.mozaws.net]
-    redirector: true
+  # ---------------------------------------------------------------------------
+  # My rules.
+  # ---------------------------------------------------------------------------
 
   # Curated names: `open:` because the container name differs from the host.
   - match:
@@ -52,7 +105,7 @@ rules:
   - match: "goflink.com"
     open: Flink
 
-  # assigned to two named containers
+  # Two eligible containers, no `default:` — so this one asks every time.
   - match: outlook.cloud.microsoft
     open: [Haeger, HSP]
 
@@ -126,9 +179,11 @@ rules:
       - at: document_start
         run: "localStorage.setItem('jetpack_post_subscribe_modal_dismissed', Date.now().toString());"
 
-# Isolation-continuity groups: members count as one site for temp isolation.
-# Separate top-level list, order-significant, first-match wins (like rules); a URL
-# resolves to at most one group. Groups never route and never override a rule.
+# Isolation-continuity groups: sites in one group stay in the SAME throwaway as you
+# move between them, while crossing to anything outside it spins up a clean one.
+# Each group is a plain list of hostnames — no "match:" key here, unlike a rule.
+# Order-significant, first-match wins; a URL resolves to at most one group. Groups
+# never route and never override a rule.
 groups:
   - [google.com, google.de, youtube.com]
   - [oracle.com, oraclecloud.com, identity.oraclecloud.com]
