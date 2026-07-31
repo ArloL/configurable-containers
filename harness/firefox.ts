@@ -7,6 +7,7 @@ import * as path from "node:path";
 import { zipSync } from "fflate";
 import { startServer, BEACON_PATH, type TestServer } from "./server";
 import { buildExtension } from "./build-extension";
+import { claimProfileDir, reapProfile } from "./reaper";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 // `mac` is the upstream Multi-Account Containers, loaded UNBUILT: its src/ is
@@ -51,6 +52,10 @@ const DEFAULT_LOCAL_DOMAINS = [
 export interface Session {
   driver: WebDriver;
   serverUrl: string;
+  // The profile directory this browser was launched into — the token the reaper
+  // identifies its processes by (harness/reaper.ts). Exposed so a test can assert
+  // nothing is left running under it.
+  profileDir: string;
   close(): Promise<void>;
 }
 
@@ -199,6 +204,10 @@ async function buildXpiFor(
 
 export async function launch(opts: LaunchOptions = {}): Promise<Session> {
   const extensions = opts.extensions ?? ["probe"];
+  // Claimed BEFORE anything can start a browser, so every exit path below — including
+  // the one where session creation throws and no driver handle ever exists — has a
+  // token to reap by.
+  const profileDir = claimProfileDir();
   const server: TestServer = await startServer();
 
   const xpis: { xpiPath: string; cleanup: () => void }[] = [];
@@ -218,9 +227,20 @@ export async function launch(opts: LaunchOptions = {}): Promise<Session> {
     );
   }
   const cleanupXpis = () => xpis.forEach((x) => x.cleanup());
+  // Every failure below unwinds through this, so no path can drop a running browser.
+  // Ordered browser-first: the server and the temp dirs are cheap to lose, a Firefox
+  // is not.
+  const teardown = async () => {
+    reapProfile(profileDir);
+    await server.close().catch(() => {});
+    cleanupXpis();
+  };
 
   const options = new firefox.Options();
   if (opts.headless !== false) options.addArguments("-headless");
+  // Launch into a profile the harness made, rather than the one geckodriver would
+  // mkdtemp for us: it stamps this browser's argv with a path only the reaper knows.
+  options.addArguments("-profile", profileDir);
   options.setPreference("privacy.userContext.enabled", true);
   options.setPreference("xpinstall.signatures.required", false);
   // Pin CC's moz-extension:// origin so ccExtensionUrl() addresses a real page.
@@ -251,8 +271,10 @@ export async function launch(opts: LaunchOptions = {}): Promise<Session> {
       await (driver as unknown as firefox.Driver).installAddon(xpiPath, true);
     }
   } catch (err) {
-    await server.close();
-    cleanupXpis();
+    // A build() that throws can still have left a Firefox running (the macOS re-exec
+    // flake), and there is no driver to quit it with — the reap is the only cleanup
+    // this path has.
+    await teardown();
     throw err;
   }
 
@@ -265,23 +287,49 @@ export async function launch(opts: LaunchOptions = {}): Promise<Session> {
     try {
       await server.awaitBeacon(MAC_ASSIGNED_BEACON);
     } catch (err) {
-      await driver.quit();
-      await server.close();
-      cleanupXpis();
+      await quit(driver);
+      await teardown();
       throw err;
     }
   }
 
+  let closed = false;
   return {
     driver,
     serverUrl: server.url,
+    profileDir,
     async close() {
-      await driver.quit();
-      await server.close();
-      cleanupXpis();
+      if (closed) return; // a test may close a session its afterAll also closes
+      closed = true;
+      // quit() first so the browser gets to shut down cleanly, then reap what it left
+      // — a quit that throws or hangs must not be able to strand a Firefox, which is
+      // why teardown runs either way rather than after a successful quit.
+      try {
+        await quit(driver);
+      } finally {
+        await teardown();
+      }
     },
   };
 }
+
+// `driver.quit()` talks to a browser that may be wedged (a cancelled navigation leaves
+// WebDriver calls blocking — see CLAUDE.md on F9), and an afterAll that hangs here dies
+// on vitest's hookTimeout with the browser still up. Bound it and let the reaper finish
+// the job; the throw is swallowed for the same reason.
+async function quit(driver: WebDriver): Promise<void> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    await Promise.race([
+      driver.quit().catch(() => {}),
+      new Promise((resolve) => (timer = setTimeout(resolve, QUIT_TIMEOUT_MS))),
+    ]);
+  } finally {
+    clearTimeout(timer); // an uncleared timer holds the event loop open for its full wait
+  }
+}
+
+const QUIT_TIMEOUT_MS = 20_000;
 
 // Poll the CURRENT window's title until the probe has written "CSID:<store>".
 export async function readCookieStoreId(driver: WebDriver, timeoutMs = 5000): Promise<string> {
