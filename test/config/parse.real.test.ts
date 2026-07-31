@@ -56,9 +56,24 @@ describe("parseConfig — real configurable-containers.config.yaml", () => {
   });
 
   it("parses the youtube script overlays from the real config", () => {
-    const scripts = ruleForHost("youtube.com")?.scripts;
-    expect(scripts?.map((s) => s.at)).toEqual(["document_start"]);
-    expect(scripts?.[0].run).toContain("yt-player-sticky-caption");
+    const scripts = ruleForHost("youtube.com")?.scripts ?? [];
+    // Identified by what each one does, not by position: adding a third overlay should
+    // not fail this, and reordering the two should not either.
+    expect(scripts.some((s) => s.run.includes("yt-player-sticky-caption"))).toBe(true);
+    expect(scripts.some((s) => s.run.includes("getAvailableAudioTracks"))).toBe(true);
+    for (const s of scripts) expect(s.at).toBe("document_start");
+  });
+
+  // The audio-track snippet is the one overlay written as a YAML block scalar.
+  // Re-indenting or reflowing that block is an edit that looks harmless in YAML and
+  // yields JavaScript the page cannot run — and nothing reports it, because the
+  // injected script fails silently and the only symptom is a video playing German.
+  it("keeps the multi-line audio snippet valid javascript", () => {
+    const run = ruleForHost("youtube.com")!.scripts!.find((s) =>
+      s.run.includes("getAvailableAudioTracks"),
+    )!.run;
+    expect(run.split("\n").length).toBeGreaterThan(1);
+    expect(() => new Function(run)).not.toThrow();
   });
 
   it("parses the google and microsoft groups", () => {

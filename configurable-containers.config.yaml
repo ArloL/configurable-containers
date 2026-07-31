@@ -178,6 +178,90 @@ rules:
     scripts:
       - at: document_start
         run: "localStorage.setItem('yt-player-sticky-caption', JSON.stringify({data:'false',expiration:Date.now()+2592000000,creation:Date.now()}));"
+      # Always play a video's ORIGINAL audio, never a machine dub. YouTube picks the
+      # default track server-side from `hl`, which also sets the interface language --
+      # so there is no cookie that gets original audio and a German UI, and signed out
+      # nothing persists. It has to be corrected on every page.
+      #
+      # This holds an INVARIANT rather than acting once, because the player applies a
+      # switch and then reverts it seconds later when playback commits (measured: set
+      # at t=874, applied by t=1055, back on the dub by t=5750). That also makes SPA
+      # navigation, back-navigation onto an already-fixed video, and the revert all the
+      # same case, with no bookkeeping to get wrong.
+      #
+      # Full reversing notes: docs/superpowers/specs/2026-07-31-youtube-original-audio-design.md
+      - at: document_start
+        run: |
+          (() => {
+            // The flags live under a MINIFIED key that changes with every player
+            // build, so find them by shape. The plain names (isAutoDubbed,
+            // audioIsDefault) hold only in the response JSON, which the player ignores.
+            const flags = (t) => {
+              if (!t) return null;
+              for (const k of Object.keys(t)) {
+                const v = t[k];
+                if (v && typeof v === "object" && "isAutoDubbed" in v) return v;
+              }
+              return null;
+            };
+            const enforce = () => {
+              // A content script is an isolated world: the player's methods are only
+              // reachable through wrappedJSObject. Without it this silently never fires.
+              const el = document.getElementById("movie_player");
+              const p = el && el.wrappedJSObject;
+              if (!p || typeof p.getAvailableAudioTracks !== "function") return;
+              const tracks = Array.from(p.getAvailableAudioTracks() || []);
+              if (!tracks.length) return;
+              // Guard on the track the SERVER marked default, not the current one:
+              // getAudioTrack() reports "und" until playback commits, so a
+              // current-track guard never sees the dub and never fires. A video whose
+              // default is not a dub is left alone -- its extra tracks are deliberate.
+              const def = tracks.find((t) => { const f = flags(t); return f && f.isDefault; });
+              if (!def || !flags(def).isAutoDubbed) return;
+              const orig = tracks.find((t) => { const f = flags(t); return f && !f.isAutoDubbed; });
+              if (!orig) return;
+              const cur = flags(p.getAudioTrack());
+              if (cur && cur.id === flags(orig).id) return;
+              p.setAudioTrack(orig);
+            };
+            // Polling, because NOTHING announces the change: the player reverts the
+            // track silently. Verified by patching EventTarget.prototype.dispatchEvent
+            // and recording all 48 event types the page fires -- not one landed in the
+            // 700ms before a revert. video.audioTracks is no help either: it sits behind
+            // media.track.enabled (off by default) and reads length 0, since YouTube
+            // feeds audio through MSE.
+            //
+            // So the poll is bounded instead of dropped: a window re-armed on every
+            // media load, rather than a timer running for the life of the tab.
+            // loadstart fires on first load, on SPA navigation, on back-navigation onto
+            // an already-fixed video, and at each ad break -- every moment the track can
+            // change -- and this idles at zero cost in between.
+            //
+            // 60s because reverts were measured at 5.7s and at 17.1s after the switch.
+            // Whatever schedules them is not something we can see, so the window is set
+            // by margin over the worst observed, not by a known bound.
+            let until = 0;
+            let timer = null;
+            const arm = () => {
+              until = Date.now() + 60000;
+              if (timer) return;
+              timer = setInterval(() => {
+                try {
+                  enforce();
+                } catch (e) {
+                  // Never throw into the page.
+                }
+                if (Date.now() > until) {
+                  clearInterval(timer);
+                  timer = null;
+                }
+              }, 100);
+            };
+            document.addEventListener("loadstart", (e) => {
+              if (e.target instanceof HTMLMediaElement) arm();
+            }, true);
+            arm(); // the first load may already be under way
+          })();
   - match: woki.de
     open: Temporary
     cookies:
