@@ -93,7 +93,20 @@ server-chosen dub. This explains two runs of the same code, switching ~150ms apa
 ended on opposite tracks. **No one-shot design is reliable** — event-triggered or polled,
 it is a race against a revert that may land after it.
 
-### 2.6 `setAudioTrack()` itself works
+### 2.6 Nothing announces the revert — there is no event to listen for
+
+`EventTarget.prototype.dispatchEvent` was patched in the page world and every event type
+the page fired was recorded — 48 of them, including the full `yt-*` set. In the 700ms
+before an observed revert, **not one fired**. The player changes the track silently.
+
+`video.audioTracks` is not an alternative: it sits behind Firefox's `media.track.enabled`
+(off by default) and, even with the pref on, reads **length 0**, because YouTube feeds
+audio through MSE rather than as discrete media tracks.
+
+So the correction cannot be made reactive. Polling is not laziness here; it is the only
+signal available.
+
+### 2.7 `setAudioTrack()` itself works
 
 Switching is effective and costs no audible dub: the player is reachable ~350–900ms in
 and the switch lands at `currentTime=0`. The concern that the user would hear a moment of
@@ -108,11 +121,35 @@ rather than performing an action:
 
 Enforcing an invariant instead of acting once is what §2.5 forces, and it collapses the
 rest of the design: SPA navigation, back-navigation onto an already-fixed video, and the
-player's own revert all become the same case. No `loadstart` listener, no video-id
-bookkeeping, no "already handled" flag — each of which was tried and each of which broke
-on one of those three cases.
+player's own revert all become the same case. No video-id bookkeeping and no "already
+handled" flag — both were tried, and each broke on one of those three cases (the id-keyed
+version silently skipped a video it had fixed before, which is what A → B → A does).
 
-### 3.1 Per tick (100ms)
+`loadstart` does appear, but only to bound *when* the invariant is enforced (§3.1) — never
+to decide *whether* it holds.
+
+### 3.1 The poll is bounded, not permanent
+
+A timer running at 10Hz for the life of every YouTube tab is more than this needs, and
+each tick allocates per track. Instead the interval is **armed for 60s on every media
+load** — `loadstart`, capture phase — and clears itself when the window expires. Between
+videos it costs nothing.
+
+`loadstart` failed as a one-shot *trigger* (§2.5) but is a good *re-arm* signal: §2.4
+measured it firing on first load, SPA navigation and back-navigation, always with the
+track list already populated, and it fires again at each ad break — covering every
+moment the track can change.
+
+60s is a margin, not a bound: reverts were measured at **5.7s** and at **17.1s** after
+the switch, and §2.6 established there is no way to observe what schedules them. A
+revert landing later than 60s would not be corrected; nothing seen so far suggests one
+does.
+
+Verified against the shipped snippet: armed at t=490, enforced at t=900, `clearInterval`
+at t=30909 under the earlier 30s window, and re-armed at t=38107 by an SPA
+back-navigation which then re-enforced at t=46287.
+
+### 3.2 Per tick (100ms)
 
 1. Get `getAvailableAudioTracks()`. Empty → return (single-track video, or player not
    rebuilt yet).
@@ -128,7 +165,7 @@ Guarding on the **`isDefault` track** rather than the current one is required:
 `getAudioTrack()` reports `und` ("Default") until playback commits, so a current-track
 guard sees no dub and never fires.
 
-### 3.2 Two hazards that make correct-looking code fail
+### 3.3 Two hazards that make correct-looking code fail
 
 - **The flags object is found by SHAPE, not key name.** On player track objects the flags
   live under a **minified** key (`qK` at time of writing) that changes with every player
@@ -141,10 +178,13 @@ guard sees no dub and never fires.
   right and silently never fires. (Note the asymmetry: WebDriver's `executeScript`
   sandbox *does* reach page methods directly, so probe code and snippet code differ here.)
 
-### 3.3 The snippet
+### 3.4 The snippet
 
 ```js
 (() => {
+  // The flags live under a MINIFIED key that changes with every player
+  // build, so find them by shape. The plain names (isAutoDubbed,
+  // audioIsDefault) hold only in the response JSON, which the player ignores.
   const flags = (t) => {
     if (!t) return null;
     for (const k of Object.keys(t)) {
@@ -153,24 +193,63 @@ guard sees no dub and never fires.
     }
     return null;
   };
-  setInterval(() => {
-    try {
-      const el = document.getElementById("movie_player");
-      const p = el && el.wrappedJSObject;
-      if (!p || typeof p.getAvailableAudioTracks !== "function") return;
-      const tracks = Array.from(p.getAvailableAudioTracks() || []);
-      if (!tracks.length) return;
-      const def = tracks.find((t) => { const f = flags(t); return f && f.isDefault; });
-      if (!def || !flags(def).isAutoDubbed) return;
-      const orig = tracks.find((t) => { const f = flags(t); return f && !f.isAutoDubbed; });
-      if (!orig) return;
-      const cur = flags(p.getAudioTrack());
-      if (cur && cur.id === flags(orig).id) return;
-      p.setAudioTrack(orig);
-    } catch (e) {
-      /* never throw into the page */
-    }
-  }, 100);
+  const enforce = () => {
+    // A content script is an isolated world: the player's methods are only
+    // reachable through wrappedJSObject. Without it this silently never fires.
+    const el = document.getElementById("movie_player");
+    const p = el && el.wrappedJSObject;
+    if (!p || typeof p.getAvailableAudioTracks !== "function") return;
+    const tracks = Array.from(p.getAvailableAudioTracks() || []);
+    if (!tracks.length) return;
+    // Guard on the track the SERVER marked default, not the current one:
+    // getAudioTrack() reports "und" until playback commits, so a
+    // current-track guard never sees the dub and never fires. A video whose
+    // default is not a dub is left alone -- its extra tracks are deliberate.
+    const def = tracks.find((t) => { const f = flags(t); return f && f.isDefault; });
+    if (!def || !flags(def).isAutoDubbed) return;
+    const orig = tracks.find((t) => { const f = flags(t); return f && !f.isAutoDubbed; });
+    if (!orig) return;
+    const cur = flags(p.getAudioTrack());
+    if (cur && cur.id === flags(orig).id) return;
+    p.setAudioTrack(orig);
+  };
+  // Polling, because NOTHING announces the change: the player reverts the
+  // track silently. Verified by patching EventTarget.prototype.dispatchEvent
+  // and recording all 48 event types the page fires -- not one landed in the
+  // 700ms before a revert. video.audioTracks is no help either: it sits behind
+  // media.track.enabled (off by default) and reads length 0, since YouTube
+  // feeds audio through MSE.
+  //
+  // So the poll is bounded instead of dropped: a window re-armed on every
+  // media load, rather than a timer running for the life of the tab.
+  // loadstart fires on first load, on SPA navigation, on back-navigation onto
+  // an already-fixed video, and at each ad break -- every moment the track can
+  // change -- and this idles at zero cost in between.
+  //
+  // 60s because reverts were measured at 5.7s and at 17.1s after the switch.
+  // Whatever schedules them is not something we can see, so the window is set
+  // by margin over the worst observed, not by a known bound.
+  let until = 0;
+  let timer = null;
+  const arm = () => {
+    until = Date.now() + 60000;
+    if (timer) return;
+    timer = setInterval(() => {
+      try {
+        enforce();
+      } catch (e) {
+        // Never throw into the page.
+      }
+      if (Date.now() > until) {
+        clearInterval(timer);
+        timer = null;
+      }
+    }, 100);
+  };
+  document.addEventListener("loadstart", (e) => {
+    if (e.target instanceof HTMLMediaElement) arm();
+  }, true);
+  arm(); // the first load may already be under way
 })();
 ```
 
@@ -196,9 +275,9 @@ reaches the user.
 
 If YouTube changes the player, this fails **silently and safely**: no flags object is
 found, nothing happens, the dub plays. You find out by hearing German. Given §7 that is
-accepted rather than mitigated. The 100ms interval runs for the life of the page; its
-work is two method calls and an array scan, and on any page without a `#movie_player` it
-returns before doing even that.
+accepted rather than mitigated. The 100ms interval is alive only inside the 60s window
+after a media load (§3.1); its work is two method calls and an array scan, and on any
+page without a `#movie_player` it returns before doing even that.
 
 ## 7. Testing — verify once, no automated test
 
