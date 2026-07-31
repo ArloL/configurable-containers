@@ -14,14 +14,14 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import * as path from "node:path";
-import { launch, type Session } from "./firefox";
+import { launch } from "./firefox";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CONFIG_PATH = path.resolve(HERE, "../configurable-containers.config.yaml");
 
 async function main() {
   const configYaml = readFileSync(CONFIG_PATH, "utf-8");
-  const session: Session = await launch({
+  await launch({
     extensions: ["cc"],
     headless: false,
     configYaml,
@@ -37,15 +37,9 @@ async function main() {
   console.log("\nTry navigating to any site in your config; CC will route per the config.");
   console.log("\nPress Ctrl+C to close Firefox and exit.\n");
 
-  process.on("SIGINT", async () => {
-    console.log("\nClosing...");
-    try {
-      await session.close();
-    } catch {
-      // Firefox may already be gone — fine.
-    }
-    process.exit(0);
-  });
+  // No SIGINT handler here: harness/reaper.ts installs one that kills this session's
+  // browser and exits. A second handler would only race it — and would run *after* it,
+  // since the reaper's is registered when harness/firefox.ts is imported.
 
   // Keep the process alive until interrupted.
   await new Promise<void>(() => {});
