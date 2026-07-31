@@ -193,25 +193,39 @@ guard sees no dub and never fires.
     }
     return null;
   };
+  // This fails silently by design -- every giving-up path is a bare return,
+  // and the only symptom is a video playing German. So each one says WHY on
+  // documentElement, which the page console can read even though the content
+  // script's own scope cannot be inspected: `document.documentElement.dataset.ccAudio`.
+  let mark = "";
+  const state = (s) => {
+    if (s === mark) return;
+    mark = s;
+    try { document.documentElement.dataset.ccAudio = s; } catch (e) {}
+  };
+  state("armed");
+
   const enforce = () => {
     // A content script is an isolated world: the player's methods are only
     // reachable through wrappedJSObject. Without it this silently never fires.
     const el = document.getElementById("movie_player");
     const p = el && el.wrappedJSObject;
-    if (!p || typeof p.getAvailableAudioTracks !== "function") return;
+    if (!p || typeof p.getAvailableAudioTracks !== "function") return state("no-player");
     const tracks = Array.from(p.getAvailableAudioTracks() || []);
-    if (!tracks.length) return;
+    if (!tracks.length) return state("no-alternate-tracks");
     // Guard on the track the SERVER marked default, not the current one:
     // getAudioTrack() reports "und" until playback commits, so a
     // current-track guard never sees the dub and never fires. A video whose
     // default is not a dub is left alone -- its extra tracks are deliberate.
     const def = tracks.find((t) => { const f = flags(t); return f && f.isDefault; });
-    if (!def || !flags(def).isAutoDubbed) return;
+    if (!def) return state("no-default-marked");
+    if (!flags(def).isAutoDubbed) return state("default-not-a-dub:" + flags(def).id);
     const orig = tracks.find((t) => { const f = flags(t); return f && !f.isAutoDubbed; });
-    if (!orig) return;
+    if (!orig) return state("no-original-available");
     const cur = flags(p.getAudioTrack());
-    if (cur && cur.id === flags(orig).id) return;
+    if (cur && cur.id === flags(orig).id) return state("holding:" + cur.id);
     p.setAudioTrack(orig);
+    state("switched:" + flags(orig).id);
   };
   // Polling, because NOTHING announces the change: the player reverts the
   // track silently. Verified by patching EventTarget.prototype.dispatchEvent
@@ -243,6 +257,7 @@ guard sees no dub and never fires.
       if (Date.now() > until) {
         clearInterval(timer);
         timer = null;
+        state(mark.indexOf("holding") === 0 ? mark : "idle:" + mark);
       }
     }, 100);
   };
@@ -259,10 +274,16 @@ block scalar here, and to fall back to a minified one-liner if not.
 
 ## 4. Accepted consequence: manual dub selection is overridden
 
-Holding the invariant means that on a video whose server default is a dub, choosing a
-dub from YouTube's audio-track menu is undone within 100ms. Selecting any **non**-dubbed
-track is respected, and videos whose default is not a dub are untouched entirely. This
-follows directly from "I always want the original" and is accepted, not overlooked.
+On a video whose server default is a dub, choosing a dub from YouTube's audio-track menu
+is undone within ~200ms. Selecting any **non**-dubbed track is respected, and videos
+whose default is not a dub are untouched entirely. This follows directly from "I always
+want the original" and is accepted, not overlooked.
+
+This holds **even after the 60s window has expired**, which is not obvious: selecting a
+track fires `loadstart`, which re-arms the window (§3.1). Measured with playback never
+started and autoplay blocked — a dub picked at t=14.5s was corrected by t=14.7s, and one
+picked at t=80.5s fired `loadstart` at t=80.5s and was corrected inside a single 200ms
+observation. So bounding the poll did not cost the property; the two mechanisms compose.
 
 ## 5. What this does not do
 
@@ -273,9 +294,22 @@ reaches the user.
 
 ## 6. Failure mode
 
-If YouTube changes the player, this fails **silently and safely**: no flags object is
-found, nothing happens, the dub plays. You find out by hearing German. Given §7 that is
-accepted rather than mitigated. The 100ms interval is alive only inside the 60s window
+If YouTube changes the player, this fails **safely**: no flags object is found, nothing
+happens, the dub plays. It is no longer **silent**, though — every giving-up path records
+why on `documentElement`, readable from the page console (which cannot otherwise inspect
+a content script's scope):
+
+```js
+document.documentElement.dataset.ccAudio
+// armed | no-player | no-alternate-tracks | no-default-marked
+// default-not-a-dub:<id> | no-original-available | holding:<id> | switched:<id>
+// idle:<last state>
+```
+
+`no-player` distinguishes the case that matters most — the snippet running but unable to
+reach the player, as another extension wrapping the YouTube player would cause — from the
+snippet not running at all, where the attribute is simply absent. Given §7 there is no
+test to catch a regression, so being able to ask the running page is what replaces one. The 100ms interval is alive only inside the 60s window
 after a media load (§3.1); its work is two method calls and an array scan, and on any
 page without a `#movie_player` it returns before doing even that.
 
