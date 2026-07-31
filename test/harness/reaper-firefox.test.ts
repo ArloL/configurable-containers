@@ -62,8 +62,8 @@ describe("a launched Firefox", () => {
     // A session nobody ever closes, in a process that is then terminated — a run cut
     // short, an IDE stop button. TERMINATION is what makes this the reaper's case and
     // not Selenium's: Selenium kills its geckodriver from a `process.once("exit")` hook
-    // of its own (selenium-webdriver/io/exec.js:134), which covers a clean exit and an
-    // uncaught throw, but node does not emit "exit" for a process killed by a signal.
+    // of its own (selenium-webdriver/io/exec.js, `onProcessExit`), which covers a clean
+    // exit and an uncaught throw, but node emits no "exit" for a signalled process.
     // Only the reaper's signal handlers run here. (Ctrl+C in a terminal is the benign
     // version: geckodriver shares the foreground process group and is signalled too.)
     const geckodriversBefore = geckodriverPids();

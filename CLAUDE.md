@@ -144,6 +144,10 @@ way* is in its own comment; the source is densely commented. This file carries o
   is then another hop of a navigation `reopenedNav` already owns, and the assertion proves
   nothing. If the POST guard regresses the tab wedges and every WebDriver call blocks — **a
   bare timeout is that regression's signature, not flake.**
+- **A reaper case must kill its holder with a SIGNAL.** Selenium's own exit hook already
+  cleans up after a clean exit and an uncaught throw, so an abandonment case that merely
+  `process.exit()`s passes with `harness/reaper.ts` removed entirely — verified by doing it.
+  Only SIGTERM isolates what the reaper adds.
 - **Config-sync adoption has no L4 test and cannot have one** (no Firefox Account in a test
   profile, no `moz-extension:` navigation, probe has its own sync namespace). The e2e cases
   observe the **startup push and save nothing** — a Save means observing after
@@ -183,6 +187,19 @@ way* is in its own comment; the source is densely commented. This file carries o
   green e2e with the feature broken (verified by doing it; only the 5ms ordering case in
   `browser-port.test.ts` caught it). `launch()` sets it unconditionally, so even
   `npm run manual` isn't byte-equivalent to a packaged build.
+- **`driver.quit()` is not what keeps a browser from leaking — `harness/reaper.ts` is.**
+  Selenium unrefs its geckodriver and kills it from a `process.once("exit")` hook of its own
+  (`io/exec.js`, `onProcessExit`), which covers a clean exit and an uncaught throw and
+  nothing else: node emits no `exit` for a **signalled** process; a browser leaked *mid-run*
+  (a `beforeAll` past `hookTimeout`, an `installAddon` that throws) then runs alongside every
+  later test; and session creation can throw with Firefox **already up** — on macOS it
+  re-execs, geckodriver loses the pid it was watching, and the survivor re-parents to init
+  with no capability left to find it by. So `launch` passes a `-profile` directory it made
+  itself, stamping the argv of the browser *and every content process* with a token that
+  exists before Firefox does. Keep that argument; keep `reapProfile`'s guard refusing a path
+  that isn't `cc-e2e-profile-…` (it becomes a `pgrep -f` pattern, and a short one matches
+  half the process table); and leave `npm run manual` **without** a SIGINT handler — the
+  reaper's is registered first and would pre-empt it.
 - **Debug real Firefox** with geckodriver `--log trace` + Selenium `usingServer` +
   `devtools.console.stdout.content=true`; `console.error` then reaches the log. `MOZ_LOG`
   surfaced nothing.
