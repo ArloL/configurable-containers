@@ -204,25 +204,39 @@ rules:
               }
               return null;
             };
+            // This fails silently by design -- every giving-up path is a bare return,
+            // and the only symptom is a video playing German. So each one says WHY on
+            // documentElement, which the page console can read even though the content
+            // script's own scope cannot be inspected: `document.documentElement.dataset.ccAudio`.
+            let mark = "";
+            const state = (s) => {
+              if (s === mark) return;
+              mark = s;
+              try { document.documentElement.dataset.ccAudio = s; } catch (e) {}
+            };
+            state("armed");
+
             const enforce = () => {
               // A content script is an isolated world: the player's methods are only
               // reachable through wrappedJSObject. Without it this silently never fires.
               const el = document.getElementById("movie_player");
               const p = el && el.wrappedJSObject;
-              if (!p || typeof p.getAvailableAudioTracks !== "function") return;
+              if (!p || typeof p.getAvailableAudioTracks !== "function") return state("no-player");
               const tracks = Array.from(p.getAvailableAudioTracks() || []);
-              if (!tracks.length) return;
+              if (!tracks.length) return state("no-alternate-tracks");
               // Guard on the track the SERVER marked default, not the current one:
               // getAudioTrack() reports "und" until playback commits, so a
               // current-track guard never sees the dub and never fires. A video whose
               // default is not a dub is left alone -- its extra tracks are deliberate.
               const def = tracks.find((t) => { const f = flags(t); return f && f.isDefault; });
-              if (!def || !flags(def).isAutoDubbed) return;
+              if (!def) return state("no-default-marked");
+              if (!flags(def).isAutoDubbed) return state("default-not-a-dub:" + flags(def).id);
               const orig = tracks.find((t) => { const f = flags(t); return f && !f.isAutoDubbed; });
-              if (!orig) return;
+              if (!orig) return state("no-original-available");
               const cur = flags(p.getAudioTrack());
-              if (cur && cur.id === flags(orig).id) return;
+              if (cur && cur.id === flags(orig).id) return state("holding:" + cur.id);
               p.setAudioTrack(orig);
+              state("switched:" + flags(orig).id);
             };
             // Polling, because NOTHING announces the change: the player reverts the
             // track silently. Verified by patching EventTarget.prototype.dispatchEvent
@@ -254,6 +268,7 @@ rules:
                 if (Date.now() > until) {
                   clearInterval(timer);
                   timer = null;
+                  state(mark.indexOf("holding") === 0 ? mark : "idle:" + mark);
                 }
               }, 100);
             };
