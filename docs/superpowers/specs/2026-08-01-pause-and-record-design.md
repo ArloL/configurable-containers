@@ -39,8 +39,11 @@ single user meets is finite.
   have tabs (each armable), and the last 10 recordings with click-to-copy per host and a
   clear button.
 - A **`browser_action` with no popup**: the badge is the armed indicator, and clicking
-  the button calls `openOptionsPage()`.
-- **`BrowserPort` additions**: `setBadge(text)`.
+  the button toggles the pause on the active tab's container.
+- **`BrowserPort` additions**: `setBadge(text)` and `onActionClicked(handler)`, the
+  latter delivering the `Tab` Firefox passes to `browserAction.onClicked`. `notify` is
+  reused as-is. `mock-port` gains a `clicksAction(tab)` arranger and one handler slot
+  for the new event, matching `receivesCommand`.
 - A **message router** in `wiring.ts` that owns the single `port.onMessage`
   registration (see §6 — this is a prerequisite, not a nicety).
 - Tests down the pyramid: pure recorder logic at L1/L2, engine bypass and recording at
@@ -266,13 +269,18 @@ flow. That is the correct side to fail on.
 
 ## 5. UI surfaces
 
-Everything the user touches is on the options page. There is no popup — see §9 for why,
-and §5.3 for what that costs.
+There are **two ways to arm a container and one implementation of arming**: the toolbar
+button (§5.3), which is how it is done in practice, and the options-page list (§5.1),
+which is how it is *tested*. Both call the same `arm(cookieStoreId)` on the pause
+module; neither has logic the other lacks. There is no popup — see §9.
 
 ### 5.1 Arming, on the options page
 
 The options page opens in a tab of its own, in its own container, so it cannot ask
 "which container am I in". It therefore **lists** containers and the user picks one.
+
+This path exists for two reasons: it is the only one an e2e can drive (§8.3), and it is
+the only way to arm a container whose tab is not the active one.
 
 The list is *the containers that currently have tabs*, each annotated with its tab count
 and the hosts of those tabs — `tmp12 · 1 tab · shop.example.com`. The annotation is not
@@ -314,12 +322,40 @@ progresses. `options.ts` reads `browser.storage.local` directly, consistent with
 and the `PauseState` types are exported from `pause.ts` as the single definition of the
 shape.
 
-### 5.3 The badge and the toolbar button
+### 5.3 The toolbar button
 
 `browser_action` stays in the manifest with **no `default_popup`**: `setBadgeText`
-requires the manifest key, and without a popup the button fires
-`browserAction.onClicked`, which calls `openOptionsPage()`. Indicator plus shortcut, no
-HTML entry point.
+requires the manifest key anyway, and without a popup the button fires
+`browserAction.onClicked` instead. Clicking it toggles the pause on the active tab's
+container. No HTML entry point, no message protocol.
+
+**Firefox hands `onClicked` the active `tab` as its first argument**, so the background
+reads `tab.cookieStoreId` straight off it. That is a better provenance than the popup
+would have had: no page is involved, so there is no payload to validate and nothing
+craftable to reach it. This is why the button is the ergonomic path and the options
+list is the fallback, rather than the other way round — the button is the version that
+knows which container you mean.
+
+A click is one action, so the button **cannot also open the options page**. Reaching the
+recordings goes through the ordinary add-on route (about:addons → Preferences), plus
+CC's existing startup `openOptionsPage()`.
+
+With no popup there is nowhere inline to answer a click, so the button path speaks
+through `port.notify` — the channel F9 already uses:
+
+- **On arm and on disarm**, naming the container: *"Routing paused in tmp12 — CC will
+  record hosts and move nothing."* The success toast is the only thing that says
+  **which** container was armed; the badge merely becomes `1`, and `tmp12` is not
+  something the user can otherwise confirm they hit.
+- **On refusal** (the active tab is in `firefox-default`, or on a non-http page), saying
+  why. A silent no-op is the worst outcome for a control reached for under time
+  pressure.
+
+This is a handful of notifications a week — one per deliberate user action — not F9's
+per-host volume, and unlike F9 there is no dedupe to design because the user initiated
+each one.
+
+### 5.4 The badge
 
 `setBadge(text)` on `BrowserPort`; the real adapter also sets a warning background
 colour once at startup. Text is the number of armed containers, empty when none.
@@ -331,9 +367,9 @@ no visible sign is a silent isolation hole; a badge that is occasionally shown o
 unrelated tab errs toward *more* visible, which is the right direction for this
 particular error.
 
-The badge is the one part of this feature with no automated coverage — nothing in the
-harness can read chrome UI. Accepted knowingly; it is a display of state that L3 already
-asserts, so what is untested is the rendering, not the fact.
+Like the button, the badge has no L4 coverage — nothing in the harness can read chrome
+UI (§8.3). Accepted knowingly: it displays state that L3 already asserts, so what goes
+untested is the rendering, not the fact.
 
 ## 6. Message routing (prerequisite)
 
@@ -412,6 +448,12 @@ and hydration rebuilding the dedupe set from a stored recording.
 - `reopenedNav` state survives arming mid-flow (pins the placement after 1b).
 - Overlays still fire in an armed container.
 - Last tab closing disarms and stamps `endedAt`.
+- A toolbar click on a tab in container X arms X — and a second click disarms it. Driven
+  through `clicksAction(tab)`, so the `onClicked` handler is exercised even though L4
+  cannot reach it.
+- A toolbar click on a `firefox-default` tab arms nothing and raises a refusal
+  notification; arming and disarming each raise one naming the container.
+- The badge text tracks the number of armed containers, and is empty at zero.
 - **Restart harness**: armed set and running recording survive; the rebuilt dedupe set
   does not re-add a host already recorded. Restart from a settled state — the harness
   does not model async work in flight.
@@ -442,9 +484,17 @@ tab, so the container list carries one extra row; and this drives routing from a
 the probe already navigated, so `awaitContainerTab` covers the reopen in step 1 while
 step 3's *non*-reopen has nothing to wait for and needs `awaitProbeReport`.
 
-What stays untested at L4: the badge (§5.3), and the last-tab-close disarm (closing the
-probe's tab tears down the observation surface the assertion needs). Both are covered at
-L3.
+What stays untested at L4, all of it chrome UI the harness cannot reach:
+
+- **The toolbar button** (§5.3). WebDriver cannot click a `browser_action` any more than
+  it can open a popup — which is exactly why the options list exists and the e2e drives
+  *it*. What goes uncovered shrinks to one line, `tab.cookieStoreId` off the `onClicked`
+  argument, because both paths call the same `arm()`. Keep it that way: any logic that
+  lives only in the `onClicked` handler is logic with no coverage at all.
+- **The badge** (§5.4) and the button's notifications — display of state that L3 already
+  asserts.
+- **Last-tab-close disarm** — closing the probe's tab tears down the observation surface
+  the assertion needs. Covered at L3.
 
 **Do not add a build-time seed to arm a container**, whatever pressure a later case
 applies. `__CC_NOTIFY_ECHO_TO__` already shows the cost — `launch()` sets it
@@ -472,17 +522,18 @@ capable of starting up with routing disabled.
 - **A badge-only `browser_action`, not a keyboard command or context menu.** Only the
   toolbar button can carry a persistent indicator, and the indicator is what makes the
   feature safe to leave in the product.
-- **Arming on the options page, not in a popup — chosen for testability.** The popup was
-  the better interaction: it knows which container the current tab is in, so arming was
-  one click with nothing to identify. The options page cannot know that (it is its own
-  tab, in its own container), so it must list containers and make the user pick — and
-  `tmp3 / tmp8 / tmp12` is exactly the identification problem the popup did not have.
-  It was traded anyway, because a popup **cannot be driven by WebDriver at all**: the
-  entire arm → record → review loop would have had no L4 coverage, in a feature whose
-  failure mode is *routing silently disabled*. Annotating each row with its open tabs
-  (§5.1) recovers most of the identification, and `storage.onChanged` (§5.2) recovers
-  the mid-flow glance. The residual cost is real: arming now takes a detour to another
-  tab.
+- **Two arming paths over one `arm()`, and no popup.** A popup cannot be driven by
+  WebDriver, so making it the only route would have left the whole arm → record → review
+  loop with no L4 coverage — unacceptable in a feature whose failure mode is *routing
+  silently disabled*. But the popup's appeal was never the panel; it was that a toolbar
+  interaction knows which container you are in. `browserAction.onClicked` supplies that
+  directly (Firefox passes the active `tab`) **without** a popup, so the ergonomics
+  survive while the HTML entry point and its message protocol do not.
+  The options-page list then exists to be *driven by a test*, and secondarily to arm a
+  container whose tab is not focused. Because both routes call the same `arm()`, the
+  untestable surface is one argument access rather than a feature. Cost of the split:
+  two entry points to keep honest, and a reviewer must resist putting logic behind the
+  button (§8.3).
 
 ## 10. Open questions
 
