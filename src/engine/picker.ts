@@ -1,6 +1,6 @@
 import type { Config, Deps, Target } from "../resolver/types";
 import { TEMPORARY } from "../resolver/types";
-import type { BrowserPort, Tab } from "./port";
+import type { BrowserPort, MessageSender, Tab } from "./port";
 import { supersede } from "./supersede";
 import { encodePayload, type PickMessage, type PickResponse } from "../extension/picker-protocol";
 
@@ -15,6 +15,13 @@ export interface Picker {
   // Open the choice page for the triggering tab. Called by the engine's onChoice
   // (automatic) and by the reopen-picker command (manual).
   showChoice(tabId: number, url: string, options: string[]): Promise<void>;
+  // The wiring owns the single runtime.onMessage registration and dispatches to this.
+  // Returns undefined SYNCHRONOUSLY for a message that is not ours: registering a second
+  // listener here would replace this one in mock-port (one handler slot per event), and
+  // in Firefox an async handler returns a Promise for every message it sees — which
+  // tells Firefox "I will answer this" and claims the reply channel from the sibling the
+  // message was actually addressed to.
+  handleMessage(msg: unknown, sender: MessageSender): Promise<PickResponse> | undefined;
 }
 
 const REOPEN_PICKER_COMMAND = "reopen-picker";
@@ -48,25 +55,29 @@ export function createPicker(opts: PickerOptions): Picker {
     await supersede(port, tab, { url: choiceUrl, cookieStoreId: tab.cookieStoreId });
   }
 
-  port.onMessage(async (msg, sender) => {
+  // Not `async`: the "not ours" answer has to be a synchronous undefined, and an async
+  // function cannot give one — it returns a Promise before the first line runs.
+  function handleMessage(msg: unknown, sender: MessageSender): Promise<PickResponse> | undefined {
     const m = msg as PickMessage;
     if (m?.type !== "cc-pick") return undefined;
-    // The tab to consume is the one that spoke, not one the message names: the hash
-    // payload a choice page renders from is attacker-reachable (a crafted
-    // moz-extension://<id>/choice.html#… link), and so is anything derived from it.
-    if (sender.tabId == null) return { ok: false } satisfies PickResponse;
-    // Same reason the choice page only ever navigated to http(s): the url travels on to
-    // port.createTab, and a javascript:/data: url there would run in a privileged origin.
-    if (!/^https?:/.test(m.url)) return { ok: false } satisfies PickResponse;
-    const tab = await port.getTab(sender.tabId);
-    if (!tab) return { ok: false } satisfies PickResponse;
-    try {
-      await reopen(tab, m.url, containerToTarget(m.container));
-      return { ok: true } satisfies PickResponse;
-    } catch {
-      return { ok: false } satisfies PickResponse;
-    }
-  });
+    return (async () => {
+      // The tab to consume is the one that spoke, not one the message names: the hash
+      // payload a choice page renders from is attacker-reachable (a crafted
+      // moz-extension://<id>/choice.html#… link), and so is anything derived from it.
+      if (sender.tabId == null) return { ok: false } satisfies PickResponse;
+      // Same reason the choice page only ever navigated to http(s): the url travels on to
+      // port.createTab, and a javascript:/data: url there would run in a privileged origin.
+      if (!/^https?:/.test(m.url)) return { ok: false } satisfies PickResponse;
+      const tab = await port.getTab(sender.tabId);
+      if (!tab) return { ok: false } satisfies PickResponse;
+      try {
+        await reopen(tab, m.url, containerToTarget(m.container));
+        return { ok: true } satisfies PickResponse;
+      } catch {
+        return { ok: false } satisfies PickResponse;
+      }
+    })();
+  }
 
   port.onCommand((name) => {
     if (name !== REOPEN_PICKER_COMMAND) return;
@@ -81,5 +92,5 @@ export function createPicker(opts: PickerOptions): Picker {
     })();
   });
 
-  return { showChoice };
+  return { showChoice, handleMessage };
 }
