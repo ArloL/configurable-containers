@@ -175,7 +175,16 @@ way* is in its own comment; the source is densely commented. This file carries o
   probe's command relay is a DOM event injected into http(s) pages only, so from
   `moz-extension://` every probe command (`listTabs`, `nav`, …) goes unanswered and reads
   as a timeout. `pause.test.ts` collects the tab id while still on the http page, arms,
-  then switches back before navigating.
+  then switches back to an http page before navigating.
+- **A probe reply is written into the DOM of the page that RELAYED the command, so a
+  `nav` must never move the tab the driver is parked on** — the navigation destroys the
+  document the answer lands in, and whether the reply beats the commit is a race the
+  driver's 100ms poll loses now and then. It reads as `probe command "nav" timed out`,
+  and it took `pause.test.ts` red on CI. The probe now **refuses** a `nav` whose target is
+  `sender.tab.id`, so the mistake names itself instead of flaking; the fix is a second
+  http tab to relay from (`openTab` + `awaitContainerTab`, a matched host so CC parks it
+  once and never touches it again). **Open that tab through the probe, not `driver.get`** —
+  from a committed page the reopen cancels the navigation and `driver.get` never returns.
 - **`test/engine/mock-port.ts` fidelity is where "L3 green, Firefox broken" comes from.** It
   fires `onTabCreated` from `createTab`, fires `onTabRemoved` from `removeTab` (Firefox
   doesn't care who closed the tab — while it didn't, a tab **CC itself closed** was invisible

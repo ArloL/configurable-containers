@@ -68,7 +68,8 @@ browser.runtime.onMessageExternal.addListener((msg) => {
 //             `switchTo().newWindow("tab")` cannot do this (it makes about:blank).
 //   tabs    — dump every tab's id/url/cookieStoreId/container name.
 //   nav     — navigate a tab BY ID; WebDriver can only drive the tab it is switched
-//             to, and gives no way to map a window handle to a tabs.Tab id.
+//             to, and gives no way to map a window handle to a tabs.Tab id. Refuses
+//             to navigate the tab it was RELAYED THROUGH — see below.
 //   open    — open an arbitrary URL in a new tab, including another extension's
 //             moz-extension:// page. WebDriver cannot navigate to that scheme at
 //             all, and Firefox lets one extension open another's pages without
@@ -78,12 +79,23 @@ browser.runtime.onMessageExternal.addListener((msg) => {
 //             REMOVED through it means re-navigating something on every poll; this
 //             asks the browser instead, from a tab that never moves.
 //   notifications — every notification CC's test build echoed to us so far.
-browser.runtime.onMessage.addListener(async (msg) => {
+browser.runtime.onMessage.addListener(async (msg, sender) => {
   if (msg && msg.cmd === "open") {
     const t = await browser.tabs.create({ url: msg.url });
     return { id: t.id, url: t.url };
   }
   if (msg && msg.cmd === "nav") {
+    // Every reply is written into the DOM of the tab that RELAYED the command, so
+    // navigating that same tab throws the answer away with the document it was going
+    // to land in: the driver then polls a fresh document that has no data-cc-result
+    // and reads it as `probe command "nav" timed out`. Whether the reply beats the
+    // commit is a race the driver's 100ms poll loses now and then — this was a real
+    // flake in test/e2e/pause.test.ts, on CI and locally. Refuse, so the mistake names
+    // itself instead of surfacing as an intermittent timeout; the test's job is to
+    // relay from a tab it is not about to move.
+    if (sender && sender.tab && sender.tab.id === msg.id) {
+      return { ok: false, error: "nav would navigate the tab it was relayed through" };
+    }
     await browser.tabs.update(msg.id, { url: msg.url });
     return { ok: true };
   }
