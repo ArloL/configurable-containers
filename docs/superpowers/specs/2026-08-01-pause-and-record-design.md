@@ -1,7 +1,7 @@
 # Pause & Record — Design
 
 **Date:** 2026-08-01
-**Status:** Approved, pending implementation plan
+**Status:** Implemented
 **Topic:** Arm a container so CC stops routing inside it, and record — deduped by host,
 in first-seen order — every top-level navigation it saw and what it *would* have done.
 The record is read afterwards and turned into config **by hand**; CC never proposes a
@@ -314,13 +314,18 @@ Placement is the point — reviewing a recording *is* writing config, and the co
 editor is on this page.
 
 The section subscribes to `browser.storage.onChanged` and re-renders, so a recording
-grows **live** while you watch it. That subscription is read-only, so it introduces no
-second writer (§4.3), and it gives back most of what the popup was for: leave the
-options page open in a second window and you can watch hosts appear as the checkout
-progresses. `options.ts` reads `browser.storage.local` directly, consistent with how
-`config.ts` and `config-sync.ts` already touch `browser.*` by design; the storage key
-and the `PauseState` types are exported from `pause.ts` as the single definition of the
-shape.
+grows **live** while you watch it: leave the options page open in a second window and you
+can watch hosts appear as the checkout progresses. That gives back most of what the popup
+was for.
+
+**As built, the subscription is only a signal.** The data still arrives through
+`cc-pause-status`, so the background remains the sole reader of its own storage shape and
+the page holds no second copy of it. (An earlier draft of this section had `options.ts`
+read `storage.local` directly, by analogy with `config.ts`. That analogy does not hold:
+the config has one writer *and* one reader, whereas the pause state is written by the
+background while the page renders it, so a shared shape would be two things to keep in
+step for no gain.) The storage key is exported from `pause.ts`; the message and row types
+live in `pause-protocol.ts`.
 
 ### 5.3 The toolbar button
 
@@ -479,10 +484,13 @@ One case, following the whole loop:
 Step 4 is the revert-verify anchor: back the §3.1 engine step out and the `CSID` changes.
 Step 5 fails independently if the recording never reaches storage.
 
-Two harness rules this case has to respect: the probe provisions its own container and
-tab, so the container list carries one extra row; and this drives routing from a tab
-the probe already navigated, so `awaitContainerTab` covers the reopen in step 1 while
-step 3's *non*-reopen has nothing to wait for and needs `awaitProbeReport`.
+Three harness rules this case has to respect. The probe provisions its own container and
+tab, so the container list carries one extra row. Step 3's *non*-reopen has nothing to
+wait for, so `awaitContainerTab` covers step 1's reopen but step 4 needs
+`awaitProbeReport`. And — found by hitting it — **the tab id must be read before parking
+on the options page**: the probe's command relay is a DOM event injected into http(s)
+pages only, so from `moz-extension://` `listTabs` and `nav` go unanswered and read as a
+timeout, not an error.
 
 What stays untested at L4, all of it chrome UI the harness cannot reach:
 

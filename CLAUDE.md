@@ -24,6 +24,27 @@ way* is in its own comment; the source is densely commented. This file carries o
   reopen skips `reopenedNav` and reopens forever). The rule was copied into the picker once
   and drifted inside the slice: the choice page loaded into the triggering tab, destroying
   the user's page. **`auto-temp.containerize` is a surviving second copy** — fold it in.
+- **`src/engine/pause.ts` owns arming, recording and the badge; the engine consults it at
+  exactly one point.** The seam is **synchronous by contract** — `isPaused` runs inside
+  the blocking `onBeforeRequest`, where an `await` is every navigation's latency, and
+  `record` returns `void` so a navigation never waits on bookkeeping. The step sits
+  **after `resolve()`** (the record's whole value is the counterfactual — "would have
+  been reopened into…" is what says a rule was needed) and **before the non-GET
+  declination** (a paused POST must raise no F9 toast: nothing went unapplied, the user
+  turned routing off). It adds nothing to `handled` and never cancels.
+- **Two arming paths, one `arm()`.** The toolbar button takes its container from the
+  `Tab` Firefox passes to `browserAction.onClicked`; the options page *names* one and the
+  background validates it. **WebDriver cannot click a `browser_action`**, so any logic
+  that lives only in the `onClicked` handler has no end-to-end coverage — keep it a
+  caller.
+- **`wireBackground` owns the single `runtime.onMessage` registration** and dispatches by
+  `type`; siblings expose `handleMessage` and must return `undefined` **synchronously**
+  for a message that is not theirs. A second `addListener` fails twice over and silently:
+  `mock-port` keeps one handler slot per event, so the first registration is replaced
+  with nothing going red, and in Firefox an `async` handler returns a Promise for *every*
+  message, which claims the reply channel from the sibling it was addressed to. Assert on
+  the **un-awaited** return — `await` flattens `Promise<undefined>` to `undefined`, which
+  is how the pre-existing case passed either way.
 - **Nothing crossing the choice-page boundary carries a tab id.** A crafted
   `moz-extension://<id>/choice.html#…` link is attacker-reachable, so the background takes
   the tab from the `cc-pick` *sender* and re-checks the url for http(s) — it goes on to
@@ -103,6 +124,16 @@ way* is in its own comment; the source is densely commented. This file carries o
   text never returns `adopt` (adoption reloads, so two machines restart each other forever),
   and the equal-stamp tie-break compares **texts** so exactly one side publishes. The tie is
   the *normal* first startup — pre-existing configs all backfill to `PRE_SYNC_EDIT`.
+- **The background is the pause state's ONLY writer; the options page only reads.**
+  Arming by a storage write from the page would race the background's own row-appends —
+  a new host landing while the user toggles loses one of the two writes. The page
+  subscribes to `storage.onChanged` as a *signal* and refetches through a message.
+- **The startup gate awaits pause hydration as well as the config.** The armed set cannot
+  be read inside the blocking handler (that is a storage round-trip in front of every
+  navigation), so it is read once and the session's first navigation is delayed instead.
+  Registration still happens synchronously; only the handler's body waits.
+  `wireBackground` exposes that readiness as `ready` **for the restart harness** — a case
+  that observes half-hydrated pause state passes for the wrong reason.
 - **Saving is a full extension restart, so every in-memory structure dies** — `handled`,
   `reopenedNav`, warned hosts, the `tmpSuffix` counter (hence `highestTmpSuffix`, or every
   save reissues `tmp1` beside a live `tmp1`). Don't add a cache expecting it to survive.
@@ -132,6 +163,19 @@ way* is in its own comment; the source is densely commented. This file carries o
   and browsing re-triggers the sweep. `*.realtime.test.ts` is the one thing `npm test` does
   not run (`npm run test:realtime`, nightly), and cases there must **not** pass `ccGraceMs`:
   the point is that the bundle carries the shipped constant.
+- **The pause's toolbar button and badge have no L4 coverage and cannot.** WebDriver
+  cannot click a `browser_action` or read chrome UI. `test/e2e/pause.test.ts` drives the
+  **options-page** arming route instead, and because both routes call one `arm()` the
+  uncovered surface is the click itself (`browser-port.test.ts` covers the tab mapping).
+  **Do not add a build-time seed to arm a container** to close the gap:
+  `__CC_NOTIFY_ECHO_TO__` already shows the cost — no test build is byte-equivalent to a
+  packaged one — and a path that arms by name would make the shipped extension capable of
+  starting up with routing disabled.
+- **An options-page e2e must read tab ids BEFORE parking on the options page.** The
+  probe's command relay is a DOM event injected into http(s) pages only, so from
+  `moz-extension://` every probe command (`listTabs`, `nav`, …) goes unanswered and reads
+  as a timeout. `pause.test.ts` collects the tab id while still on the http page, arms,
+  then switches back before navigating.
 - **`test/engine/mock-port.ts` fidelity is where "L3 green, Firefox broken" comes from.** It
   fires `onTabCreated` from `createTab`, fires `onTabRemoved` from `removeTab` (Firefox
   doesn't care who closed the tab — while it didn't, a tab **CC itself closed** was invisible
