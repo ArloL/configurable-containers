@@ -198,3 +198,54 @@ describe("pause — flushing the hit counts", () => {
     expect(((await browser.port.readStored(PAUSE_STORAGE_KEY)) as PauseState).recordings[0].hosts[0].hits).toBe(3);
   });
 });
+
+describe("pause — lifetime", () => {
+  it("disarms when the armed container's last tab closes", async () => {
+    const browser = aFakeBrowser();
+    const shop = browser.addContainerNamed({ name: "tmp3" });
+    const tab = browser.existingTab({ url: "https://shop.test/", cookieStoreId: shop.cookieStoreId });
+    const pause = createPause({ port: browser.port, clock: aFakeClock().clock });
+    await pause.arm(shop.cookieStoreId);
+
+    await browser.closesTab(tab);
+    await browser.settle();
+
+    // There is no timer: an expiry firing mid-checkout reproduces exactly the failure
+    // the pause exists to prevent, and unpredictably. For a throwaway, last-tab-close is
+    // the container's whole life.
+    expect(pause.isPaused(shop.cookieStoreId)).toBe(false);
+    expect(pause.snapshot().recordings[0].endedAt).not.toBeNull();
+    expect(browser.badgeText).toBe("");
+  });
+
+  it("stays armed while another tab in that container is still open", async () => {
+    const browser = aFakeBrowser();
+    const shop = browser.addContainerNamed({ name: "tmp3" });
+    const first = browser.existingTab({ url: "https://shop.test/", cookieStoreId: shop.cookieStoreId });
+    browser.existingTab({ url: "https://shop.test/cart", cookieStoreId: shop.cookieStoreId });
+    const pause = createPause({ port: browser.port, clock: aFakeClock().clock });
+    await pause.arm(shop.cookieStoreId);
+
+    await browser.closesTab(first);
+    await browser.settle();
+
+    expect(pause.isPaused(shop.cookieStoreId)).toBe(true);
+  });
+
+  it("leaves an unarmed container's tabs alone", async () => {
+    const browser = aFakeBrowser();
+    const armedContainer = browser.addContainerNamed({ name: "tmp3" });
+    browser.existingTab({ url: "https://shop.test/", cookieStoreId: armedContainer.cookieStoreId });
+    const other = browser.addContainerNamed({ name: "tmp4" });
+    const otherTab = browser.existingTab({ url: "https://elsewhere.test/", cookieStoreId: other.cookieStoreId });
+    const pause = createPause({ port: browser.port, clock: aFakeClock().clock });
+    await pause.arm(armedContainer.cookieStoreId);
+
+    await browser.closesTab(otherTab);
+    await browser.settle();
+
+    // The sweep asks the browser which containers still have tabs, so an unrelated tab
+    // closing must not end somebody else's recording.
+    expect(pause.isPaused(armedContainer.cookieStoreId)).toBe(true);
+  });
+});
