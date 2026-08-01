@@ -57,6 +57,8 @@ export interface MockPort {
   seededCookies: SetCookieDetails[];
   notifications: NotificationSpec[];
   registeredScripts: RegisterContentScriptDetails[];
+  /** Current browser_action badge text; "" when cleared. */
+  badgeText: string;
 
   // The engine floats its notification rather than awaiting it (a navigation must not
   // wait on a toast), so a test asserting on notifications must settle first.
@@ -112,6 +114,7 @@ export function aFakeBrowser(): MockPort {
   let messageHandler: ((msg: unknown, sender: MessageSender) => unknown | Promise<unknown>) | null = null;
   let commandHandler: ((name: string) => void) | null = null;
   let activeTab: Tab | null = null;
+  let badgeText = "";
   const cookieStore = new Map<string, Map<string, Cookie>>(); // storeId -> name -> cookie
   const registeredScripts: RegisterContentScriptDetails[] = [];
   // storage.local. Lives on the BROWSER, not the background session, which is the whole
@@ -243,6 +246,9 @@ export function aFakeBrowser(): MockPort {
     async notify(n) {
       notifications.push(n);
     },
+    async setBadge(text) {
+      badgeText = text;
+    },
     async readStored(key) {
       // Round-trips through JSON like the real storage does, so a test cannot pass by
       // handing back the very object the caller still holds a reference to.
@@ -273,6 +279,11 @@ export function aFakeBrowser(): MockPort {
     seededCookies,
     notifications,
     registeredScripts,
+    // A getter: `badgeText` is reassigned on every set, so exposing the binding's value
+    // here would freeze a test's view at construction time.
+    get badgeText() {
+      return badgeText;
+    },
     existingTab: makeTab,
     addContainerNamed: (props) => makeIdentity({ name: props.name, color: props.color ?? "blue", icon: props.icon ?? "circle" }),
     async opensTab(props) {

@@ -23,6 +23,12 @@ declare const __CC_NOTIFY_ECHO_TO__: string;
 // onBeforeRequest listener may return a Promise<BlockingResponse>, which Firefox
 // awaits before the request proceeds.
 export function createBrowserPort(): BrowserPort {
+  // The badge colour is set once, on first use, rather than at construction: the colour
+  // never changes, but constructing the port must stay free of browser.* calls — every
+  // other method here only touches browser.* when invoked, and a constructor that did
+  // otherwise would fail for any caller that has not stubbed browserAction.
+  let badgeColoured = false;
+
   return {
     onBeforeRequest(handler) {
       browser.webRequest.onBeforeRequest.addListener(
@@ -167,6 +173,14 @@ export function createBrowserPort(): BrowserPort {
       if (__CC_NOTIFY_ECHO_TO__ !== "") {
         await browser.runtime.sendMessage(__CC_NOTIFY_ECHO_TO__, { cmd: "cc-notification", ...n });
       }
+    },
+
+    async setBadge(text) {
+      if (!badgeColoured) {
+        badgeColoured = true;
+        await browser.browserAction.setBadgeBackgroundColor({ color: "#c1361a" });
+      }
+      await browser.browserAction.setBadgeText({ text });
     },
 
     async readStored(key) {

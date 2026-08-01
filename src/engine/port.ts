@@ -192,6 +192,12 @@ export interface BrowserPort {
   // desktop notification; the mock records the call.
   notify(n: NotificationSpec): Promise<void>;
 
+  // The armed-pause indicator. Text only — the real adapter sets the background colour
+  // once at startup, since the colour never changes and this is called on every
+  // arm/disarm. Empty string clears it. It is on the seam at all because a pause with no
+  // visible sign is an isolation hole the user has no way to notice.
+  setBadge(text: string): Promise<void>;
+
   // Durable key/value, backed by storage.local. The ONE thing here that outlives the
   // background context, which is what makes it worth a seam: a pending timer does not,
   // and `options.ts` calls runtime.reload() on every config save. Any deadline that has
