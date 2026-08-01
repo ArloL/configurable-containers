@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { aFakeBrowser } from "./mock-port";
-import { createEngine } from "../../src/engine/engine";
+import { createEngine, type PauseRecorder } from "../../src/engine/engine";
 import { matchRule, matchGroup, hostMatcher } from "../../src/matcher/matcher";
 import { sameSite } from "../../src/psl/same-site";
 import type { Config, Deps } from "../../src/resolver/types";
@@ -8,6 +8,8 @@ import type { WebRequestDetails } from "../../src/engine/port";
 
 const deps: Deps = { matchRule, matchGroup, sameSite };
 const ignoreChoices = () => {};
+// Required, not optional: an optional field is one a mock forgets to set.
+const noPause: PauseRecorder = { isPaused: () => false, record: () => {} };
 
 function sequentialTmpSuffixes(): () => string {
   let n = 0;
@@ -33,7 +35,7 @@ describe("engine — a non-GET navigation is never reopened (F9)", () => {
     const browser = aFakeBrowser();
     const tmp = browser.addContainerNamed({ name: "tmp1" });
     const tab = browser.existingTab({ url: "https://start.test/", cookieStoreId: tmp.cookieStoreId });
-    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, tmpSuffix: sequentialTmpSuffixes() });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
 
     const blockingResponse = await browser.navigates(aNavigationTo({ tabId: tab.id }));
     await browser.settle();
@@ -52,7 +54,7 @@ describe("engine — a non-GET navigation is never reopened (F9)", () => {
   it("declines a POST that would have bought a fresh throwaway", async () => {
     const browser = aFakeBrowser();
     const tab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
-    createEngine({ port: browser.port, config: { rules: [], groups: [] }, deps, onChoice: ignoreChoices, tmpSuffix: sequentialTmpSuffixes() });
+    createEngine({ port: browser.port, config: { rules: [], groups: [] }, deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
 
     const blockingResponse = await browser.navigates(aNavigationTo({ tabId: tab.id }));
     await browser.settle();
@@ -66,7 +68,7 @@ describe("engine — a non-GET navigation is never reopened (F9)", () => {
     const browser = aFakeBrowser();
     const tab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
     const offered: string[][] = [];
-    createEngine({ port: browser.port, config: choiceConfig(), deps, onChoice: (o) => void offered.push(o), tmpSuffix: sequentialTmpSuffixes() });
+    createEngine({ port: browser.port, config: choiceConfig(), deps, onChoice: (o) => void offered.push(o), pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
 
     const blockingResponse = await browser.navigates(aNavigationTo({ tabId: tab.id }));
     await browser.settle();
@@ -83,7 +85,7 @@ describe("engine — a non-GET navigation is never reopened (F9)", () => {
     const browser = aFakeBrowser();
     const work = browser.addContainerNamed({ name: "Work" });
     const tab = browser.existingTab({ url: "https://example.com/a", cookieStoreId: work.cookieStoreId });
-    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, tmpSuffix: sequentialTmpSuffixes() });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
 
     const blockingResponse = await browser.navigates(aNavigationTo({ tabId: tab.id }));
     await browser.settle();
@@ -95,7 +97,7 @@ describe("engine — a non-GET navigation is never reopened (F9)", () => {
   it("still reopens a GET", async () => {
     const browser = aFakeBrowser();
     const tab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
-    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, tmpSuffix: sequentialTmpSuffixes() });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
 
     const blockingResponse = await browser.navigates(aNavigationTo({ tabId: tab.id, method: "GET" }));
     await browser.settle();
@@ -108,7 +110,7 @@ describe("engine — a non-GET navigation is never reopened (F9)", () => {
   it("warns once per host, not once per attempt", async () => {
     const browser = aFakeBrowser();
     const tab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
-    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, tmpSuffix: sequentialTmpSuffixes() });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
 
     await browser.navigates(aNavigationTo({ tabId: tab.id, requestId: "1" }));
     await browser.navigates(aNavigationTo({ tabId: tab.id, requestId: "2", url: "https://example.com/other" }));
@@ -120,7 +122,7 @@ describe("engine — a non-GET navigation is never reopened (F9)", () => {
   it("says nothing about a POST inside a navigation the engine itself reopened", async () => {
     const browser = aFakeBrowser();
     const tab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
-    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, tmpSuffix: sequentialTmpSuffixes() });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
 
     await browser.navigates(aNavigationTo({ tabId: tab.id, method: "GET" })); // reopens into Work
     const created = browser.openedTabs[0];

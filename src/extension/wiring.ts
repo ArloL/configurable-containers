@@ -5,6 +5,7 @@ import { createCookieSeeder } from "../engine/cookie-seeder";
 import { createScriptInjector } from "../engine/script-injector";
 import { createRedirectorCloser } from "../engine/redirector-closer";
 import { createPicker } from "../engine/picker";
+import { createPause, type Pause } from "../engine/pause";
 import { matchRule, matchGroup } from "../matcher/matcher";
 import { sameSite } from "../psl/same-site";
 import { highestTmpSuffix } from "../engine/registry";
@@ -29,6 +30,12 @@ export interface Background {
   // The one sibling that reads the config eagerly, so it runs after useConfig.
   injectScripts(): Promise<void>;
   engine: Engine;
+  pause: Pause;
+  // Resolves when the gate opens — config published AND pause state hydrated. Nothing in
+  // background.ts awaits it (the gated handler does that itself); it is here so the
+  // restart harness can drive from a settled state rather than relying on hydration
+  // happening to land inside some other await.
+  ready: Promise<void>;
 }
 
 // Wires the engine and its siblings onto a port, and returns the four steps that
@@ -63,11 +70,21 @@ export function wireBackground(opts: WiringOptions): Background {
     markConfigReady = resolve;
   });
 
+  const pause = createPause({ port, clock });
+
+  // The blocking handler waits for BOTH. Routing against a still-empty config is wrong,
+  // and so is routing a container the user armed before the restart — and the armed set
+  // cannot be read inside the handler, because that is a storage round-trip in front of
+  // every navigation in the browser. So it is read once, here, and the session's first
+  // navigation is delayed instead. Registration itself stays synchronous; only the
+  // handler's body awaits.
+  const ready = Promise.all([configReady, pause.hydrate()]);
+
   const gatedPort: BrowserPort = {
     ...port,
     onBeforeRequest(handler) {
       port.onBeforeRequest(async (details) => {
-        await configReady;
+        await ready;
         return handler(details);
       });
     },
@@ -89,6 +106,7 @@ export function wireBackground(opts: WiringOptions): Background {
     port: gatedPort,
     config,
     deps: { matchRule, matchGroup, sameSite },
+    pause,
     tmpSuffix,
     onChoice: (options, nav) => {
       void picker.showChoice(nav.tabId, nav.url, options);
@@ -133,5 +151,7 @@ export function wireBackground(opts: WiringOptions): Background {
       await createScriptInjector({ port, config });
     },
     engine,
+    pause,
+    ready: ready.then(() => {}),
   };
 }
