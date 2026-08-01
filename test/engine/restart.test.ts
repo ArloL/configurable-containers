@@ -236,3 +236,60 @@ describe("a background restart — state that cannot be", () => {
     expect(browser.notifications).toHaveLength(2);
   });
 });
+
+describe("restart — a paused container", () => {
+  it("keeps the container paused, and its recording, across a background restart", async () => {
+    const browser = aFakeBrowser();
+    const clock = aFakeClock();
+    const shop = browser.addContainerNamed({ name: "tmp3" });
+    browser.existingTab({ url: "https://shop.test/", cookieStoreId: shop.cookieStoreId });
+    let session = await startTheBackground(browser, clock.clock, workConfig());
+    await session.pause.arm(shop.cookieStoreId);
+    session.pause.record(shop.cookieStoreId, "https://payment.acme.test/", { kind: "reopen", into: { kind: "temporary" } });
+    await browser.settle();
+
+    // Every config save calls runtime.reload(), so this is the ordinary path — and
+    // reviewing a recording is what leads to a save.
+    session = await restartTheBackground(session, browser, clock.clock, workConfig());
+
+    expect(session.pause.isPaused(shop.cookieStoreId)).toBe(true);
+    expect(session.pause.snapshot().recordings[0].hosts.map((h) => h.host)).toEqual(["payment.acme.test"]);
+
+    // The dedupe set is rebuilt from the stored recording, so a host the PREVIOUS
+    // session already recorded must not come back as a second row.
+    session.pause.record(shop.cookieStoreId, "https://payment.acme.test/again", { kind: "reopen", into: { kind: "temporary" } });
+    expect(session.pause.snapshot().recordings[0].hosts).toHaveLength(1);
+  });
+
+  it("still seeds cookies in a paused container — an overlay never decides a container", async () => {
+    const browser = aFakeBrowser();
+    const shop = browser.addContainerNamed({ name: "tmp3" });
+    const tab = browser.existingTab({ url: "https://shop.test/", cookieStoreId: shop.cookieStoreId });
+    const config: Config = {
+      rules: [
+        {
+          match: [hostMatcher("payment.acme.test")],
+          action: { kind: "open", containers: ["Work"] },
+          cookies: [{ name: "consent", url: "https://payment.acme.test/", value: "1" }],
+        },
+      ],
+      groups: [],
+    };
+    const session = await startTheBackground(browser, aFakeClock().clock, config);
+    await session.pause.arm(shop.cookieStoreId);
+
+    await browser.sendsHeaders({
+      requestId: "1",
+      tabId: tab.id,
+      url: "https://payment.acme.test/",
+      type: "main_frame",
+      requestHeaders: [],
+    });
+    await browser.settle();
+
+    // The pause suspends ROUTING, not the within-container conveniences: an overlay acts
+    // inside whatever container the tab is already in and never moves identity across
+    // one, so a paused checkout should still get its consent banner pre-dismissed.
+    expect(browser.seededCookies.map((c) => c.name)).toContain("consent");
+  });
+});

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import fc from "fast-check";
 import { aFakeBrowser } from "./mock-port";
-import { createEngine } from "../../src/engine/engine";
+import { createEngine, type PauseRecorder } from "../../src/engine/engine";
 import { matchRule, matchGroup, hostMatcher } from "../../src/matcher/matcher";
 import { sameSite } from "../../src/psl/same-site";
 import type { Config, Deps, Rule } from "../../src/resolver/types";
@@ -10,6 +10,8 @@ import type { WebRequestDetails } from "../../src/engine/port";
 const deps: Deps = { matchRule, matchGroup, sameSite };
 const HOSTS = ["a.test", "b.test", "c.example"] as const;
 const ignoreChoices = () => {};
+// Required, not optional: an optional field is one a mock forgets to set.
+const noPause: PauseRecorder = { isPaused: () => false, record: () => {} };
 
 function sequentialTmpSuffixes(): () => string {
   let n = 0;
@@ -52,7 +54,7 @@ describe("engine — property-based invariants", () => {
     await fc.assert(
       fc.asyncProperty(arbConfig, arbUrl, async (config, url) => {
         const { browser, tab } = freshMockWithTab();
-        createEngine({ port: browser.port, config, deps, onChoice: ignoreChoices, tmpSuffix: sequentialTmpSuffixes() });
+        createEngine({ port: browser.port, config, deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
         await browser.navigates(aNavigationTo({ tabId: tab.id, url }));
         expect(browser.openedTabs.length).toBeLessThanOrEqual(1);
       })
@@ -63,7 +65,7 @@ describe("engine — property-based invariants", () => {
     await fc.assert(
       fc.asyncProperty(arbConfig, arbUrl, async (config, url) => {
         const { browser, tab } = freshMockWithTab();
-        createEngine({ port: browser.port, config, deps, onChoice: ignoreChoices, tmpSuffix: sequentialTmpSuffixes() });
+        createEngine({ port: browser.port, config, deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
         const blockingResponse = await browser.navigates(aNavigationTo({ tabId: tab.id, url }));
         if (blockingResponse && blockingResponse.cancel && browser.openedTabs.length === 1) {
           // Whatever container we opened must exist as a real store the registry
@@ -81,7 +83,7 @@ describe("engine — property-based invariants", () => {
       fc.asyncProperty(arbConfig, arbUrl, async (config, url) => {
         const { browser, tab } = freshMockWithTab();
         browser.macAssigns(url, { userContextId: 1 }); // MAC owns every fired URL
-        createEngine({ port: browser.port, config, deps, onChoice: ignoreChoices, tmpSuffix: sequentialTmpSuffixes() });
+        createEngine({ port: browser.port, config, deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
         await browser.navigates(aNavigationTo({ tabId: tab.id, url }));
         expect(browser.openedTabs).toHaveLength(0);
         expect(browser.closedTabIds).toHaveLength(0);

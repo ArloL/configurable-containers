@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { aFakeBrowser } from "./mock-port";
-import { createEngine } from "../../src/engine/engine";
+import { createEngine, type PauseRecorder } from "../../src/engine/engine";
 import { matchRule, matchGroup, hostMatcher } from "../../src/matcher/matcher";
 import { sameSite } from "../../src/psl/same-site";
-import type { Config, Deps, Target } from "../../src/resolver/types";
+import type { Config, Decision, Deps, Target } from "../../src/resolver/types";
 import type { Tab, WebRequestDetails } from "../../src/engine/port";
 
 const deps: Deps = { matchRule, matchGroup, sameSite };
@@ -24,11 +24,26 @@ function workConfig(): Config {
 
 const ignoreChoices = () => {};
 
+// Every case that is not about pausing passes this. `pause` is a REQUIRED option rather
+// than an optional one precisely so it shows up here: an optional field is one a mock
+// forgets to set, and the coverage quietly stops.
+const noPause: PauseRecorder = { isPaused: () => false, record: () => {} };
+
+// An armed container, plus a log of what the engine handed the recorder.
+function armedFor(cookieStoreId: string) {
+  const recorded: { csid: string; url: string; decision: Decision }[] = [];
+  return {
+    isPaused: (id: string) => id === cookieStoreId,
+    record: (csid: string, url: string, decision: Decision) => void recorded.push({ csid, url, decision }),
+    recorded,
+  };
+}
+
 describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
   it("opens the container tab beside a source tab that is ON a page, and keeps that tab", async () => {
     const browser = aFakeBrowser();
     const sourceTab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default", index: 3, active: true, openerTabId: 7 });
-    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, tmpSuffix: sequentialTmpSuffixes() });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
 
     const blockingResponse = await browser.navigates(aNavigationTo({ tabId: sourceTab.id }));
 
@@ -50,7 +65,7 @@ describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
     // about:blank = a tab still pre-commit, which is what a middle-clicked or
     // target=_blank link is. Keeping it would strand an empty tab beside every one.
     const sourceTab = browser.existingTab({ url: "about:blank", cookieStoreId: "firefox-default", index: 3, active: true, openerTabId: 7 });
-    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, tmpSuffix: sequentialTmpSuffixes() });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
 
     const blockingResponse = await browser.navigates(aNavigationTo({ tabId: sourceTab.id }));
 
@@ -62,7 +77,7 @@ describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
   it("opens the container tab in the window the source tab is in, not the focused one", async () => {
     const browser = aFakeBrowser();
     const inAnotherWindow = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default", windowId: 7 });
-    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, tmpSuffix: sequentialTmpSuffixes() });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
 
     await browser.navigates(aNavigationTo({ tabId: inAnotherWindow.id }));
 
@@ -77,7 +92,7 @@ describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
     // landed in the last focused normal window and removing the original closed the
     // popup, taking the navigation with it.
     const popup = browser.existingTab({ url: "about:blank", cookieStoreId: "firefox-default", windowId: 42, openerTabId: 7 });
-    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, tmpSuffix: sequentialTmpSuffixes() });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
 
     await browser.navigates(aNavigationTo({ tabId: popup.id }));
 
@@ -89,7 +104,7 @@ describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
     const browser = aFakeBrowser();
     const tmp1 = browser.addContainerNamed({ name: "tmp1" });
     const sourceTab = browser.existingTab({ url: "about:newtab", cookieStoreId: tmp1.cookieStoreId });
-    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, tmpSuffix: sequentialTmpSuffixes() });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
 
     await browser.navigates(aNavigationTo({ tabId: sourceTab.id }));
 
@@ -99,7 +114,7 @@ describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
   it("F1: a re-fire of the same request+url does not open a second tab", async () => {
     const browser = aFakeBrowser();
     const sourceTab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
-    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, tmpSuffix: sequentialTmpSuffixes() });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
 
     await browser.navigates(aNavigationTo({ tabId: sourceTab.id }));
     const again = await browser.navigates(aNavigationTo({ tabId: sourceTab.id })); // same requestId + url
@@ -111,7 +126,7 @@ describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
   it("F1 termination: the reopened tab (now in target) yields stay, no further effects", async () => {
     const browser = aFakeBrowser();
     const sourceTab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
-    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, tmpSuffix: sequentialTmpSuffixes() });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
 
     await browser.navigates(aNavigationTo({ tabId: sourceTab.id }));
     const newTab = [...browser.openTabs.values()].find((t) => t.id !== sourceTab.id)!;
@@ -124,7 +139,7 @@ describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
   it("F1: the freshly reopened tab does not re-reopen when its first request fires before the url commits", async () => {
     const browser = aFakeBrowser();
     const sourceTab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
-    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, tmpSuffix: sequentialTmpSuffixes() });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
 
     await browser.navigates(aNavigationTo({ requestId: "1", tabId: sourceTab.id }));
     const newTab = [...browser.openTabs.values()].find((t) => t.id !== sourceTab.id)!;
@@ -142,7 +157,7 @@ describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
     const tab = browser.existingTab({ url: "https://kottke.org/", cookieStoreId: tmp1.cookieStoreId });
     const suffix = sequentialTmpSuffixes();
     suffix(); // tmp1 above was issued by this counter
-    createEngine({ port: browser.port, config: { rules: [], groups: [] }, deps, onChoice: ignoreChoices, tmpSuffix: suffix });
+    createEngine({ port: browser.port, config: { rules: [], groups: [] }, deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: suffix });
 
     // Click a link to another site: reopened into a fresh throwaway, tmp2.
     await browser.navigates(aNavigationTo({ requestId: "10", tabId: tab.id, url: "https://linked.test/a" }));
@@ -162,7 +177,7 @@ describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
   it("routes a later navigation in a reopened tab whose own request never arrived", async () => {
     const browser = aFakeBrowser();
     const sourceTab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
-    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, tmpSuffix: sequentialTmpSuffixes() });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
 
     await browser.navigates(aNavigationTo({ requestId: "1", tabId: sourceTab.id, url: "https://example.com/" }));
     const newTab = [...browser.openTabs.values()].find((t) => t.id !== sourceTab.id)!;
@@ -185,7 +200,7 @@ describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
     const tab = browser.existingTab({ url: "https://kottke.org/", cookieStoreId: tmp1.cookieStoreId });
     const suffix = sequentialTmpSuffixes();
     suffix(); // tmp1 above was issued by this counter
-    createEngine({ port: browser.port, config: { rules: [], groups: [] }, deps, onChoice: ignoreChoices, tmpSuffix: suffix });
+    createEngine({ port: browser.port, config: { rules: [], groups: [] }, deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: suffix });
 
     // Reopened to the http url the click carried...
     await browser.navigates(aNavigationTo({ requestId: "30", tabId: tab.id, url: "http://linked.test/a" }));
@@ -208,7 +223,7 @@ describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
     const opener = browser.existingTab({ url: "https://kottke.org/", cookieStoreId: tmp1.cookieStoreId });
     const suffix = sequentialTmpSuffixes();
     suffix(); // tmp1 above was issued by this counter
-    createEngine({ port: browser.port, config: { rules: [], groups: [] }, deps, onChoice: ignoreChoices, tmpSuffix: suffix });
+    createEngine({ port: browser.port, config: { rules: [], groups: [] }, deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: suffix });
 
     // Middle-click / ctrl-click / target=_blank: Firefox opens a tab that INHERITS the
     // opener's container and reads about:blank until the click's navigation commits.
@@ -223,7 +238,7 @@ describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
     const browser = aFakeBrowser();
     const work = browser.addContainerNamed({ name: "Work" });
     const tab = browser.existingTab({ url: "https://example.com/old", cookieStoreId: work.cookieStoreId });
-    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, tmpSuffix: sequentialTmpSuffixes() });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
 
     const blockingResponse = await browser.navigates(aNavigationTo({ tabId: tab.id }));
 
@@ -235,7 +250,7 @@ describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
   it("no matching rule reopens into a fresh tmp-prefixed container", async () => {
     const browser = aFakeBrowser();
     const tab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
-    createEngine({ port: browser.port, config: { rules: [], groups: [] }, deps, onChoice: ignoreChoices, tmpSuffix: sequentialTmpSuffixes() });
+    createEngine({ port: browser.port, config: { rules: [], groups: [] }, deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
 
     const blockingResponse = await browser.navigates(aNavigationTo({ tabId: tab.id, url: "https://unmatched.test/" }));
 
@@ -247,7 +262,7 @@ describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
   it("skips non-http(s) navigations", async () => {
     const browser = aFakeBrowser();
     const tab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
-    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, tmpSuffix: sequentialTmpSuffixes() });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
 
     const blockingResponse = await browser.navigates(aNavigationTo({ tabId: tab.id, url: "about:preferences" }));
 
@@ -258,7 +273,7 @@ describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
   it("skips sub_frame requests", async () => {
     const browser = aFakeBrowser();
     const tab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
-    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, tmpSuffix: sequentialTmpSuffixes() });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
 
     const blockingResponse = await browser.navigates(aNavigationTo({ tabId: tab.id, type: "sub_frame" }));
 
@@ -268,7 +283,7 @@ describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
 
   it("fails open when the tab has raced away (getTab null)", async () => {
     const browser = aFakeBrowser();
-    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, tmpSuffix: sequentialTmpSuffixes() });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
 
     const blockingResponse = await browser.navigates(aNavigationTo({ tabId: 999 }));
 
@@ -280,7 +295,7 @@ describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
     const browser = aFakeBrowser();
     const tab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
     browser.tabCreationFails(true);
-    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, tmpSuffix: sequentialTmpSuffixes() });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
 
     const blockingResponse = await browser.navigates(aNavigationTo({ tabId: tab.id }));
     expect(blockingResponse).toBeUndefined(); // NOT { cancel: true }
@@ -304,7 +319,7 @@ describe("engine — F7 MAC defer + choice", () => {
     const browser = aFakeBrowser();
     const tab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
     browser.macAssigns("https://example.com/", { userContextId: 5 });
-    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, tmpSuffix: sequentialTmpSuffixes() });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
 
     const blockingResponse = await browser.navigates(aNavigationTo({ tabId: tab.id }));
 
@@ -316,7 +331,7 @@ describe("engine — F7 MAC defer + choice", () => {
     const browser = aFakeBrowser();
     const tab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
     browser.macIsAbsent(true);
-    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, tmpSuffix: sequentialTmpSuffixes() });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
 
     const blockingResponse = await browser.navigates(aNavigationTo({ tabId: tab.id }));
 
@@ -333,6 +348,7 @@ describe("engine — F7 MAC defer + choice", () => {
       config: choiceConfig(),
       deps,
       onChoice: (options, nav) => seen.push({ options, nav }),
+      pause: noPause,
       tmpSuffix: sequentialTmpSuffixes(),
     });
 
@@ -348,7 +364,7 @@ describe("engine — F7 MAC defer + choice", () => {
     const tab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
     browser.macAssigns("https://example.com/", { userContextId: 5 });
     let called = false;
-    createEngine({ port: browser.port, config: choiceConfig(), deps, onChoice: () => (called = true), tmpSuffix: sequentialTmpSuffixes() });
+    createEngine({ port: browser.port, config: choiceConfig(), deps, onChoice: () => (called = true), pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
 
     const blockingResponse = await browser.navigates(aNavigationTo({ tabId: tab.id }));
 
@@ -363,7 +379,7 @@ describe("engine.reopen — extracted F1-guarded effect", () => {
     // The picker reaches here with the tab sitting on the choice page (a moz-extension
     // url), which is a tab with nothing to lose — so this is the replacing path.
     const sourceTab = browser.existingTab({ url: "moz-extension://test/choice.html#x", cookieStoreId: "firefox-default", index: 3, active: true, openerTabId: 7 });
-    const engine = createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, tmpSuffix: sequentialTmpSuffixes() });
+    const engine = createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
 
     await engine.reopen(sourceTab, "https://example.com/", { kind: "permanent", name: "Work" });
 
@@ -384,7 +400,7 @@ describe("engine.reopen — extracted F1-guarded effect", () => {
   it("reopen into Temporary creates a tmp-prefixed container", async () => {
     const browser = aFakeBrowser();
     const sourceTab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
-    const engine = createEngine({ port: browser.port, config: { rules: [], groups: [] }, deps, onChoice: ignoreChoices, tmpSuffix: sequentialTmpSuffixes() });
+    const engine = createEngine({ port: browser.port, config: { rules: [], groups: [] }, deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
 
     await engine.reopen(sourceTab, "https://example.com/", { kind: "temporary" });
 
@@ -397,9 +413,73 @@ describe("engine.reopen — extracted F1-guarded effect", () => {
     const browser = aFakeBrowser();
     const sourceTab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
     browser.tabCreationFails(true);
-    const engine = createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, tmpSuffix: sequentialTmpSuffixes() });
+    const engine = createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
 
     await expect(engine.reopen(sourceTab, "https://example.com/", { kind: "permanent", name: "Work" })).rejects.toThrow();
     expect(browser.closedTabIds).toEqual([]); // old tab not removed on failure
+  });
+});
+
+describe("engine — a paused container", () => {
+  it("does not reopen, does not cancel, and records what it would have done", async () => {
+    const browser = aFakeBrowser();
+    const tab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-container-1" });
+    const pause = armedFor("firefox-container-1");
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause, tmpSuffix: sequentialTmpSuffixes() });
+
+    const blockingResponse = await browser.navigates(aNavigationTo({ tabId: tab.id }));
+
+    // No cancel: the navigation proceeds where it already is, which is the point.
+    expect(blockingResponse).toBeUndefined();
+    expect(browser.openedTabs).toEqual([]);
+    expect(pause.recorded).toEqual([
+      {
+        csid: "firefox-container-1",
+        url: "https://example.com/",
+        decision: { kind: "reopen", into: { kind: "permanent", name: "Work" } },
+      },
+    ]);
+  });
+
+  it("still routes an UNARMED container — the anchor for the case above", async () => {
+    const browser = aFakeBrowser();
+    const tab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-container-2" });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: armedFor("firefox-container-1"), tmpSuffix: sequentialTmpSuffixes() });
+
+    const blockingResponse = await browser.navigates(aNavigationTo({ tabId: tab.id }));
+
+    expect(blockingResponse).toEqual({ cancel: true });
+    expect(browser.openedTabs).toHaveLength(1);
+  });
+
+  it("raises no declination notification for a POST — staying put is what was asked for", async () => {
+    const browser = aFakeBrowser();
+    const tab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-container-1" });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: armedFor("firefox-container-1"), tmpSuffix: sequentialTmpSuffixes() });
+
+    await browser.navigates(aNavigationTo({ tabId: tab.id, method: "POST" }));
+    await browser.settle();
+
+    // F9's toast announces a routing rule that went UNAPPLIED. Under a pause nothing
+    // went unapplied — the user turned routing off. This pins the step ahead of F9's.
+    expect(browser.notifications).toEqual([]);
+  });
+
+  it("shows no choice screen in a paused container, and records that one was due", async () => {
+    const browser = aFakeBrowser();
+    const tab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-container-1" });
+    const offered: string[][] = [];
+    const pause = armedFor("firefox-container-1");
+    const config: Config = {
+      rules: [{ match: [hostMatcher("example.com")], action: { kind: "open", containers: ["Personal", "Work"] } }],
+      groups: [],
+    };
+    createEngine({ port: browser.port, config, deps, onChoice: (o) => void offered.push(o), pause, tmpSuffix: sequentialTmpSuffixes() });
+
+    const blockingResponse = await browser.navigates(aNavigationTo({ tabId: tab.id }));
+
+    expect(offered).toEqual([]);
+    expect(blockingResponse).toBeUndefined();
+    expect(pause.recorded[0].decision).toEqual({ kind: "choice", options: ["Personal", "Work"] });
   });
 });

@@ -13,11 +13,22 @@ export interface Engine {
   reopen(tab: Tab, url: string, target: Target): Promise<void>;
 }
 
+// The pause seam. Narrow and SYNCHRONOUS by contract: `isPaused` is consulted inside the
+// blocking webRequest handler, where an await would sit in every navigation's latency,
+// and `record` returns void so a navigation never waits on bookkeeping. Required, not
+// optional — an optional field is one a mock forgets to set, and the coverage quietly
+// stops.
+export interface PauseRecorder {
+  isPaused(cookieStoreId: string): boolean;
+  record(cookieStoreId: string, url: string, decision: Decision): void;
+}
+
 export interface EngineOptions {
   port: BrowserPort;
   config: Config;
   deps: Deps;
   onChoice: (options: string[], nav: { tabId: number; url: string }) => void;
+  pause: PauseRecorder;
   tmpSuffix?: () => string;
 }
 
@@ -87,7 +98,7 @@ export function targetLabel(decision: Declinable): string {
 }
 
 export function createEngine(opts: EngineOptions): Engine {
-  const { port, config, deps, onChoice } = opts;
+  const { port, config, deps, onChoice, pause } = opts;
   const registry = createRegistry(port, opts.tmpSuffix ?? defaultSuffix());
   const handled = new Set<string>();
   // Hosts already warned about a declined non-GET. Session-scoped: the
@@ -174,6 +185,26 @@ export function createEngine(opts: EngineOptions): Engine {
 
     // (3) Pure decision.
     const decision = resolve(nav, config, deps);
+
+    // (3a) The user armed this container: record what routing would have done, and do
+    // nothing. Three boundaries, each required by something specific:
+    //
+    //   after (3)  — the record's value is the COUNTERFACTUAL. "would have been reopened
+    //                into a new temporary container" is what tells the user the rule was
+    //                needed; "no action" is what tells them it was not. resolve() is pure
+    //                and cheap, so computing a decision we then decline costs nothing.
+    //   before (3b)— a paused POST must raise no declination toast. F9 announces a
+    //                routing rule that went UNAPPLIED; under a pause nothing went
+    //                unapplied, the user turned routing off.
+    //   after (1b) — the reopenedNav guard still runs, so arming one hop after a reopen
+    //                cannot orphan its state.
+    //
+    // Adds nothing to `handled` and never cancels, so like (3b) it is fail-open by
+    // construction: it accumulates no state a later navigation could inherit.
+    if (pause.isPaused(tab.cookieStoreId)) {
+      pause.record(tab.cookieStoreId, d.url, decision);
+      return;
+    }
 
     // (3b) F9 — tabs.create can only issue a GET, so reopening a navigation that
     // carries a body would drop it silently. Leave it where it is and say so. Placed

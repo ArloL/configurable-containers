@@ -49,6 +49,10 @@ export async function startTheBackground(
   });
 
   background.useConfig(config);
+  // The gate's own condition: config published and pause state hydrated. Awaited here so
+  // a caller observes a background that has actually finished starting — without it a
+  // case could read half-hydrated pause state and pass for the wrong reason.
+  await background.ready;
   await background.resumeTmpSuffix();
   await background.injectScripts();
 
