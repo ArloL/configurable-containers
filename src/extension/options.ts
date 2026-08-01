@@ -20,6 +20,9 @@ import {
   writeStoredConfigYaml,
 } from "./config";
 
+import { PAUSE_STORAGE_KEY } from "../engine/pause";
+import type { ContainerRow, PauseStatusResponse, PauseToggleResponse } from "./pause-protocol";
+
 const textarea = document.getElementById("cc-config") as HTMLTextAreaElement;
 const saveButton = document.getElementById("cc-save") as HTMLButtonElement;
 const errorEl = document.getElementById("cc-error")!;
@@ -27,6 +30,9 @@ const statusEl = document.getElementById("cc-status")!;
 const syncEl = document.getElementById("cc-sync")!;
 const replacedEl = document.getElementById("cc-replaced") as HTMLElement;
 const restoreButton = document.getElementById("cc-restore") as HTMLButtonElement;
+const pauseContainersEl = document.getElementById("cc-pause-containers")!;
+const pauseRecordingsEl = document.getElementById("cc-pause-recordings")!;
+const pauseClearButton = document.getElementById("cc-pause-clear") as HTMLButtonElement;
 
 function describe(e: unknown): string {
   if (e instanceof ConfigError) {
@@ -110,6 +116,96 @@ async function renderReplaced(): Promise<void> {
   replacedEl.hidden = replaced === undefined || replaced === stored;
 }
 
+// ---- Pause & record -------------------------------------------------------------
+//
+// This page never WRITES the pause state: the background is its only writer, and a host
+// row landing mid-render would otherwise race a toggle here and one of the two writes
+// would be lost. Everything below goes through runtime.sendMessage.
+
+function renderContainerRow(row: ContainerRow): HTMLElement {
+  const line = document.createElement("div");
+  line.className = "cc-pause-row";
+
+  const button = document.createElement("button");
+  button.dataset.ccArm = row.name;
+  button.dataset.ccArmed = String(row.armed);
+  button.disabled = !row.armable;
+  button.textContent = row.armed ? "Resume routing" : "Pause routing";
+  button.addEventListener("click", () => {
+    void (async () => {
+      const reply = (await browser.runtime.sendMessage({
+        type: "cc-pause-toggle",
+        cookieStoreId: row.cookieStoreId,
+      })) as PauseToggleResponse;
+      if (!reply.ok) line.append(` ${reply.message}`);
+      await renderPause();
+    })();
+  });
+
+  const label = document.createElement("span");
+  const tabs = `${row.tabCount} tab${row.tabCount === 1 ? "" : "s"}`;
+  // The hosts are what make a throwaway row identifiable: "tmp12" alone says nothing
+  // about which flow it is holding, and that is the one thing the user needs to know.
+  const where = row.hosts.length > 0 ? ` · ${row.hosts.join(", ")}` : "";
+  const why = row.armable ? "" : ` — ${row.reason ?? ""}`;
+  label.textContent = ` ${row.name} · ${tabs}${where}${why}`;
+
+  line.append(button, label);
+  return line;
+}
+
+function renderRecording(recording: PauseStatusResponse["recordings"][number]): HTMLElement {
+  const box = document.createElement("div");
+  box.className = "cc-pause-recording";
+
+  const head = document.createElement("p");
+  head.className = "cc-pause-when";
+  const when = new Date(recording.startedAt).toLocaleString();
+  head.textContent = `${recording.container} · ${when}${recording.endedAt === null ? " · recording now" : ""}`;
+  box.append(head);
+
+  for (const row of recording.hosts) {
+    const line = document.createElement("div");
+    line.className = "cc-pause-row";
+
+    const copy = document.createElement("button");
+    copy.dataset.ccHost = row.host;
+    copy.textContent = "Copy";
+    // The host, and nothing else. Choosing between inherit / ignore / open is a
+    // judgement about what a domain IS to the user, and CC does not have what it would
+    // take to make it — a generated snippet would be CC guessing. This removes the
+    // typo, not the decision.
+    copy.addEventListener("click", () => void navigator.clipboard.writeText(row.host));
+
+    const label = document.createElement("span");
+    label.className = "cc-pause-host";
+    label.textContent = ` ${row.host} ×${row.hits} — ${row.wouldHave}`;
+
+    line.append(copy, label);
+    box.append(line);
+  }
+
+  if (recording.hosts.length === 0) {
+    const empty = document.createElement("p");
+    empty.textContent = "Nothing seen yet.";
+    box.append(empty);
+  }
+  return box;
+}
+
+async function renderPause(): Promise<void> {
+  const status = (await browser.runtime.sendMessage({ type: "cc-pause-status" })) as PauseStatusResponse;
+  pauseContainersEl.replaceChildren(...status.containers.map(renderContainerRow));
+  pauseRecordingsEl.replaceChildren(...status.recordings.map(renderRecording));
+}
+
+pauseClearButton.addEventListener("click", () => {
+  void (async () => {
+    await browser.runtime.sendMessage({ type: "cc-pause-clear" });
+    await renderPause();
+  })();
+});
+
 textarea.addEventListener("input", () => {
   statusEl.textContent = "";
   validate();
@@ -151,4 +247,14 @@ void (async () => {
   // painted, and a status that said "not yet published" until the next visit would be
   // reporting a race rather than the truth.
   onSyncStorageChanged(() => void renderSyncStatus());
+
+  await renderPause();
+  // Live, so a recording grows while you watch it — that mid-flow glance is what a
+  // toolbar popup would have been for, and it comes free here. The subscription is only
+  // a SIGNAL: the data still arrives through the message, so the background remains the
+  // only reader of its own storage shape. The repaint touches the pause subtree alone,
+  // never the textarea, so unsaved edits cannot be clobbered by a background write.
+  browser.storage.onChanged.addListener((changes, area) => {
+    if (area === "local" && PAUSE_STORAGE_KEY in changes) void renderPause();
+  });
 })();

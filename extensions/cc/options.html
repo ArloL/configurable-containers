@@ -12,6 +12,11 @@
     #cc-replaced { background: #fff6d8; border: 1px solid #e0c56a; padding: 8px 12px; }
     #cc-replaced[hidden] { display: none; }
     button { font-size: 14px; padding: 4px 12px; }
+    .cc-pause-row { padding: 3px 0; }
+    .cc-pause-row button[data-cc-armed="true"] { font-weight: bold; }
+    .cc-pause-host { font-family: monospace; }
+    .cc-pause-recording { border-left: 3px solid #ccc; padding-left: 10px; margin: 12px 0; }
+    .cc-pause-when { color: #555; }
   </style>
 </head>
 <body>
@@ -24,6 +29,18 @@
     A config synced from another machine replaced the one stored here.
     <button id="cc-restore">Load the replaced config into the editor</button>
   </p>
+  <hr>
+  <h2>Pause &amp; record</h2>
+  <p>
+    Pausing a container stops CC routing inside it and records every site it sees, so you
+    can add the ones you need to the config above. The toolbar button does the same for
+    the container you are currently in. A pause ends when you resume it, or when the
+    container's last tab closes.
+  </p>
+  <div id="cc-pause-containers"></div>
+  <h3>Recordings</h3>
+  <div id="cc-pause-recordings"></div>
+  <p><button id="cc-pause-clear">Clear recordings</button></p>
   <script src="options.js"></script>
 </body>
 </html>
