@@ -63,8 +63,10 @@ async function buildNavContext(
 }
 
 // The two decisions the engine executes by opening a tab — and therefore the two it
-// cannot execute for a request that carries a body.
-type Declinable = Extract<Decision, { kind: "reopen" } | { kind: "choice" }>;
+// cannot execute for a request that carries a body. Exported because the pause record
+// describes a declined action in the SAME words as the F9 notification: one function, so
+// the toast and the record cannot drift apart.
+export type Declinable = Extract<Decision, { kind: "reopen" } | { kind: "choice" }>;
 
 // How the notification names where the tab is, and where the rules wanted it.
 async function containerLabel(port: BrowserPort, cookieStoreId: string): Promise<string> {
@@ -72,7 +74,7 @@ async function containerLabel(port: BrowserPort, cookieStoreId: string): Promise
   return ci ? ci.name : "the default container";
 }
 
-function targetLabel(decision: Declinable): string {
+export function targetLabel(decision: Declinable): string {
   if (decision.kind === "choice") return `one of: ${decision.options.join(", ")}`;
   switch (decision.into.kind) {
     case "permanent":
