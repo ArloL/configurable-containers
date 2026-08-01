@@ -136,6 +136,21 @@ export function createPause(opts: { port: BrowserPort; clock: Clock }): Pause {
     return { ok: true, container };
   }
 
+  // A tab closing is the only way a container becomes empty, so it is the only trigger
+  // needed. WHICH tab closed does not matter — the browser is asked — and that is what
+  // lets this survive a restart with no per-tab bookkeeping to rebuild. mock-port fires
+  // onTabRemoved for a tab CC itself closed, so a reopen that consumed the container's
+  // last tab is seen here too.
+  port.onTabRemoved(() => {
+    void (async () => {
+      if (armed.size === 0) return;
+      const occupied = new Set((await port.queryTabs({})).map((t) => t.cookieStoreId));
+      for (const cookieStoreId of [...armed]) {
+        if (!occupied.has(cookieStoreId)) await disarm(cookieStoreId);
+      }
+    })().catch((e) => console.warn("[pause] disarm-on-empty failed", e));
+  });
+
   return {
     isPaused: (cookieStoreId) => armed.has(cookieStoreId),
 
