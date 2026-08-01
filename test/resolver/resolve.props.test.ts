@@ -18,7 +18,9 @@ const arbContainer: fc.Arbitrary<ContainerRef> = fc.oneof(
 const arbAction = fc.oneof(
   fc.record({
     kind: fc.constant("open" as const),
-    containers: fc.constantFrom(["X"], ["Temporary"], ["Personal", "Work"]),
+    // Explicit `string[]`: fast-check 4 infers `const` type parameters, so a bare
+    // call yields readonly tuples that don't fit Action's mutable `containers`.
+    containers: fc.constantFrom<string[]>(["X"], ["Temporary"], ["Personal", "Work"]),
   }),
   fc.constant({ kind: "inherit" as const }),
   fc.constant({ kind: "ignore" as const }),
