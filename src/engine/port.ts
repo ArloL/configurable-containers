@@ -182,6 +182,13 @@ export interface BrowserPort {
   // Reopen picker keyboard command (manifest "commands").
   onCommand(handler: (name: string) => void): void;
 
+  // browser_action clicks. Firefox hands the handler the ACTIVE TAB, which is the whole
+  // reason the toolbar button can arm the container the user is in without a popup, a
+  // message, or a payload to validate — no page is involved, so nothing craftable can
+  // reach it. WebDriver cannot click a browser_action, so a handler registered here has
+  // no end-to-end coverage: keep it a caller of logic that lives elsewhere.
+  onActionClicked(handler: (tab: Tab) => void): void;
+
   // The active tab in the current window (for the reopen picker). Null if none.
   getActiveTab(): Promise<Tab | null>;
 
