@@ -94,6 +94,16 @@ function fakeBrowser() {
       },
       _sent: [] as { ext: string; msg: unknown }[],
     },
+    browserAction: {
+      setBadgeText: async (d: { text: string }) => {
+        f.browserAction._texts.push(d.text);
+      },
+      setBadgeBackgroundColor: async (d: { color: string }) => {
+        f.browserAction._colors.push(d.color);
+      },
+      _texts: [] as string[],
+      _colors: [] as string[],
+    },
   };
 }
 let f: ReturnType<typeof fakeBrowser>;
@@ -261,5 +271,26 @@ describe("createBrowserPort — disposal methods", () => {
     const port = createBrowserPort();
     await expect(port.notify({ title: "T", message: "M" })).rejects.toThrow(/No permission/);
     expect(f.runtime._sent).toEqual([]);
+  });
+
+  it("setBadge writes the text and colours the badge exactly once", async () => {
+    const port = createBrowserPort();
+
+    await port.setBadge("1");
+    await port.setBadge("2");
+    await port.setBadge("");
+
+    expect(f.browserAction._texts).toEqual(["1", "2", ""]);
+    // The colour never changes, so setting it per update would be one wasted call on
+    // every arm and disarm. Constructing the port must not do it either: every other
+    // method here touches browser.* only when invoked.
+    expect(f.browserAction._colors).toEqual(["#c1361a"]);
+  });
+
+  it("constructing the port touches no browser.* API", () => {
+    createBrowserPort();
+
+    expect(f.browserAction._texts).toEqual([]);
+    expect(f.browserAction._colors).toEqual([]);
   });
 });
