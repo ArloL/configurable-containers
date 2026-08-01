@@ -45,6 +45,22 @@ flows from breaking along the way.
 How domains map to containers is defined in a single user configuration. See
 [CONFIG.md](CONFIG.md) for the design.
 
+### Working out what a flow needs
+
+Some flows — a checkout that hands off to a payment provider, a login that bounces
+through several identity hosts — break the first time because a domain nobody has
+configured gets isolated into a fresh container and the session is lost.
+
+Before entering a flow you don't trust, **pause** the container you are in: the toolbar
+button does it for the current tab, and the options page lists every container that has
+tabs open. While paused, CC routes nothing inside that container, so the flow completes
+— and it records each site it saw along with the action it would have taken. Afterwards
+the recording sits beside the config editor, so you can read off the hosts that mattered
+and write the rules yourself. CC never proposes one.
+
+A pause ends when you resume it, or when the container's last tab closes. The toolbar
+badge shows how many containers are paused.
+
 ## Install
 
 Configurable Containers is published on addons.mozilla.org. Install it from its
