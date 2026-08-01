@@ -249,3 +249,45 @@ describe("pause — lifetime", () => {
     expect(pause.isPaused(armedContainer.cookieStoreId)).toBe(true);
   });
 });
+
+describe("pause — the toolbar button", () => {
+  it("arms the container of the tab Firefox hands the click, and says which", async () => {
+    const browser = aFakeBrowser();
+    const shop = browser.addContainerNamed({ name: "tmp3" });
+    const tab = browser.existingTab({ url: "https://shop.test/", cookieStoreId: shop.cookieStoreId });
+    const pause = createPause({ port: browser.port, clock: aFakeClock().clock });
+
+    await browser.clicksAction(tab);
+
+    expect(pause.isPaused(shop.cookieStoreId)).toBe(true);
+    // The badge only ever reaches "1", so the toast is the one thing that names tmp3 —
+    // and the user has no other way to confirm they hit the container they meant.
+    expect(browser.notifications[0].message).toContain("tmp3");
+  });
+
+  it("a second click resumes routing", async () => {
+    const browser = aFakeBrowser();
+    const shop = browser.addContainerNamed({ name: "tmp3" });
+    const tab = browser.existingTab({ url: "https://shop.test/", cookieStoreId: shop.cookieStoreId });
+    const pause = createPause({ port: browser.port, clock: aFakeClock().clock });
+
+    await browser.clicksAction(tab);
+    await browser.clicksAction(tab);
+
+    expect(pause.isPaused(shop.cookieStoreId)).toBe(false);
+    expect(browser.notifications).toHaveLength(2);
+    expect(browser.notifications[1].message).toContain("tmp3");
+  });
+
+  it("refuses the default container out loud", async () => {
+    const browser = aFakeBrowser();
+    const tab = browser.existingTab({ url: "https://shop.test/", cookieStoreId: "firefox-default" });
+    const pause = createPause({ port: browser.port, clock: aFakeClock().clock });
+
+    await browser.clicksAction(tab);
+
+    // A silent no-op is the worst outcome for a control reached for under time pressure.
+    expect(pause.isPaused("firefox-default")).toBe(false);
+    expect(browser.notifications[0].message).toContain("default container");
+  });
+});

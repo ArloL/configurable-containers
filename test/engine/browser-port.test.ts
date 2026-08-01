@@ -95,6 +95,12 @@ function fakeBrowser() {
       _sent: [] as { ext: string; msg: unknown }[],
     },
     browserAction: {
+      onClicked: {
+        addListener: (fn: (tab: unknown) => void) => {
+          f.browserAction._clicked = fn;
+        },
+      },
+      _clicked: null as ((tab: unknown) => void) | null,
       setBadgeText: async (d: { text: string }) => {
         f.browserAction._texts.push(d.text);
       },
@@ -285,6 +291,19 @@ describe("createBrowserPort — disposal methods", () => {
     // every arm and disarm. Constructing the port must not do it either: every other
     // method here touches browser.* only when invoked.
     expect(f.browserAction._colors).toEqual(["#c1361a"]);
+  });
+
+  it("onActionClicked hands on the tab Firefox supplied, mapped", () => {
+    const port = createBrowserPort();
+    const seen: { id: number; cookieStoreId: string }[] = [];
+    port.onActionClicked((tab) => void seen.push({ id: tab.id, cookieStoreId: tab.cookieStoreId }));
+
+    // Firefox passes the ACTIVE tab, which is what lets the button arm the container the
+    // user is in with no popup and no payload to validate. WebDriver cannot click a
+    // browser_action, so this is the only place the mapping is exercised at all.
+    f.browserAction._clicked!({ id: 5, url: "https://x.test/", cookieStoreId: "firefox-container-2", index: 1, active: true, windowId: 3 });
+
+    expect(seen).toEqual([{ id: 5, cookieStoreId: "firefox-container-2" }]);
   });
 
   it("constructing the port touches no browser.* API", () => {

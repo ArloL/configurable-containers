@@ -51,6 +51,7 @@ export interface Pause {
 }
 
 const DEFAULT_STORE_ID = "firefox-default";
+const NOTIFY_TITLE = "Configurable Containers";
 
 // The F9 toast's own words for an action CC declined, extended with the one case F9
 // never sees: a decision that would not have moved the tab at all. Recording those too is
@@ -135,6 +136,28 @@ export function createPause(opts: { port: BrowserPort; clock: Clock }): Pause {
     await persist();
     return { ok: true, container };
   }
+
+  // The toolbar button. It holds NO logic of its own, and must not acquire any: WebDriver
+  // cannot click a browser_action, so anything living only here would ship with no
+  // end-to-end coverage at all. The options-page route (which an e2e does drive) reaches
+  // the same arm()/disarm(), so what goes uncovered is the argument access below.
+  //
+  // Firefox supplies `tab`, so there is no payload to validate and nothing craftable can
+  // reach this — unlike the options page, which names a container and is checked.
+  port.onActionClicked((tab) => {
+    void (async () => {
+      const wasPaused = armed.has(tab.cookieStoreId);
+      const result = wasPaused ? await disarm(tab.cookieStoreId) : await arm(tab.cookieStoreId);
+      await port.notify({
+        title: NOTIFY_TITLE,
+        message: !result.ok
+          ? result.reason
+          : wasPaused
+            ? `Routing resumed in ${result.container}.`
+            : `Routing paused in ${result.container} — CC will record the sites it sees and move nothing.`,
+      });
+    })().catch((e) => console.warn("[pause] toolbar click failed", e));
+  });
 
   // A tab closing is the only way a container becomes empty, so it is the only trigger
   // needed. WHICH tab closed does not matter — the browser is asked — and that is what

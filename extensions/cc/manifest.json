@@ -29,6 +29,9 @@
     "page": "options.html",
     "open_in_tab": true
   },
+  "browser_action": {
+    "default_title": "Configurable Containers — pause routing in this container"
+  },
   "commands": {
     "reopen-picker": {
       "suggested_key": { "default": "Ctrl+Shift+O" },

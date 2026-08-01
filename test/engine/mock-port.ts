@@ -82,6 +82,8 @@ export interface MockPort {
   receivesMessage(msg: unknown, from?: Tab): Promise<unknown>;
   /** Fires browser.commands.onCommand. */
   receivesCommand(name: string): Promise<void>;
+  /** Fires browser.browserAction.onClicked with the tab Firefox would hand it. */
+  clicksAction(tab: Tab): Promise<void>;
 
   // Arranged conditions.
   macAssigns(url: string, value: unknown): void;
@@ -115,6 +117,7 @@ export function aFakeBrowser(): MockPort {
   let commandHandler: ((name: string) => void) | null = null;
   let activeTab: Tab | null = null;
   let badgeText = "";
+  let actionClickedH: ((tab: Tab) => void) | null = null;
   const cookieStore = new Map<string, Map<string, Cookie>>(); // storeId -> name -> cookie
   const registeredScripts: RegisterContentScriptDetails[] = [];
   // storage.local. Lives on the BROWSER, not the background session, which is the whole
@@ -246,6 +249,9 @@ export function aFakeBrowser(): MockPort {
     async notify(n) {
       notifications.push(n);
     },
+    onActionClicked(h) {
+      actionClickedH = h;
+    },
     async setBadge(text) {
       badgeText = text;
     },
@@ -313,6 +319,10 @@ export function aFakeBrowser(): MockPort {
     },
     async receivesCommand(name) {
       commandHandler?.(name);
+      await flushMicrotasks();
+    },
+    async clicksAction(tab) {
+      actionClickedH?.(tab);
       await flushMicrotasks();
     },
     activeTabIs(tab) {

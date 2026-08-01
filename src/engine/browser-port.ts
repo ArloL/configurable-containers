@@ -175,6 +175,10 @@ export function createBrowserPort(): BrowserPort {
       }
     },
 
+    onActionClicked(handler) {
+      browser.browserAction.onClicked.addListener((tab) => handler(mapTab(tab)));
+    },
+
     async setBadge(text) {
       if (!badgeColoured) {
         badgeColoured = true;
