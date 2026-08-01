@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { aFakeBrowser, DEFAULT_WINDOW_ID } from "./mock-port";
+import { aFakeBrowser, DEFAULT_WINDOW_ID, type MockPort } from "./mock-port";
 import { createPicker } from "../../src/engine/picker";
 import { decodePayload } from "../../src/extension/picker-protocol";
 import { parseConfig } from "../../src/config/parse";
@@ -37,6 +37,16 @@ function fakeReopen(): {
 
 function decodeChoiceUrl(url: string | undefined) {
   return decodePayload(url!.split("#")[1]);
+}
+
+// The picker no longer registers runtime.onMessage — the wiring owns the single
+// registration and dispatches by type. These cases mount the handler themselves so they
+// still drive it through the port; that the WIRING dispatches cc-pick to it is pinned
+// separately, in wiring.test.ts.
+function mountedPicker(browser: MockPort, reopen: (tab: Tab, url: string, t: Target) => Promise<void>) {
+  const picker = createPicker({ port: browser.port, config, deps, reopen });
+  browser.port.onMessage((msg, sender) => picker.handleMessage(msg, sender));
+  return picker;
 }
 
 describe("picker — choice screen (onChoice flow)", () => {
@@ -108,7 +118,7 @@ describe("picker — a selection (cc-pick)", () => {
     const browser = aFakeBrowser();
     const choiceTab = browser.existingTab({ url: CHOICE_PAGE + "#x", cookieStoreId: "firefox-default" });
     const fr = fakeReopen();
-    createPicker({ port: browser.port, config, deps, reopen: fr.reopen });
+    mountedPicker(browser, fr.reopen);
 
     const reply = await browser.receivesMessage({ type: "cc-pick", url: "https://figma.example/", container: "Work" }, choiceTab);
 
@@ -120,7 +130,7 @@ describe("picker — a selection (cc-pick)", () => {
     const browser = aFakeBrowser();
     const choiceTab = browser.existingTab({ url: CHOICE_PAGE + "#x", cookieStoreId: "firefox-default" });
     const fr = fakeReopen();
-    createPicker({ port: browser.port, config, deps, reopen: fr.reopen });
+    mountedPicker(browser, fr.reopen);
 
     await browser.receivesMessage({ type: "cc-pick", url: "https://youtube.example/", container: "Temporary" }, choiceTab);
 
@@ -130,7 +140,7 @@ describe("picker — a selection (cc-pick)", () => {
   it("declines a sender that is not a tab — the page cannot name a tab it is not", async () => {
     const browser = aFakeBrowser();
     const fr = fakeReopen();
-    createPicker({ port: browser.port, config, deps, reopen: fr.reopen });
+    mountedPicker(browser, fr.reopen);
 
     const reply = await browser.receivesMessage({ type: "cc-pick", url: "https://figma.example/", container: "Work" });
 
@@ -142,7 +152,7 @@ describe("picker — a selection (cc-pick)", () => {
     const browser = aFakeBrowser();
     const choiceTab = browser.existingTab({ url: CHOICE_PAGE + "#x", cookieStoreId: "firefox-default" });
     const fr = fakeReopen();
-    createPicker({ port: browser.port, config, deps, reopen: fr.reopen });
+    mountedPicker(browser, fr.reopen);
 
     const reply = await browser.receivesMessage({ type: "cc-pick", url: "javascript:alert(1)", container: "Work" }, choiceTab);
 
@@ -157,7 +167,7 @@ describe("picker — a selection (cc-pick)", () => {
     fr.reopen = async () => {
       throw new Error("boom");
     };
-    createPicker({ port: browser.port, config, deps, reopen: fr.reopen });
+    mountedPicker(browser, fr.reopen);
 
     const reply = await browser.receivesMessage({ type: "cc-pick", url: "https://figma.example/", container: "Work" }, choiceTab);
 
@@ -167,7 +177,7 @@ describe("picker — a selection (cc-pick)", () => {
   it("returns {ok:false} when the sending tab has raced away", async () => {
     const browser = aFakeBrowser();
     const choiceTab = browser.existingTab({ url: CHOICE_PAGE + "#x", cookieStoreId: "firefox-default" });
-    createPicker({ port: browser.port, config, deps, reopen: fakeReopen().reopen });
+    mountedPicker(browser, fakeReopen().reopen);
     await browser.port.removeTab(choiceTab.id);
 
     const reply = await browser.receivesMessage({ type: "cc-pick", url: "https://figma.example/", container: "Work" }, choiceTab);
@@ -175,11 +185,16 @@ describe("picker — a selection (cc-pick)", () => {
     expect(reply).toEqual({ ok: false });
   });
 
-  it("ignores unrelated messages (returns undefined)", async () => {
+  it("leaves a message that is not cc-pick unanswered, SYNCHRONOUSLY", () => {
     const browser = aFakeBrowser();
-    createPicker({ port: browser.port, config, deps, reopen: fakeReopen().reopen });
-    const reply = await browser.receivesMessage({ type: "something-else" });
-    expect(reply).toBeUndefined();
+    const picker = createPicker({ port: browser.port, config, deps, reopen: fakeReopen().reopen });
+
+    // Deliberately not awaited, and this is the whole point: `await` flattens a
+    // Promise<undefined> to undefined, so an awaited assertion passes whether the
+    // handler answered or not. Firefox does not flatten — a returned Promise means
+    // "I will answer this", claiming the reply channel from the sibling the message was
+    // actually for. Only a synchronous undefined leaves it free.
+    expect(picker.handleMessage({ type: "cc-pause-status" }, {})).toBeUndefined();
   });
 });
 
