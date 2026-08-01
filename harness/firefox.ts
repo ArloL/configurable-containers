@@ -446,6 +446,11 @@ export interface ProbeTab {
 // `cc-probe-cmd` DOM listener there that relays to its background (which holds the
 // privileged APIs) and writes the reply back into data-cc-result. This is the only way
 // a test can reach browser.* — WebDriver has no extension APIs.
+//
+// The reply therefore lives in the RELAYING document, and a command that tears that
+// document down (a `nav` of this very tab) loses its own answer: the poll below then
+// reads a fresh document with no attribute and gives up as a timeout. `navigateTab`
+// carries the guard.
 export async function probeCommand<T>(
   driver: WebDriver,
   cmd: string,
@@ -520,8 +525,24 @@ export function listTabs(driver: WebDriver): Promise<ProbeTab[]> {
 // address bar does. WebDriver can only drive the tab it is switched to, and offers no
 // way to map a window handle to a tab id, so an about:newtab tab is otherwise
 // unaddressable.
-export function navigateTab(driver: WebDriver, tabId: number, url: string): Promise<{ ok: boolean }> {
-  return probeCommand(driver, "nav", { id: tabId, url });
+//
+// The tab being navigated must NOT be the tab the driver is parked on: the reply is
+// written into the relaying document (see probeCommand), and this navigation destroys
+// it. The probe refuses that case rather than letting it race, and the refusal is
+// raised here — park on another probe-reported page first.
+export async function navigateTab(driver: WebDriver, tabId: number, url: string): Promise<{ ok: boolean }> {
+  const reply = await probeCommand<{ ok: boolean; error?: string }>(driver, "nav", { id: tabId, url });
+  if (!reply.ok) throw new Error(`navigateTab(${tabId}, ${url}): ${reply.error}`);
+  return reply;
+}
+
+// Open a URL in a NEW tab via the probe, leaving the tab the driver is parked on where
+// it is. That is the difference from `driver.get`, and it matters twice over: a
+// navigation CC cancels never returns to WebDriver, so `driver.get` from a tab already
+// on a committed page hangs until the test times out; and the driver's own tab is often
+// the relay a test still needs.
+export function openTab(driver: WebDriver, url: string): Promise<{ id: number; url: string }> {
+  return probeCommand(driver, "open", { url });
 }
 
 // Open a URL in a new tab via the probe. The ONLY way a test can reach a
@@ -533,7 +554,7 @@ export function openExtensionPage(
   driver: WebDriver,
   url: string,
 ): Promise<{ id: number; url: string }> {
-  return probeCommand(driver, "open", { url });
+  return openTab(driver, url);
 }
 
 // Switch the driver to the first window handle whose URL starts with `urlPrefix`.

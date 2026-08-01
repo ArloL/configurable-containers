@@ -5,6 +5,7 @@ import {
   awaitContainerTab,
   awaitProbeReport,
   openExtensionPage,
+  openTab,
   switchToUrl,
   ccExtensionUrl,
   listTabs,
@@ -50,7 +51,19 @@ describe("pause & record (real Firefox, CC + probe)", () => {
     const target = (await listTabs(firefox.driver)).find((t) => t.url.startsWith(first.split("?")[0]))!;
     expect(target).toBeDefined();
 
-    // 2. Arm that container from the options page.
+    // 2. Move to a relay page of its own before doing anything else. Every probe reply is
+    //    written into the DOM of the page that dispatched the command, so relaying the
+    //    cross-site `nav` below from the tab being navigated would destroy the answer with
+    //    the document — an intermittent `probe command "nav" timed out`, which is exactly
+    //    how this case flaked. work.example is a MATCHED host, so CC parks it in Work once
+    //    and never touches it again. It is opened through the probe rather than with
+    //    driver.get, which from this committed page would be cancelled by the reopen and
+    //    never return.
+    const relay = `http://work.example:${serverPort}/?cb=pause-relay-${Date.now()}`;
+    await openTab(firefox.driver, relay);
+    await awaitContainerTab(firefox.driver, relay);
+
+    // 3. Arm that container from the options page.
     await openExtensionPage(firefox.driver, OPTIONS_URL);
     await switchToUrl(firefox.driver, OPTIONS_URL);
     const armButton = By.css(`button[data-cc-arm="${container}"]`);
@@ -61,20 +74,20 @@ describe("pause & record (real Firefox, CC + probe)", () => {
       10_000,
     );
 
-    // 3. Back to the http(s) page so the relay works again, then navigate that same tab
-    //    CROSS-SITE — a hop that would normally buy a fresh throwaway, since
+    // 4. Back to the relay page so the command relay works again, then navigate the ARMED
+    //    tab CROSS-SITE — a hop that would normally buy a fresh throwaway, since
     //    nomatch.example and hop.example are different registrable domains.
-    await switchToUrl(firefox.driver, first);
+    await switchToUrl(firefox.driver, relay);
     const second = `http://hop.example:${serverPort}/?cb=pause2-${Date.now()}`;
     await navigateTab(firefox.driver, target.id, second);
 
-    // 4. The pause held. There is no reopen to wait for here — that is the point — so
+    // 5. The pause held. There is no reopen to wait for here — that is the point — so
     //    the probe's own report is the only signal the navigation finished.
     await switchToUrl(firefox.driver, second);
     await awaitProbeReport(firefox.driver);
     expect(await readContainerName(firefox.driver)).toBe(container);
 
-    // 5. And the record names the host with the action CC declined to take. Live via
+    // 6. And the record names the host with the action CC declined to take. Live via
     //    storage.onChanged — no reload.
     await switchToUrl(firefox.driver, OPTIONS_URL);
     await firefox.driver.wait(async () => {
