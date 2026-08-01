@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { aFakeBrowser, aFakeClock } from "./mock-port";
 import { createPause, PAUSE_STORAGE_KEY, type PauseState } from "../../src/engine/pause";
+import type { Decision } from "../../src/resolver/types";
+
+const intoTemporary: Decision = { kind: "reopen", into: { kind: "temporary" } };
+const intoWork: Decision = { kind: "reopen", into: { kind: "permanent", name: "Work" } };
+const noAction: Decision = { kind: "stay" };
 
 describe("pause — arming", () => {
   it("arms a real container, names it, and shows the count on the badge", async () => {
@@ -95,5 +100,101 @@ describe("pause — arming", () => {
 
     // A corrupt value must not be able to leave a container unrouted.
     expect(pause.snapshot()).toEqual({ armed: [], recordings: [] });
+  });
+});
+
+describe("pause — recording", () => {
+  async function anArmedPause() {
+    const browser = aFakeBrowser();
+    const shop = browser.addContainerNamed({ name: "tmp3" });
+    const pause = createPause({ port: browser.port, clock: aFakeClock().clock });
+    await pause.arm(shop.cookieStoreId);
+    return { browser, pause, csid: shop.cookieStoreId };
+  }
+
+  it("records the host and the action it would have taken", async () => {
+    const { pause, csid } = await anArmedPause();
+
+    pause.record(csid, "https://payment.acme.test/3ds?token=secret", intoTemporary);
+
+    expect(pause.snapshot().recordings[0].hosts).toEqual([
+      { host: "payment.acme.test", hits: 1, wouldHave: "a new temporary container" },
+    ]);
+  });
+
+  it("collapses a bounce into one row and counts the hops", async () => {
+    const { pause, csid } = await anArmedPause();
+
+    for (let i = 0; i < 7; i++) pause.record(csid, `https://login.ms.test/step${i}`, intoTemporary);
+
+    // The deduplication is what turns a twelve-hop Microsoft bounce into the handful of
+    // lines a config is actually written from; the redirection-limit=0 workaround
+    // produces the raw chain and leaves that collapse to the reader.
+    expect(pause.snapshot().recordings[0].hosts).toEqual([
+      { host: "login.ms.test", hits: 7, wouldHave: "a new temporary container" },
+    ]);
+  });
+
+  it("keeps first-seen order and records hops it would NOT have moved", async () => {
+    const { pause, csid } = await anArmedPause();
+
+    pause.record(csid, "https://shop.test/cart", noAction);
+    pause.record(csid, "https://payment.acme.test/", intoWork);
+
+    // "Was it even needed?" is only answerable if the untouched hops are visible too —
+    // the ones carrying a real target are then the ones that stand out.
+    expect(pause.snapshot().recordings[0].hosts).toEqual([
+      { host: "shop.test", hits: 1, wouldHave: "no action" },
+      { host: "payment.acme.test", hits: 1, wouldHave: "Work" },
+    ]);
+  });
+
+  it("stores no path and no query — a checkout URL carries session tokens", async () => {
+    const { browser, pause, csid } = await anArmedPause();
+
+    pause.record(csid, "https://payment.acme.test/confirm?session=SECRET123", intoTemporary);
+    await browser.settle();
+
+    expect(JSON.stringify(await browser.port.readStored(PAUSE_STORAGE_KEY))).not.toContain("SECRET123");
+  });
+
+  it("ignores a navigation in a container that is not armed", async () => {
+    const { pause } = await anArmedPause();
+
+    pause.record("firefox-container-77", "https://elsewhere.test/", intoTemporary);
+
+    expect(pause.snapshot().recordings[0].hosts).toEqual([]);
+  });
+
+  it("writes through when a new host appears, so a config save cannot destroy the record", async () => {
+    const { browser, pause, csid } = await anArmedPause();
+
+    pause.record(csid, "https://payment.acme.test/", intoTemporary);
+    await browser.settle();
+
+    // Reviewing a recording means editing the config, and a save calls runtime.reload():
+    // a record held only in memory would be destroyed by the act it exists to enable.
+    const stored = (await browser.port.readStored(PAUSE_STORAGE_KEY)) as PauseState;
+    expect(stored.recordings[0].hosts[0].host).toBe("payment.acme.test");
+  });
+});
+
+describe("pause — flushing the hit counts", () => {
+  it("disarming writes the hops accumulated since the last new host", async () => {
+    const browser = aFakeBrowser();
+    const shop = browser.addContainerNamed({ name: "tmp3" });
+    const pause = createPause({ port: browser.port, clock: aFakeClock().clock });
+    await pause.arm(shop.cookieStoreId);
+
+    for (let i = 0; i < 3; i++) pause.record(shop.cookieStoreId, `https://login.ms.test/${i}`, intoTemporary);
+    await browser.settle();
+    // Repeat hops deliberately do not write — seven storage writes from the blocking
+    // path is the cost that buys. So the flush has to happen somewhere, and disarm is
+    // where: a finished recording's counts must be right.
+    expect(((await browser.port.readStored(PAUSE_STORAGE_KEY)) as PauseState).recordings[0].hosts[0].hits).toBe(1);
+
+    await pause.disarm(shop.cookieStoreId);
+
+    expect(((await browser.port.readStored(PAUSE_STORAGE_KEY)) as PauseState).recordings[0].hosts[0].hits).toBe(3);
   });
 });

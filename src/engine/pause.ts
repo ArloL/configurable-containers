@@ -1,3 +1,5 @@
+import { targetLabel, type Declinable } from "./engine";
+import type { Decision } from "../resolver/types";
 import type { BrowserPort, Clock } from "./port";
 
 // storage.local key holding the armed set and the recordings. The background is its ONLY
@@ -39,6 +41,9 @@ export interface Pause {
   // reads no storage: an await here would sit in the latency of every navigation in the
   // browser, armed or not.
   isPaused(cookieStoreId: string): boolean;
+  // Returns void, and the engine never awaits it: a navigation must not wait on
+  // bookkeeping, and a write that fails must not break routing.
+  record(cookieStoreId: string, url: string, decision: Decision): void;
   arm(cookieStoreId: string): Promise<ArmResult>;
   disarm(cookieStoreId: string): Promise<ArmResult>;
   hydrate(): Promise<void>;
@@ -46,6 +51,16 @@ export interface Pause {
 }
 
 const DEFAULT_STORE_ID = "firefox-default";
+
+// The F9 toast's own words for an action CC declined, extended with the one case F9
+// never sees: a decision that would not have moved the tab at all. Recording those too is
+// what makes "was this rule even needed?" answerable — without them the record only
+// proves CC saw the host.
+function wouldHaveLabel(decision: Decision): string {
+  return decision.kind === "reopen" || decision.kind === "choice"
+    ? targetLabel(decision as Declinable)
+    : "no action";
+}
 
 function isRecording(v: unknown): v is Recording {
   const r = v as Recording;
@@ -123,6 +138,29 @@ export function createPause(opts: { port: BrowserPort; clock: Clock }): Pause {
 
   return {
     isPaused: (cookieStoreId) => armed.has(cookieStoreId),
+
+    record(cookieStoreId, url, decision) {
+      const open = running(cookieStoreId);
+      if (!open) return;
+      let host: string;
+      try {
+        host = new URL(url).host;
+      } catch {
+        return; // nothing nameable; the engine has already filtered to http(s) anyway
+      }
+
+      const seen = open.hosts.find((h) => h.host === host);
+      if (seen) {
+        seen.hits++;
+        // Deliberately no write: a seven-hop bounce would otherwise be seven storage
+        // writes issued from the blocking path. `disarm` flushes, so a FINISHED
+        // recording's counts are accurate; a background killed mid-flow loses the hops
+        // since the last new host, which is the same class of loss as an unflushed row.
+        return;
+      }
+      open.hosts.push({ host, hits: 1, wouldHave: wouldHaveLabel(decision) });
+      void persist().catch((e) => console.warn("[pause] write failed", e));
+    },
 
     arm,
     disarm,
