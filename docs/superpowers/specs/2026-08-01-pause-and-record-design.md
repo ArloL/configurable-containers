@@ -35,10 +35,11 @@ single user meets is finite.
   recordings, their persistence, and the badge.
 - **One engine hook**: after `resolve()`, before the F9 non-GET check — if the tab's
   container is armed, hand the decision to the recorder and return without acting.
-- A **`browser_action` popup** (`extensions/cc/popup.html` + `popup.js`): arm/disarm the
-  current tab's container, and show the running recording.
-- An **options-page section**: the last 10 recordings, beside the config editor, with
-  click-to-copy per host and a clear button.
+- An **options-page section**, beside the config editor: the containers that currently
+  have tabs (each armable), and the last 10 recordings with click-to-copy per host and a
+  clear button.
+- A **`browser_action` with no popup**: the badge is the armed indicator, and clicking
+  the button calls `openOptionsPage()`.
 - **`BrowserPort` additions**: `setBadge(text)`.
 - A **message router** in `wiring.ts` that owns the single `port.onMessage`
   registration (see §6 — this is a prerequisite, not a nicety).
@@ -61,7 +62,7 @@ single user meets is finite.
 - **Pausing the default container.** Refused at the arming step, §5.1.
 - **Exemption from MAC.** A paused container is not exempt from Multi-Account
   Containers. See §7.1.
-- **An L4 e2e for arming.** Not possible with the current harness; see §8.3.
+- **A toolbar popup.** Dropped in favour of the options page — see §9.
 
 ## 2. Architecture & model
 
@@ -91,7 +92,7 @@ Two properties of that interface carry the design:
 
 Everything else the module does — arming, disarming, persistence, last-tab-close, the
 badge — happens outside the blocking path, on its own `tabs.onRemoved` listener and in
-response to popup messages.
+response to messages from the options page.
 
 ### 2.1 Why the engine, and not another sibling
 
@@ -265,30 +266,60 @@ flow. That is the correct side to fail on.
 
 ## 5. UI surfaces
 
-### 5.1 The popup (`browser_action`)
+Everything the user touches is on the options page. There is no popup — see §9 for why,
+and §5.3 for what that costs.
 
-`browser_action` needs no permission in MV2 — one manifest key plus two files.
+### 5.1 Arming, on the options page
 
-On open, the popup sends `{ type: "cc-pause-status" }`. The background resolves the
-active tab through `port.getActiveTab()` and answers with: the container's display name,
-whether it is armed, whether it *may* be armed, and the running recording's rows.
+The options page opens in a tab of its own, in its own container, so it cannot ask
+"which container am I in". It therefore **lists** containers and the user picks one.
 
-**The popup never sends a tab id, and the background never accepts one.** This is the
-same rule the choice page follows — `picker-protocol.ts` documents it — and it applies
-here for a second reason: a popup's `sender` has no `tab` at all, so a tab id in the
-message would be unverifiable by construction.
+The list is *the containers that currently have tabs*, each annotated with its tab count
+and the hosts of those tabs — `tmp12 · 1 tab · shop.example.com`. The annotation is not
+decoration: throwaway names (`tmp3`, `tmp8`, `tmp12`) carry no clue which one holds the
+checkout you are trying to protect, and a list of bare names would be unusable at the
+one moment the feature is reached for. `queryTabs` supplies it for free. Containers with
+no tabs are omitted — you cannot arm a flow you are not in.
 
-Arming is refused for `firefox-default`, and the popup **says so** rather than
-no-opping. "I pressed it and nothing happened" is the worst outcome for a control
-reached for under time pressure. The refusal is a scope decision, not a technical limit:
-pausing the default container is close enough to pausing globally that it should be a
-separate, deliberate feature if it is ever wanted.
+`firefox-default` is listed but **not armable**, with the reason shown inline rather
+than the row simply not responding. "I clicked it and nothing happened" is the worst
+outcome for a control reached for under time pressure. The refusal is a scope decision,
+not a technical limit: pausing the default container is close enough to pausing globally
+that it should be a separate, deliberate feature if it is ever wanted.
 
-The popup shows the running recording's rows because the moment of *glancing* is
-mid-flow — "has it seen the payment host yet?". A popup re-reads its state every time it
-opens, so this view costs nothing beyond rendering.
+**This is the one message in CC that names a container instead of deriving it from the
+sender.** The choice page's rule — take the tab from the sender, never from the payload
+(`picker-protocol.ts`) — cannot apply, because the sender here is the options tab and
+that is not the tab under discussion. So the background **validates the payload
+instead**: the `cookieStoreId` must resolve through `getIdentity()` and must not be
+`firefox-default`. A crafted `moz-extension://<id>/options.html` link is
+attacker-reachable, and while it can only ever open the page (not act on it), the
+validation means the message cannot arm something that is not a real container.
 
-### 5.2 The badge
+### 5.2 Recordings, on the options page
+
+Below the arming list: the last 10 recordings, newest first, each showing container,
+time, and its host rows with `hits` and `wouldHave`. Per-host click-to-copy, and a
+clear-all button.
+
+Placement is the point — reviewing a recording *is* writing config, and the config
+editor is on this page.
+
+The section subscribes to `browser.storage.onChanged` and re-renders, so a recording
+grows **live** while you watch it. That subscription is read-only, so it introduces no
+second writer (§4.3), and it gives back most of what the popup was for: leave the
+options page open in a second window and you can watch hosts appear as the checkout
+progresses. `options.ts` reads `browser.storage.local` directly, consistent with how
+`config.ts` and `config-sync.ts` already touch `browser.*` by design; the storage key
+and the `PauseState` types are exported from `pause.ts` as the single definition of the
+shape.
+
+### 5.3 The badge and the toolbar button
+
+`browser_action` stays in the manifest with **no `default_popup`**: `setBadgeText`
+requires the manifest key, and without a popup the button fires
+`browserAction.onClicked`, which calls `openOptionsPage()`. Indicator plus shortcut, no
+HTML entry point.
 
 `setBadge(text)` on `BrowserPort`; the real adapter also sets a warning background
 colour once at startup. Text is the number of armed containers, empty when none.
@@ -300,17 +331,9 @@ no visible sign is a silent isolation hole; a badge that is occasionally shown o
 unrelated tab errs toward *more* visible, which is the right direction for this
 particular error.
 
-### 5.3 The options page
-
-A section beside the config editor: the last 10 recordings, newest first, each showing
-container, time, and its host rows with `hits` and `wouldHave`. Per-host click-to-copy,
-and a clear-all button.
-
-Placement is the point — reviewing a recording *is* writing config, and the config
-editor is here. `options.ts` reads `browser.storage.local` directly, consistent with how
-`config.ts`, `config-sync.ts` and `options.ts` already touch `browser.*` by design; the
-storage key and the `PauseState` types are exported from `pause.ts` as the single
-definition of the shape.
+The badge is the one part of this feature with no automated coverage — nothing in the
+harness can read chrome UI. Accepted knowingly; it is a display of state that L3 already
+asserts, so what is untested is the rendering, not the fact.
 
 ## 6. Message routing (prerequisite)
 
@@ -331,8 +354,16 @@ So: **`wiring.ts` owns the single `port.onMessage` registration** and dispatches
 `pause` exposes the same. The router returns `undefined` synchronously for an unknown
 type, which is the only shape that leaves the reply channel free.
 
-This is a prerequisite for the slice, not incidental cleanup — the feature cannot receive
-a message without it.
+This is a prerequisite for the slice, not incidental cleanup — the options page cannot
+reach the background without it.
+
+**Why messages at all, when the options page can write `storage.local` directly?**
+Because arming by storage write would make the options page a *second writer* of the
+pause state, racing the background's own writes (a new host row landing while the user
+toggles a container: whoever writes last clobbers the other). Keeping the background as
+the single writer is the same instinct that governs `storage.sync`, and it puts the
+validation of §5.1 somewhere the page cannot bypass. The options page reads storage
+directly and writes nothing.
 
 ## 7. Failure modes and what this does not fix
 
@@ -385,24 +416,41 @@ and hydration rebuilding the dedupe set from a stored recording.
   does not re-add a host already recorded. Restart from a settled state — the harness
   does not model async work in flight.
 
-### 8.3 L4: an honest gap
+### 8.3 L4 (real Firefox)
 
-**Arming cannot be driven end-to-end by the current harness.** WebDriver cannot navigate
-to `moz-extension://`, a `browser_action` popup cannot be opened by the driver at all,
-and `commands.onCommand` cannot be driven (chrome-level key events). Opening
-`popup.html` as an ordinary tab does not substitute: the background answers
-`cc-pause-status` from `getActiveTab()`, which in that arrangement is the popup's own
-tab, so the thing under test is not the thing exercised.
+Putting arming on the options page is what makes an end-to-end case possible, and it is
+the reason the popup was dropped (§9). CC already calls `openOptionsPage()` at startup,
+so the page is open and `test/e2e/options.test.ts` already drives it — the driver can
+*operate* an extension page something else opened, which is exactly this arrangement.
 
-This is the same class of gap as the reopen picker (`it.skip`) and config-sync adoption,
-and it is recorded here rather than papered over. **Do not add a build-time seed to work
-around it.** `__CC_NOTIFY_ECHO_TO__` already shows the cost — `launch()` sets it
-unconditionally, so no test build is byte-equivalent to a packaged one — and a second
-test-only path into shipped code to arm a container by name would be worse: it would
-make the shipped extension capable of starting up with routing disabled.
+One case, following the whole loop:
 
-If the popup ever gains a non-popup route (e.g. arming from the options page), the L4
-case becomes reachable and should be written then.
+1. The probe opens a tab and navigates it to an unmatched host; CC routes it into a
+   throwaway. The probe reports the tab's `CSID` and container name.
+2. The driver switches to the options tab and arms that container by name.
+3. The probe navigates the same tab **cross-site** to a second unmatched host — a
+   navigation that would normally buy a fresh throwaway.
+4. Assert the tab's `CSID` is **unchanged**: the pause held.
+5. Assert the options page shows a recording row for the second host reading *a new
+   temporary container* — the counterfactual, live via `storage.onChanged`, no reload.
+
+Step 4 is the revert-verify anchor: back the §3.1 engine step out and the `CSID` changes.
+Step 5 fails independently if the recording never reaches storage.
+
+Two harness rules this case has to respect: the probe provisions its own container and
+tab, so the container list carries one extra row; and this drives routing from a tab
+the probe already navigated, so `awaitContainerTab` covers the reopen in step 1 while
+step 3's *non*-reopen has nothing to wait for and needs `awaitProbeReport`.
+
+What stays untested at L4: the badge (§5.3), and the last-tab-close disarm (closing the
+probe's tab tears down the observation surface the assertion needs). Both are covered at
+L3.
+
+**Do not add a build-time seed to arm a container**, whatever pressure a later case
+applies. `__CC_NOTIFY_ECHO_TO__` already shows the cost — `launch()` sets it
+unconditionally, so no test build is byte-equivalent to a packaged one — and a
+test-only path that arms by name would be worse: it would make the shipped extension
+capable of starting up with routing disabled.
 
 ## 9. Decisions taken, with the alternatives rejected
 
@@ -421,9 +469,20 @@ case becomes reachable and should be written then.
   free. It is also the honest privacy unit: the container is already the boundary that
   says "these pages may see each other's cookies", so exempting one from routing widens
   nothing that is not already shared. Global scope silently unroutes every unrelated tab.
-- **`browser_action`, not a keyboard command or context menu.** Only the toolbar button
-  can carry a persistent indicator, and the indicator is what makes the feature safe to
-  leave in the product.
+- **A badge-only `browser_action`, not a keyboard command or context menu.** Only the
+  toolbar button can carry a persistent indicator, and the indicator is what makes the
+  feature safe to leave in the product.
+- **Arming on the options page, not in a popup — chosen for testability.** The popup was
+  the better interaction: it knows which container the current tab is in, so arming was
+  one click with nothing to identify. The options page cannot know that (it is its own
+  tab, in its own container), so it must list containers and make the user pick — and
+  `tmp3 / tmp8 / tmp12` is exactly the identification problem the popup did not have.
+  It was traded anyway, because a popup **cannot be driven by WebDriver at all**: the
+  entire arm → record → review loop would have had no L4 coverage, in a feature whose
+  failure mode is *routing silently disabled*. Annotating each row with its open tabs
+  (§5.1) recovers most of the identification, and `storage.onChanged` (§5.2) recovers
+  the mid-flow glance. The residual cost is real: arming now takes a detour to another
+  tab.
 
 ## 10. Open questions
 
