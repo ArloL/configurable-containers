@@ -1,5 +1,6 @@
 import { targetLabel, type Declinable } from "./engine";
 import type { Decision } from "../resolver/types";
+import type { ContainerRow, PauseStatusResponse, PauseToggleMessage, PauseToggleResponse } from "../extension/pause-protocol";
 import type { BrowserPort, Clock } from "./port";
 
 // storage.local key holding the armed set and the recordings. The background is its ONLY
@@ -48,6 +49,10 @@ export interface Pause {
   disarm(cookieStoreId: string): Promise<ArmResult>;
   hydrate(): Promise<void>;
   snapshot(): PauseState;
+  // Dispatched to by the wiring's single runtime.onMessage registration. Returns
+  // undefined SYNCHRONOUSLY for a message that is not ours, so the reply channel stays
+  // free for the sibling it was addressed to.
+  handleMessage(msg: unknown): Promise<PauseStatusResponse | PauseToggleResponse> | undefined;
 }
 
 const DEFAULT_STORE_ID = "firefox-default";
@@ -137,6 +142,68 @@ export function createPause(opts: { port: BrowserPort; clock: Clock }): Pause {
     return { ok: true, container };
   }
 
+  // What the options page renders: the containers that currently hold tabs, each with
+  // enough about those tabs to be recognisable, plus the recordings.
+  async function status(): Promise<PauseStatusResponse> {
+    const identities = await port.queryIdentities();
+    const tabs = await port.queryTabs({});
+    const named = new Map(identities.map((c) => [c.cookieStoreId, c.name]));
+
+    const hostsByStore = new Map<string, string[]>();
+    for (const tab of tabs) {
+      const hosts = hostsByStore.get(tab.cookieStoreId) ?? [];
+      let host = "";
+      try {
+        host = new URL(tab.url).host;
+      } catch {
+        // about:blank, about:newtab and the extension's own pages have no host. The row
+        // still counts the tab — it is occupied either way.
+      }
+      if (host && !hosts.includes(host)) hosts.push(host);
+      hostsByStore.set(tab.cookieStoreId, hosts);
+    }
+
+    // Containers with no tabs are omitted: you cannot arm a flow you are not in, and a
+    // list of every throwaway that ever existed would bury the one that matters.
+    const containers: ContainerRow[] = [...hostsByStore.keys()]
+      .filter((csid) => csid === DEFAULT_STORE_ID || named.has(csid))
+      .map((csid) => ({
+        cookieStoreId: csid,
+        name: named.get(csid) ?? "Default",
+        tabCount: tabs.filter((t) => t.cookieStoreId === csid).length,
+        hosts: hostsByStore.get(csid) ?? [],
+        armed: armed.has(csid),
+        armable: csid !== DEFAULT_STORE_ID,
+        reason: csid === DEFAULT_STORE_ID ? "The default container cannot be paused." : undefined,
+      }));
+
+    return { containers, recordings };
+  }
+
+  async function toggle(cookieStoreId: unknown): Promise<PauseToggleResponse> {
+    // The sender here is the options tab, which is not the tab under discussion — so
+    // unlike the choice page there is nothing to derive the container from, and the
+    // payload is validated instead. arm() does the real checking (a real identity, never
+    // the default container); this only rejects a value of the wrong type.
+    if (typeof cookieStoreId !== "string") return { ok: false, message: "No container named." };
+    const wasPaused = armed.has(cookieStoreId);
+    const result = wasPaused ? await disarm(cookieStoreId) : await arm(cookieStoreId);
+    if (!result.ok) return { ok: false, message: result.reason };
+    return {
+      ok: true,
+      message: wasPaused ? `Resumed in ${result.container}.` : `Paused in ${result.container}.`,
+    };
+  }
+
+  async function clearAll(): Promise<PauseToggleResponse> {
+    // Disarm first: a cleared list must not leave a container silently unrouted with no
+    // recording left to show for it.
+    for (const cookieStoreId of [...armed]) await disarm(cookieStoreId);
+    recordings = [];
+    await persist();
+    return { ok: true, message: "Cleared." };
+  }
+
   // The toolbar button. It holds NO logic of its own, and must not acquire any: WebDriver
   // cannot click a browser_action, so anything living only here would ship with no
   // end-to-end coverage at all. The options-page route (which an e2e does drive) reaches
@@ -202,6 +269,16 @@ export function createPause(opts: { port: BrowserPort; clock: Clock }): Pause {
 
     arm,
     disarm,
+
+    // Not `async`: the "not ours" answer has to be a synchronous undefined, and an async
+    // function cannot give one.
+    handleMessage(msg) {
+      const type = (msg as { type?: unknown } | null | undefined)?.type;
+      if (type === "cc-pause-status") return status();
+      if (type === "cc-pause-toggle") return toggle((msg as PauseToggleMessage).cookieStoreId);
+      if (type === "cc-pause-clear") return clearAll();
+      return undefined;
+    },
 
     async hydrate() {
       const raw = await port.readStored(PAUSE_STORAGE_KEY);

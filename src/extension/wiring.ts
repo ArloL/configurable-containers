@@ -124,6 +124,7 @@ export function wireBackground(opts: WiringOptions): Background {
   port.onMessage((msg, sender) => {
     const type = (msg as { type?: unknown } | null | undefined)?.type;
     if (type === "cc-pick") return picker.handleMessage(msg, sender);
+    if (typeof type === "string" && type.startsWith("cc-pause-")) return pause.handleMessage(msg);
     return undefined;
   });
 
