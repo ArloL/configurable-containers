@@ -6,15 +6,36 @@
   <style>
     body { font: 14px sans-serif; padding: 16px; }
     #cc-dest { color: #555; word-break: break-all; }
-    #cc-options { list-style: none; padding: 0; }
-    #cc-options li { padding: 6px 8px; cursor: pointer; border-radius: 4px; }
-    #cc-options li:hover, #cc-options li:focus { background: #eef; outline: none; }
+    #cc-options { list-style: none; padding: 0; margin: 12px 0; max-width: 32em; }
+    #cc-options li {
+      display: flex; align-items: baseline; gap: 10px;
+      padding: 6px 8px; cursor: pointer; border-radius: 4px;
+      border: 1px solid transparent;
+    }
+    #cc-options li:hover { background: #eef; }
+    /* The focused option is where Enter goes, so it is marked whether focus arrived by
+       keyboard or by click — :focus-visible would hide the highlight after a click and
+       leave the next Enter looking unbound. */
+    #cc-options li:focus { background: #dde6ff; border-color: #4a6cf7; outline: none; }
+    .cc-key {
+      font-family: monospace; font-size: 12px; min-width: 1.4em; text-align: center;
+      padding: 1px 5px; border: 1px solid #bbb; border-radius: 3px; background: #f6f6f6;
+      color: #333;
+    }
+    #cc-hint { color: #666; font-size: 13px; }
+    #cc-hint kbd {
+      font-family: monospace; padding: 0 3px; border: 1px solid #ccc; border-radius: 3px;
+    }
     #cc-status { color: #555; }
   </style>
 </head>
 <body>
   <p id="cc-dest"></p>
-  <ul id="cc-options"></ul>
+  <ul id="cc-options" role="listbox" aria-label="Open in container"></ul>
+  <p id="cc-hint">
+    <kbd>↑</kbd> <kbd>↓</kbd> to move · <kbd>Enter</kbd> to open · the key beside a
+    container opens it directly · <kbd>Esc</kbd> to cancel
+  </p>
   <p id="cc-status" hidden></p>
   <script src="choice.js"></script>
 </body>

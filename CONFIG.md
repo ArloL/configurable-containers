@@ -214,10 +214,16 @@ There is **no auth-flow auto-detection**; the sole user knows which domains need
 
 - A **choice screen** appears when a multi-`open` rule (without `default`) resolves
   and the tab is not already in one of the rule's eligible containers. It is
-  **fully keyboard-driven — non-negotiable** (number/letter keys), because the
-  founding use case is the same site in personal and work containers, and a
-  mouse-only screen would reintroduce the friction that keeps manual container
-  switching unused today. Choices are **never remembered**.
+  **fully keyboard-driven — non-negotiable**, because the founding use case is the
+  same site in personal and work containers, and a mouse-only screen would
+  reintroduce the friction that keeps manual container switching unused today.
+  Choices are **never remembered**.
+- The screen opens with its first option focused and answers, in one keystroke each:
+  the **positional key** printed beside an option (`1`…`9`, then `a`…`z`), or the
+  **underlined initial** of the container's name (`w` for `Work`) where that letter is
+  free — the ones a daily user remembers. `↑`/`↓` (wrapping), `Home`/`End` move the
+  highlight, `Enter`/`Space` open it, `Esc` closes the screen and leaves the page you
+  were on alone. Modified keystrokes (`Ctrl+W`, `Alt+←`) stay the browser's.
 - The manual **reopen picker** ("reopen this tab in container X") is **restricted
   to the matching rule's `open` list**. This is how a site restricts its escalation
   targets (e.g. `youtube.com` offers only `Personal`).
