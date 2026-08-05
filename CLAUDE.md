@@ -45,6 +45,13 @@ way* is in its own comment; the source is densely commented. This file carries o
   message, which claims the reply channel from the sibling it was addressed to. Assert on
   the **un-awaited** return — `await` flattens `Promise<undefined>` to `undefined`, which
   is how the pre-existing case passed either way.
+- **The choice page's keyboard grammar is PURE and lives in `picker-protocol.ts`**
+  (`choiceHints`/`choiceBindings`/`choiceIntent`); `choice.ts` only performs its DOM
+  effects. There is **no jsdom in this repo**, so anything decided inside `choice.ts` has
+  no test below L4 — and the keyboard is this screen's non-negotiable surface. The page
+  also **focuses its first option as it renders**: a `tabs.create`d extension page renders
+  with focus nowhere, so arrows and Enter — the first two keys anyone tries — did nothing
+  at all, and the printed hotkeys were the only way in.
 - **Nothing crossing the choice-page boundary carries a tab id.** A crafted
   `moz-extension://<id>/choice.html#…` link is attacker-reachable, so the background takes
   the tab from the `cc-pick` *sender* and re-checks the url for http(s) — it goes on to

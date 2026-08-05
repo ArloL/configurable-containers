@@ -70,6 +70,53 @@ describe("choice screen + reopen picker (real Firefox, CC + probe)", () => {
     expect(containerName).toBe("Work");
   });
 
+  // The container name of the option the page has focused, or null for none. The
+  // highlight is where Enter goes, so this is the page's whole keyboard state.
+  async function focusedOption(): Promise<string | null> {
+    return firefox.driver.executeScript<string | null>(
+      "return document.activeElement && document.activeElement.getAttribute('data-container')",
+    );
+  }
+
+  async function optionOrder(): Promise<string[]> {
+    const opts = await firefox.driver.findElements(By.css("[data-cc-option]"));
+    return Promise.all(opts.map(async (o) => (await o.getAttribute("data-container")) ?? ""));
+  }
+
+  it("lands with an option already focused, so arrows and Enter are enough to choose", async () => {
+    // The page used to render with focus nowhere: the two keys a user reaches for first
+    // — an arrow and Enter — did nothing at all, and the hotkeys were the only way in.
+    const url = `http://figma.example:${serverPort}/?arrow-enter`;
+    await navFreshTab(url);
+    await awaitChoicePage();
+
+    const order = await optionOrder();
+    expect(await focusedOption(), "the page must take the keyboard as it renders").toBe(order[0]);
+
+    await firefox.driver.actions().sendKeys(Key.ARROW_DOWN).perform();
+    expect(await focusedOption()).toBe(order[1]);
+
+    // Enter opens the highlighted one — the arrow moved the target, so this proves both.
+    await firefox.driver.actions().sendKeys(Key.ENTER).perform();
+    const { name: containerName } = await awaitContainerTab(firefox.driver, url);
+    expect(containerName).toBe(order[1]);
+  });
+
+  it("the underlined initial of a container name opens it directly", async () => {
+    const url = `http://figma.example:${serverPort}/?mnemonic`;
+    await navFreshTab(url);
+    await awaitChoicePage();
+
+    // "w" for Work, beside the positional "2" — the accelerator a user remembers when
+    // the same site is open in two containers every day.
+    const opts = await firefox.driver.findElements(By.css("[data-cc-option][data-mnemonic='w']"));
+    expect(await opts[0]?.getAttribute("data-container")).toBe("Work");
+
+    await firefox.driver.actions().sendKeys("w").perform();
+    const { name: containerName } = await awaitContainerTab(firefox.driver, url);
+    expect(containerName).toBe("Work");
+  });
+
   it("a choice is never remembered — a fresh nav re-shows the choice page", async () => {
     const url = `http://figma.example:${serverPort}/`;
     await navFreshTab(url);
