@@ -10,6 +10,7 @@ import type {
   GetCookieDetails,
   HeadersDetails,
   MessageSender,
+  NavigationDetails,
   NotificationSpec,
   RegisterContentScriptDetails,
   RegisteredContentScript,
@@ -43,6 +44,12 @@ export interface MockPort {
 
   /** Fires webRequest.onBeforeRequest and returns the blocking response. */
   navigates(d: WebRequestDetails): Promise<BlockingResponse | void>;
+  /**
+   * Fires webNavigation.onBeforeNavigate — what Firefox announces before the request a
+   * navigation issues, and the only event that names a `view-source:` url. Defaults to
+   * the top-level frame, which is the only one the engine looks at.
+   */
+  startsNavigating(d: { tabId: number; url: string; frameId?: number }): void;
   /** Fires webRequest.onBeforeSendHeaders and returns the header edits. */
   sendsHeaders(d: HeadersDetails): Promise<BlockingHeadersResponse | void>;
 
@@ -109,6 +116,7 @@ export function aFakeBrowser(): MockPort {
   let macThrows = false;
   let createTabThrows = false;
   let handler: ((d: WebRequestDetails) => Promise<BlockingResponse | void>) | null = null;
+  let beforeNavigateH: ((d: NavigationDetails) => void) | null = null;
   let onTabCreatedH: ((tab: Tab) => void) | null = null;
   let onTabRemovedH: ((tabId: number) => void) | null = null;
   let onTabUpdatedH: ((tab: Tab, info: TabUpdateInfo) => void) | null = null;
@@ -155,6 +163,9 @@ export function aFakeBrowser(): MockPort {
   const port: BrowserPort = {
     onBeforeRequest(h) {
       handler = h;
+    },
+    onBeforeNavigate(h) {
+      beforeNavigateH = h;
     },
     async getTab(id) {
       return openTabs.get(id) ?? null;
@@ -271,6 +282,10 @@ export function aFakeBrowser(): MockPort {
     async navigates(d) {
       if (!handler) throw new Error("no onBeforeRequest handler registered");
       return handler(d);
+    },
+    startsNavigating(d) {
+      if (!beforeNavigateH) throw new Error("no onBeforeNavigate handler registered");
+      beforeNavigateH({ frameId: 0, ...d });
     },
     async sendsHeaders(d) {
       if (!headersHandler) throw new Error("no onBeforeSendHeaders handler registered");

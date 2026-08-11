@@ -545,6 +545,18 @@ export function openTab(driver: WebDriver, url: string): Promise<{ id: number; u
   return probeCommand(driver, "open", { url });
 }
 
+// What "View Page Source" does: open `view-source:<url>` in a new tab, in the container
+// the page it was invoked on is in. The keystroke is chrome-level and WebDriver refuses
+// the scheme, so the probe is the only route to it — but the load itself is the browser's
+// own, which is what the assertion is about.
+export function openViewSource(
+  driver: WebDriver,
+  url: string,
+  cookieStoreId: string,
+): Promise<{ id: number; url: string; cookieStoreId: string }> {
+  return probeCommand(driver, "viewSource", { url, cookieStoreId });
+}
+
 // Open a URL in a new tab via the probe. The ONLY way a test can reach a
 // moz-extension:// page: WebDriver refuses that scheme ("Navigation to
 // moz-extension://… is not allowed in this context"), while an extension may open

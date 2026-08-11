@@ -483,3 +483,91 @@ describe("engine — a paused container", () => {
     expect(pause.recorded[0].decision).toEqual({ kind: "choice", options: ["Personal", "Work"] });
   });
 });
+
+// Ctrl+U. Firefox loads `view-source:https://example.com/` into a tab of its own and
+// fetches the document to print, so webRequest is handed an ordinary main_frame GET for
+// the INNER url with the tab still pre-commit on about:blank — nothing there says the
+// user asked for source rather than for the page. Routing it cancels the fetch and
+// reopens the plain url elsewhere, which loses the `view-source:` wrapper and (the tab
+// having nothing to lose yet) takes the source tab down with it.
+//
+// webNavigation.onBeforeNavigate is the one event that names the wrapped url, and
+// Firefox fires it before the request that navigation issues.
+describe("engine — a view-source load", () => {
+  const viewSourceOf = (url: string) => `view-source:${url}`;
+
+  it("is left alone: the fetch behind Ctrl+U is not a navigation to route", async () => {
+    const browser = aFakeBrowser();
+    // A brand new tab, pre-commit — indistinguishable, from the request alone, from a
+    // middle-clicked link, which is exactly why the mark has to come from elsewhere.
+    const sourceTab = browser.existingTab({ url: "about:blank", cookieStoreId: "firefox-default" });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
+
+    browser.startsNavigating({ tabId: sourceTab.id, url: viewSourceOf("https://example.com/") });
+    const blockingResponse = await browser.navigates(aNavigationTo({ tabId: sourceTab.id }));
+
+    expect(blockingResponse).toBeUndefined(); // no cancel — the source is allowed to load
+    expect(browser.openedTabs).toEqual([]);
+    expect(browser.closedTabIds).toEqual([]); // and the tab showing it survives
+  });
+
+  it("stays left alone across a redirect of the very load being viewed", async () => {
+    const browser = aFakeBrowser();
+    const sourceTab = browser.existingTab({ url: "about:blank", cookieStoreId: "firefox-default" });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
+
+    // One navigation, one onBeforeNavigate, several requests: a redirect chain reuses
+    // the requestId and announces no second navigation, so the mark must outlive hop 1.
+    browser.startsNavigating({ tabId: sourceTab.id, url: viewSourceOf("https://example.com/hop") });
+    await browser.navigates(aNavigationTo({ tabId: sourceTab.id, url: "https://example.com/hop" }));
+    const lastHop = await browser.navigates(aNavigationTo({ tabId: sourceTab.id, url: "https://example.com/" }));
+
+    expect(lastHop).toBeUndefined();
+    expect(browser.openedTabs).toEqual([]);
+  });
+
+  it("does not stop the tab being routed once it navigates somewhere for real", async () => {
+    const browser = aFakeBrowser();
+    // A tab that is ON a page: `view_source.tab=false` puts the source in the current
+    // tab instead of a new one, and that tab is the one still to be routed afterwards.
+    const sourceTab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
+
+    browser.startsNavigating({ tabId: sourceTab.id, url: viewSourceOf("https://example.com/") });
+    await browser.navigates(aNavigationTo({ tabId: sourceTab.id }));
+    expect(browser.openedTabs).toEqual([]);
+
+    // Typing a url into that same tab. Nothing expires the mark on a timer — the next
+    // top-level navigation announcing itself is what clears it.
+    browser.startsNavigating({ tabId: sourceTab.id, url: "https://example.com/" });
+    const blockingResponse = await browser.navigates(aNavigationTo({ requestId: "2", tabId: sourceTab.id }));
+
+    expect(blockingResponse).toEqual({ cancel: true });
+    expect(browser.openedTabs).toHaveLength(1); // routed once, for the real navigation only
+  });
+
+  it("is not un-marked by a sub-frame the source page is still loading", async () => {
+    const browser = aFakeBrowser();
+    const sourceTab = browser.existingTab({ url: "about:blank", cookieStoreId: "firefox-default" });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
+
+    browser.startsNavigating({ tabId: sourceTab.id, url: viewSourceOf("https://example.com/") });
+    browser.startsNavigating({ tabId: sourceTab.id, url: "https://frame.test/", frameId: 7 });
+    const blockingResponse = await browser.navigates(aNavigationTo({ tabId: sourceTab.id }));
+
+    expect(blockingResponse).toBeUndefined();
+    expect(browser.openedTabs).toEqual([]);
+  });
+
+  it("routes an ordinary navigation exactly as before — the anchor for the cases above", async () => {
+    const browser = aFakeBrowser();
+    const sourceTab = browser.existingTab({ url: "about:blank", cookieStoreId: "firefox-default" });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
+
+    browser.startsNavigating({ tabId: sourceTab.id, url: "https://example.com/" });
+    const blockingResponse = await browser.navigates(aNavigationTo({ tabId: sourceTab.id }));
+
+    expect(blockingResponse).toEqual({ cancel: true });
+    expect(browser.openedTabs).toHaveLength(1);
+  });
+});

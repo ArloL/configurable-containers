@@ -129,6 +129,40 @@ export function createEngine(opts: EngineOptions): Engine {
   // upgrades the scheme); the site is what survives that and what routing turns on.
   const reopenedNav = new Map<number, { awaiting: string } | { requestId: string }>();
 
+  // Tabs whose pending top-level navigation is a `view-source:` load.
+  //
+  // "View Page Source" fetches the document it is about to print, so it issues an
+  // ordinary main_frame GET — and webRequest reports that request under the INNER url:
+  // `view-source:https://site/` arrives here as plain `https://site/`, with the tab
+  // still pre-commit on about:blank. Nothing in the details says otherwise, so the
+  // engine used to route it like any other navigation: cancel, and reopen `https://site/`
+  // elsewhere. That drops the `view-source:` wrapper (a reopen can only issue a plain
+  // GET, exactly as it cannot carry a POST body), and because the tab Firefox just made
+  // is pre-commit, `supersede` replaces it rather than keeping it. Ctrl+U therefore
+  // destroyed its own tab and rendered the page in a throwaway instead of showing the
+  // source. Multi-Account Containers carries the same report unresolved
+  // (mozilla/multi-account-containers#2582).
+  //
+  // webNavigation is the one place the wrapped url is visible, and Firefox fires
+  // onBeforeNavigate before the webRequest that navigation issues — measured in
+  // Firefox 153, for the view-source tab and for every ordinary navigation in the same
+  // session (test/e2e/view-source.test.ts pins the outcome end to end). So the mark is
+  // written there and read, without an await, inside the blocking handler.
+  //
+  // Nothing has to expire it: every top-level navigation in a tab announces itself here
+  // first, so the next one clears the mark, and a redirect of the view-source load
+  // itself keeps it — which is what that hop needs. A tab closed while still showing
+  // source leaves its id behind; that is one integer, and NOT worth an onTabRemoved
+  // listener, because `mock-port` holds a single handler slot per event and a second
+  // registration would silently displace the disposer's.
+  const viewSourceNav = new Set<number>();
+
+  port.onBeforeNavigate((d) => {
+    if (d.frameId !== 0) return; // sub-frames are not routed at all
+    if (d.url.startsWith("view-source:")) viewSourceNav.add(d.tabId);
+    else viewSourceNav.delete(d.tabId);
+  });
+
   // The F1-guarded reopen effect. Shared by the engine's own `case "reopen"` and the
   // picker (choice screen / reopen picker). Throws on failure — callers decide whether
   // to swallow (the engine's request-time path clears `handled` and fails open) or to
@@ -158,6 +192,13 @@ export function createEngine(opts: EngineOptions): Engine {
     // (0) Scope: only top-level http(s) navigations.
     if (d.type !== "main_frame") return;
     if (!/^https?:/.test(d.url)) return;
+    // …and not the document fetch behind a `view-source:` load, which arrives here
+    // wearing the inner url. Sits with the scheme test because it is the same
+    // question — is this a page the user is navigating to, or something else this
+    // request is only the raw material for. Adds no state and never cancels, so it is
+    // fail-open by construction: if the mark is somehow missing, routing carries on
+    // exactly as it did before.
+    if (viewSourceNav.has(d.tabId)) return;
 
     // (1) F1 loop guard — re-fires of a request we already acted on.
     const key = d.requestId + "+" + d.url;

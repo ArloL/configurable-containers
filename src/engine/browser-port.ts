@@ -42,6 +42,12 @@ export function createBrowserPort(): BrowserPort {
       );
     },
 
+    onBeforeNavigate(handler) {
+      browser.webNavigation.onBeforeNavigate.addListener((d) =>
+        handler({ tabId: d.tabId, frameId: d.frameId, url: d.url })
+      );
+    },
+
     async getTab(tabId): Promise<Tab | null> {
       try {
         const t = await browser.tabs.get(tabId);

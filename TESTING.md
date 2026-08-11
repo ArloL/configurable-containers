@@ -29,6 +29,7 @@ to prevent these):
 | F10 | **Disposal timing / leak** — temp not disposed after last tab close, or disposed too early. | Cookies linger or vanish; time-dependent. |
 | F11 | **Cookie boundary crossed** — a routing construct assumed to move a cookie. | Identity bleed; the one thing containers must prevent. |
 | F12 | **Side-effect timing** — a seeded cookie or injected script lands *after* the page already read it; or a `redirector` tab closes *before* its redirect fires, or closes a tab that had already navigated on to a real destination. | No error; the consent banner just reappears, the pref doesn't apply, or a live tab silently vanishes. |
+| F13 | **Routing a request that is not a page navigation** — `view-source:` fetches the document it prints, so webRequest reports a main_frame GET for the *inner* url in a pre-commit tab: indistinguishable, from the request alone, from a middle-clicked link. | Routing it "works": a tab opens in the right container. It is just the rendered page, and the source tab is gone. |
 
 Every level below states which classes it owns. The [coverage
 matrix](#subtle-bug-coverage-matrix) proves no class is orphaned.
@@ -122,7 +123,7 @@ dangerous. Table-driven over the three grammars, plus fuzz:
 Everything stateful runs here, against a **mock `browser.*`** (fake `tabs`,
 `contextualIdentities`, `webRequest`, `webNavigation`, and a **fake clock**). We
 drive *sequences* of events and assert invariants after each step. This is the
-home of F1, F2, F7, F8, F10.
+home of F1, F2, F7, F8, F10, F13.
 
 - **Model-based / stateful property tests** (fast-check `commands`): generate
   random sequences of `navigate`, `redirect`, `clickLink`, `closeTab`,
@@ -174,6 +175,11 @@ create/dispose, real redirects.
 
 - **Real routing** — navigate; assert `tab.cookieStoreId` is the expected
   container; assert containers created/disposed via `contextualIdentities.query`.
+- **View Page Source (F13)** — open a real `view-source:` tab and assert it is still
+  showing source, in the container it was opened in, with no throwaway bought for it.
+  Only the browser can produce that load, and only it decides what webRequest is told
+  about one; an L3 case can pin the guard, but not that the guard is watching the right
+  event.
 - **MAC interop (F2/F7)** — install *actual* Multi-Account Containers alongside,
   assign a domain in MAC, and assert our engine defers (no double-open, no churn).
   This is the Phase-1 coexistence contract executed for real.
@@ -264,9 +270,10 @@ three scenarios that had no test are recorded in
 | F10 disposal timing        |    |    | ✅ | ✅ |    |    |
 | F11 cookie boundary        | ✅ |    |    | ✅ | ✅ |    |
 | F12 side-effect timing     |    |    | ✅ | ✅ | ✅ |    |
+| F13 non-navigation request |    |    | ✅ | ✅ |    |    |
 
 Every class now has at least one deterministic owner (L1–L3) *and*, where the
-browser is the source of truth (F1, F2, F7, F9, F10, F11, F12), a real-Firefox
+browser is the source of truth (F1, F2, F7, F9, F10, F11, F12, F13), a real-Firefox
 confirmation. F9 was the long-standing exception: POST bodies and redirect
 bindings don't exist in a pure resolver. It gained an L3 owner when the decision
 *not* to reopen a non-GET navigation moved into the engine, where a mock port can

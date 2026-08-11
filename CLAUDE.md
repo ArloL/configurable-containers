@@ -24,6 +24,14 @@ way* is in its own comment; the source is densely commented. This file carries o
   reopen skips `reopenedNav` and reopens forever). The rule was copied into the picker once
   and drifted inside the slice: the choice page loaded into the triggering tab, destroying
   the user's page. **`auto-temp.containerize` is a surviving second copy** — fold it in.
+- **A guard on the engine's own webRequest handling stays IN `engine.ts`** — `handled`,
+  `reopenedNav` and `viewSourceNav` are one family, each keyed on a navigation and read
+  inside the blocking handler. A sibling module is for behaviour with a life of its own
+  (`pause` has storage, a badge and an options page); a `Set` the handler reads is not.
+  Note `viewSourceNav` deliberately has **no `onTabRemoved` cleanup**: `mock-port` keeps
+  one handler slot per event, so a second registration would silently displace the
+  disposer's, and the leak is one integer per source tab closed while still on
+  `view-source:`.
 - **`src/engine/pause.ts` owns arming, recording and the badge; the engine consults it at
   exactly one point.** The seam is **synchronous by contract** — `isPaused` runs inside
   the blocking `onBeforeRequest`, where an `await` is every navigation's latency, and
@@ -59,10 +67,24 @@ way* is in its own comment; the source is densely commented. This file carries o
 
 ## Firefox facts that make correct-looking code wrong
 
-- **Keep `cookies`, `contextualIdentities` and `notifications` in the manifest.** Without
-  `cookies`, `tabs.create({cookieStoreId})` throws and *nothing routes*; without
-  `contextualIdentities`, MAC's gate rejects the F7 handshake; without `notifications`, the
-  F9 declination toast is silently lost.
+- **Keep `cookies`, `contextualIdentities`, `notifications` and `webNavigation` in the
+  manifest.** Without `cookies`, `tabs.create({cookieStoreId})` throws and *nothing
+  routes*; without `contextualIdentities`, MAC's gate rejects the F7 handshake; without
+  `notifications`, the F9 declination toast is silently lost; without `webNavigation`,
+  `onBeforeNavigate` never fires and every "View Page Source" is routed as if it were a
+  navigation (F13, below).
+- **A `view-source:` load reaches `onBeforeRequest` wearing the INNER url.** Ctrl+U
+  fetches the document it prints, so webRequest reports a `main_frame` GET for plain
+  `https://site/` in a tab still pre-commit on `about:blank` — nothing in the details,
+  and nothing on the tab, says the user asked for source. Routing it cancels the fetch
+  and reopens the plain url, which loses the `view-source:` wrapper (a reopen can only
+  issue a plain GET, exactly as it cannot carry a POST body) and, the tab having nothing
+  to lose, takes the source tab down with it: Ctrl+U rendered the page in a throwaway
+  instead. **`webNavigation.onBeforeNavigate` is the only event that names the wrapped
+  url**, and Firefox fires it before that navigation's request — measured in FF153 for
+  the view-source tab and every ordinary navigation beside it. Hence the engine's
+  `viewSourceNav` mark: written there, read without an await inside the blocking handler.
+  MAC has the same bug open and unreproduced (`mozilla/multi-account-containers#2582`).
 - **`tabs.create` rejects `about:newtab`/`about:home`** (`Illegal URL`) — land there by
   passing **no url at all** (hence optional `CreateTabProps.url`). Auto-temp shipped once
   with `url: tab.url`: every containerize threw *after* creating the identity, leaving
