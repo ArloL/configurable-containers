@@ -9,6 +9,8 @@
     "tabs",
     "contextualIdentities",
     "cookies",
+    "webRequest",
+    "webNavigation",
     "<all_urls>"
   ],
   "background": { "scripts": ["background.js"] }

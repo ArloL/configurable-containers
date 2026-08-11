@@ -62,6 +62,43 @@ browser.runtime.onMessageExternal.addListener((msg) => {
   return Promise.resolve({ ok: true });
 });
 
+// INVESTIGATION (view-source): what a WebExtension actually observes while Firefox
+// loads `view-source:https://…`. Ordered log of webNavigation.onBeforeNavigate and
+// webRequest.onBeforeRequest, plus the tab state each request read back — which is the
+// same read CC's engine performs, and equally asynchronous.
+const observed = [];
+let observedSeq = 0;
+
+browser.webNavigation.onBeforeNavigate.addListener((d) => {
+  observed.push({ seq: ++observedSeq, ev: "onBeforeNavigate", url: d.url, tabId: d.tabId, frameId: d.frameId });
+});
+
+browser.webRequest.onBeforeRequest.addListener(
+  (d) => {
+    const entry = {
+      seq: ++observedSeq,
+      ev: "onBeforeRequest",
+      url: d.url,
+      tabId: d.tabId,
+      type: d.type,
+      method: d.method,
+      originUrl: d.originUrl,
+      documentUrl: d.documentUrl,
+      tabRead: "pending",
+    };
+    observed.push(entry);
+    browser.tabs.get(d.tabId).then(
+      (t) => {
+        entry.tabRead = { url: t.url, cookieStoreId: t.cookieStoreId, openerTabId: t.openerTabId };
+      },
+      (e) => {
+        entry.tabRead = "error: " + e;
+      },
+    );
+  },
+  { urls: ["<all_urls>"], types: ["main_frame"] },
+);
+
 // Driver commands, relayed from the injected content script above.
 //   newTab  — `browser.tabs.create({})`, i.e. exactly what Ctrl/Cmd+T does: a tab
 //             at the new-tab page in the default container. WebDriver's
@@ -80,6 +117,27 @@ browser.runtime.onMessageExternal.addListener((msg) => {
 //             asks the browser instead, from a tab that never moves.
 //   notifications — every notification CC's test build echoed to us so far.
 browser.runtime.onMessage.addListener(async (msg, sender) => {
+  if (msg && msg.cmd === "observed") {
+    return observed;
+  }
+  if (msg && msg.cmd === "viewSource") {
+    // What Ctrl+U does: open `view-source:<url>` in a new tab. Reported rather than
+    // thrown so the investigation learns whether an extension may do this at all.
+    const target = "view-source:" + msg.url;
+    try {
+      const t = await browser.tabs.create({ url: target });
+      return { how: "tabs.create", id: t.id, url: t.url, cookieStoreId: t.cookieStoreId };
+    } catch (e) {
+      const viaCreate = "" + e;
+      try {
+        const blank = await browser.tabs.create({});
+        await browser.tabs.update(blank.id, { url: target });
+        return { how: "tabs.update", id: blank.id, viaCreate };
+      } catch (e2) {
+        return { how: "failed", viaCreate, viaUpdate: "" + e2 };
+      }
+    }
+  }
   if (msg && msg.cmd === "open") {
     const t = await browser.tabs.create({ url: msg.url });
     return { id: t.id, url: t.url };
