@@ -14,6 +14,17 @@ export interface WebRequestDetails {
   documentUrl?: string;
 }
 
+// A top-level navigation ABOUT to start, from webNavigation.onBeforeNavigate. The one
+// place an extension is told the url the tab is really going to: for a
+// `view-source:https://…` load this reports the wrapped url, while the webRequest that
+// same load issues reports only the inner `https://…` (see the engine's view-source
+// guard). `frameId` is 0 for the top-level frame; the engine ignores the rest.
+export interface NavigationDetails {
+  tabId: number;
+  frameId: number;
+  url: string;
+}
+
 export interface HeadersDetails {
   requestId: string;
   tabId: number;
@@ -141,6 +152,11 @@ export interface BrowserPort {
   onBeforeRequest(
     handler: (d: WebRequestDetails) => Promise<BlockingResponse | void>
   ): void;
+
+  // webNavigation.onBeforeNavigate. Non-blocking and synchronous by contract: the
+  // engine's handler for it only writes down what a tab is navigating to, and the
+  // blocking onBeforeRequest reads that back without an await.
+  onBeforeNavigate(handler: (d: NavigationDetails) => void): void;
 
   getTab(tabId: number): Promise<Tab | null>;
   createTab(props: CreateTabProps): Promise<Tab>;

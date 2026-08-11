@@ -20,6 +20,14 @@ function fakeBrowser() {
         onBeforeSendHeaders_last: null as unknown,
       },
     },
+    webNavigation: {
+      onBeforeNavigate: {
+        addListener(fn: (d: unknown) => void) {
+          f.webNavigation.onBeforeNavigate.onBeforeNavigate_fn = fn;
+        },
+        onBeforeNavigate_fn: null as unknown,
+      },
+    },
     tabs: {
       get: async (id: number) => {
         if (id === 404) throw new Error("no such tab");
@@ -142,6 +150,19 @@ describe("createBrowserPort", () => {
     port.onBeforeRequest(async () => undefined);
     const reg = f.webRequest.onBeforeRequest.onBeforeRequest_last as { fn: (d: unknown) => Promise<unknown> };
     expect(await reg.fn({ requestId: "1", tabId: 1, url: "https://a.test/", type: "main_frame", method: "GET" })).toEqual({});
+  });
+
+  it("forwards onBeforeNavigate with the url Firefox is really navigating to", () => {
+    const seen: { tabId: number; frameId: number; url: string }[] = [];
+    const port = createBrowserPort();
+    port.onBeforeNavigate((d) => void seen.push(d));
+
+    const fn = f.webNavigation.onBeforeNavigate.onBeforeNavigate_fn as (d: unknown) => void;
+    // The whole reason this seam exists: `view-source:` survives here, and nowhere in
+    // the webRequest the same load goes on to issue.
+    fn({ tabId: 3, frameId: 0, url: "view-source:https://a.test/", timeStamp: 1 });
+
+    expect(seen).toEqual([{ tabId: 3, frameId: 0, url: "view-source:https://a.test/" }]);
   });
 
   it("getTab maps fields (incl. openerTabId) and returns null when the tab is gone", async () => {
