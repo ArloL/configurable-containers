@@ -176,6 +176,34 @@ describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
     expect(browser.openedTabs).toHaveLength(1);
   });
 
+  it("F1: a link opened in a new tab buys one throwaway even when its navigation is requested twice", async () => {
+    const browser = aFakeBrowser();
+    const tmp1 = browser.addContainerNamed({ name: "tmp1" });
+    const readingTab = browser.existingTab({ url: "https://daringfireball.net/", cookieStoreId: tmp1.cookieStoreId, index: 3 });
+    // "Open Link in New Tab": Firefox makes a tab that inherits the opener's container
+    // and reads about:blank for its whole pre-commit life.
+    const linkTab = browser.existingTab({ url: "about:blank", cookieStoreId: tmp1.cookieStoreId, index: 4, openerTabId: readingTab.id });
+    const suffix = sequentialTmpSuffixes();
+    suffix(); // tmp1 above was issued by this counter
+    createEngine({ port: browser.port, config: { rules: [], groups: [] }, deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: suffix });
+
+    // One click, but the tab's top-level load reaches webRequest twice — a second
+    // request for the same url, on its own requestId, while the first is still inside
+    // createIdentity/createTab. Read concurrently, both see the same pre-commit tab and
+    // both mint a throwaway: one click, two tabs.
+    const [first, second] = await Promise.all([
+      browser.navigates(aNavigationTo({ requestId: "1", tabId: linkTab.id, url: "https://linked.test/a" })),
+      browser.navigates(aNavigationTo({ requestId: "2", tabId: linkTab.id, url: "https://linked.test/a" })),
+    ]);
+
+    expect(first).toEqual({ cancel: true });
+    // By the time the second is looked at, the tab it belonged to has been superseded
+    // and is gone — there is nothing left to route, and nothing to cancel.
+    expect(second).toBeUndefined();
+    expect(browser.createdContainers.map((c) => c.name)).toEqual(["tmp2"]);
+    expect(browser.openedTabs).toHaveLength(1);
+  });
+
   it("routes a later navigation in a reopened tab whose own request never arrived", async () => {
     const browser = aFakeBrowser();
     const sourceTab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });

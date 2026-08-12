@@ -32,6 +32,18 @@ way* is in its own comment; the source is densely commented. This file carries o
   one handler slot per event, so a second registration would silently displace the
   disposer's, and the leak is one integer per source tab closed while still on
   `view-source:`.
+- **The blocking handler takes one navigation at a time PER TAB (`inTurn`, `engine.ts`).**
+  Each decision is a read-then-act across four awaits (`getTab`, the MAC handshake,
+  `createIdentity`, `createTab`), and Firefox can deliver a **second `main_frame` request
+  for the same tab inside that window** — one "Open Link in New Tab" whose load reaches
+  webRequest twice (seen on YouTube and on links out of daringfireball.net to x.com; a
+  static destination never showed it). Read concurrently, both requests see the same
+  pre-commit `about:blank` tab and both mint a throwaway: one click, two tabs in two
+  containers. `handled` cannot catch that pair — it is keyed on the requestId, and these
+  are two requestIds for one navigation. Serialised, the second is decided *after*
+  `supersede` replaced the tab it belonged to, so `getTab` returns null and it falls open.
+  Keep the queue **per tab**: one global queue would put an unrelated tab's navigation
+  behind this one's MAC roundtrip, which is latency in front of every navigation.
 - **`src/engine/pause.ts` owns arming, recording and the badge; the engine consults it at
   exactly one point.** The seam is **synchronous by contract** — `isPaused` runs inside
   the blocking `onBeforeRequest`, where an `await` is every navigation's latency, and

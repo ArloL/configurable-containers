@@ -1,6 +1,6 @@
 import { resolve } from "../resolver/resolve";
 import type { Config, ContainerRef, Decision, Deps, NavContext, Target } from "../resolver/types";
-import type { BrowserPort, Tab, WebRequestDetails } from "./port";
+import type { BlockingResponse, BrowserPort, Tab, WebRequestDetails } from "./port";
 import { createRegistry, type ContainerRegistry } from "./registry";
 import { supersede } from "./supersede";
 
@@ -173,6 +173,45 @@ export function createEngine(opts: EngineOptions): Engine {
   // registration would silently displace the disposer's.
   const viewSourceNav = new Set<number>();
 
+  // One top-level navigation at a time per tab.
+  //
+  // Deciding a navigation is a read-then-act across four awaits — `getTab`, the MAC
+  // handshake, `createIdentity`, `createTab` — and Firefox can deliver a SECOND
+  // main_frame request for the same tab inside that window. Run concurrently, both
+  // requests read the same pre-commit `about:blank` tab, both resolve to "isolate this
+  // into a throwaway", and one click on "Open Link in New Tab" opens two tabs in two
+  // fresh containers (F1: reported for a YouTube search result and for links out of
+  // daringfireball.net to x.com, where a static destination on the same page never showed
+  // it). `handled` cannot catch that pair — it is keyed on the requestId, and these are
+  // two requestIds for one navigation.
+  //
+  // Serialised, the second request is decided against the state the first one LEFT:
+  // `supersede` has already replaced the pre-commit tab it belonged to, `getTab` returns
+  // null, and it falls open having done nothing. Nothing here decides anything — the
+  // ordering is the whole fix, and every existing answer is unchanged whenever a tab has
+  // only one navigation in flight, which is every ordinary case.
+  //
+  // Per TAB, not one global queue: a queue shared across tabs would put an unrelated
+  // tab's navigation behind this one's MAC roundtrip, and that is latency in front of
+  // every navigation in the browser. Entries are dropped as each tab's queue drains, so
+  // this holds nothing for a tab that is not navigating right now.
+  const routing = new Map<number, Promise<unknown>>();
+
+  async function inTurn<T>(tabId: number, work: () => Promise<T>): Promise<T> {
+    const ahead = routing.get(tabId);
+    const mine = ahead ? ahead.then(work) : work();
+    // What the next request waits on swallows the outcome: a request that threw is
+    // reported to ITS caller (Firefox, which fails the navigation open), and must not
+    // take the tab's next navigation down with it.
+    const settled = mine.then(() => {}, () => {});
+    routing.set(tabId, settled);
+    try {
+      return await mine;
+    } finally {
+      if (routing.get(tabId) === settled) routing.delete(tabId);
+    }
+  }
+
   port.onBeforeNavigate((d) => {
     if (d.frameId !== 0) return; // sub-frames are not routed at all
     if (d.url.startsWith("view-source:")) viewSourceNav.add(d.tabId);
@@ -204,7 +243,9 @@ export function createEngine(opts: EngineOptions): Engine {
     });
   }
 
-  port.onBeforeRequest(async (d) => {
+  port.onBeforeRequest((d) => inTurn(d.tabId, () => navigate(d)));
+
+  async function navigate(d: WebRequestDetails): Promise<BlockingResponse | void> {
     // (0) Scope: only top-level http(s) navigations.
     if (d.type !== "main_frame") return;
     if (!/^https?:/.test(d.url)) return;
@@ -300,7 +341,7 @@ export function createEngine(opts: EngineOptions): Engine {
         return { cancel: true };
       }
     }
-  });
+  }
 
   return { reopen };
 }
