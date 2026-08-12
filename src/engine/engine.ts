@@ -62,6 +62,10 @@ async function buildNavContext(
       ? { url: tab.url, container: await registry.toRef(tab.cookieStoreId) }
       : null;
 
+  // The opener, read once for both questions below, and only while the tab is
+  // pre-commit — after that it is the stale pointer F14 is about.
+  const opener = current === null && tab.openerTabId != null ? await port.getTab(tab.openerTabId) : null;
+
   // Which container did this navigation come FROM? The page the tab is on, whenever it
   // has one — that is what the user was looking at when they clicked. The opener answers
   // this only while the tab has nothing of its own: a target=_blank / middle-clicked link
@@ -79,14 +83,30 @@ async function buildNavContext(
   let initiator: ContainerRef | null;
   if (current) {
     initiator = current.container;
-  } else if (tab.openerTabId != null) {
-    const opener = await port.getTab(tab.openerTabId);
-    initiator = opener ? await registry.toRef(opener.cookieStoreId) : null;
   } else {
-    initiator = null;
+    initiator = opener ? await registry.toRef(opener.cookieStoreId) : null;
   }
 
-  return { targetUrl: d.url, current, initiator };
+  // Which PAGE did this tab's container come from? Only the disposable path asks, and
+  // only so that "open link in a new tab" answers the way clicking the same link in
+  // place does: a tab with no page of its own used to fail every same-site and
+  // same-group comparison there was, so a video opened from a YouTube search result
+  // landed in a throwaway of its own, logged out of the session it was clicked from.
+  //
+  // Both conditions are load-bearing. The tab must actually be IN the opener's
+  // container — Firefox puts a link's new tab there, but `tabs.create` can name an
+  // opener in any container at all, and CC's own reopens do exactly that (the whole
+  // point of a reopen is that the two differ). And the opener must be on an http(s)
+  // page, because the disposable path reads a non-http url as "a throwaway nobody has
+  // browsed in yet" and keeps the tab in it — which for a middle-clicked link would
+  // park every one of them in its opener's throwaway, the very thing `current: null`
+  // was protecting against.
+  const inheritedFrom =
+    opener && initiator && opener.cookieStoreId === tab.cookieStoreId && /^https?:/.test(opener.url)
+      ? { url: opener.url, container: initiator }
+      : null;
+
+  return { targetUrl: d.url, current, initiator, inheritedFrom };
 }
 
 // The two decisions the engine executes by opening a tab — and therefore the two it
