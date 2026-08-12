@@ -344,6 +344,118 @@ function choiceConfig(): Config {
   };
 }
 
+// A tab the browser opened FOR a link has no page of its own, so `current` cannot answer
+// "may this navigation keep the throwaway it is in" — but the tab starts in the container
+// of the page the click came from, and that page can. Reported: reading YouTube in a
+// throwaway, opening a video from the search results in a new tab put it in a SECOND
+// throwaway, logged out, where clicking the same link in place stays put.
+describe("engine — a link opened in a new tab", () => {
+  const noRules = () => ({ rules: [], groups: [] });
+
+  // The state Firefox leaves behind for "Open Link in New Tab": a tab pre-commit on
+  // about:blank, in its opener's container, pointing back at the page clicked.
+  function aLinkTabFrom(browser: ReturnType<typeof aFakeBrowser>, opener: Tab): Tab {
+    return browser.existingTab({ url: "about:blank", cookieStoreId: opener.cookieStoreId, openerTabId: opener.id, index: opener.index + 1 });
+  }
+
+  it("keeps the throwaway it was clicked from when it stays on the same site", async () => {
+    const browser = aFakeBrowser();
+    const tmp1 = browser.addContainerNamed({ name: "tmp1" });
+    const search = browser.existingTab({ url: "https://youtube.test/results?q=cc", cookieStoreId: tmp1.cookieStoreId });
+    const linkTab = aLinkTabFrom(browser, search);
+    const suffix = sequentialTmpSuffixes();
+    suffix(); // tmp1 above was issued by this counter
+    createEngine({ port: browser.port, config: noRules(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: suffix });
+
+    const blockingResponse = await browser.navigates(aNavigationTo({ tabId: linkTab.id, url: "https://youtube.test/watch?v=1" }));
+
+    expect(blockingResponse).toBeUndefined(); // the tab is already where it belongs
+    expect(browser.createdContainers).toEqual([]);
+    expect(browser.openedTabs).toEqual([]);
+    expect(browser.closedTabIds).toEqual([]);
+  });
+
+  it("still gets a throwaway of its own when it crosses a site boundary", async () => {
+    const browser = aFakeBrowser();
+    const tmp1 = browser.addContainerNamed({ name: "tmp1" });
+    const article = browser.existingTab({ url: "https://daringfireball.net/", cookieStoreId: tmp1.cookieStoreId });
+    const linkTab = aLinkTabFrom(browser, article);
+    const suffix = sequentialTmpSuffixes();
+    suffix();
+    createEngine({ port: browser.port, config: noRules(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: suffix });
+
+    const blockingResponse = await browser.navigates(aNavigationTo({ tabId: linkTab.id, url: "https://x.com/gruber" }));
+
+    expect(blockingResponse).toEqual({ cancel: true });
+    expect(browser.createdContainers.map((c) => c.name)).toEqual(["tmp2"]);
+  });
+
+  // `tabs.create` can name an opener in any container, and CC's own reopens do exactly
+  // that — a reopen exists BECAUSE the two containers differ. Reading the opener's page
+  // as this tab's own would then answer for a container the tab is not in.
+  it("ignores the opener's page for a tab that is not in the opener's container", async () => {
+    const browser = aFakeBrowser();
+    const tmp1 = browser.addContainerNamed({ name: "tmp1" });
+    const tmp2 = browser.addContainerNamed({ name: "tmp2" });
+    const article = browser.existingTab({ url: "https://linked.test/a", cookieStoreId: tmp1.cookieStoreId });
+    // A tab CC reopened out of `article`: same site, pre-commit, opener carried along by
+    // `supersede` — but in a throwaway of its own, and its first request never arrived.
+    const reopened = browser.existingTab({ url: "about:blank", cookieStoreId: tmp2.cookieStoreId, openerTabId: article.id });
+    const suffix = sequentialTmpSuffixes();
+    suffix();
+    suffix();
+    createEngine({ port: browser.port, config: noRules(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: suffix });
+
+    const blockingResponse = await browser.navigates(aNavigationTo({ tabId: reopened.id, url: "https://linked.test/b" }));
+
+    expect(blockingResponse).toEqual({ cancel: true });
+    expect(browser.createdContainers.map((c) => c.name)).toEqual(["tmp3"]);
+  });
+
+  // The disposable path reads a non-http url as "a throwaway nobody has browsed in yet"
+  // and keeps the tab in it. Handing it an opener that is on one would park the link tab
+  // in its opener's throwaway whatever site it was headed for — the isolation this whole
+  // path exists to provide.
+  it("ignores an opener that is not on a page of its own", async () => {
+    const browser = aFakeBrowser();
+    const tmp1 = browser.addContainerNamed({ name: "tmp1" });
+    const newTab = browser.existingTab({ url: "about:newtab", cookieStoreId: tmp1.cookieStoreId });
+    const linkTab = aLinkTabFrom(browser, newTab);
+    const suffix = sequentialTmpSuffixes();
+    suffix();
+    createEngine({ port: browser.port, config: noRules(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: suffix });
+
+    const blockingResponse = await browser.navigates(aNavigationTo({ tabId: linkTab.id, url: "https://x.com/gruber" }));
+
+    expect(blockingResponse).toEqual({ cancel: true });
+    expect(browser.createdContainers.map((c) => c.name)).toEqual(["tmp2"]);
+  });
+
+  // Rules still decide for a tab that has no page of its own: `inheritedFrom` feeds the
+  // disposable path only. F14's chain opens exactly this way — a Slack link in a new tab,
+  // in Slack's container, to a host with a multi-open rule — and must still ask.
+  it("does not let the opener's page answer for a rule that would ask", async () => {
+    const browser = aFakeBrowser();
+    const haeger = browser.addContainerNamed({ name: "Haeger" });
+    const slackTab = browser.existingTab({ url: "https://slack.example/", cookieStoreId: haeger.cookieStoreId });
+    const linkTab = aLinkTabFrom(browser, slackTab);
+    const asked: string[][] = [];
+    createEngine({
+      port: browser.port,
+      config: parseConfig("rules:\n  - match: azure.example\n    open: [Haeger, HSP]\n"),
+      deps,
+      onChoice: (options) => void asked.push(options),
+      pause: noPause,
+      tmpSuffix: sequentialTmpSuffixes(),
+    });
+
+    const blockingResponse = await browser.navigates(aNavigationTo({ tabId: linkTab.id, url: "https://portal.azure.example/" }));
+
+    expect(blockingResponse).toEqual({ cancel: true });
+    expect(asked).toEqual([["Haeger", "HSP"]]);
+  });
+});
+
 describe("engine — F7 MAC defer + choice", () => {
   it("F7: defers (no reopen) when MAC owns the URL", async () => {
     const browser = aFakeBrowser();

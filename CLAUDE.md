@@ -105,9 +105,22 @@ way* is in its own comment; the source is densely commented. This file carries o
   `target=_blank`/`window.open` tab (which **inherits its opener's** container) and a truly
   blank tab are indistinguishable. Hence: `about:blank` is not an auto-temp candidate (else
   every link opened in a new tab dies pre-load — cost: `newtabpage.enabled=false` users go
-  uncontainerized, as in TCP); `buildNavContext` reports `current: null` there (reporting
-  the inherited container parks every middle-clicked link in its opener's throwaway); and
-  `reopenedNav`'s requestId is the *only* thing separating our tab from theirs.
+  uncontainerized, as in TCP); `buildNavContext` reports `current: null` there (a tab with
+  no page of its own is not "already correctly contained" in anything, and treating the
+  container it merely inherited as its own would silence the choice screen on a tab's very
+  first navigation — F14's chain opens exactly that way); and `reopenedNav`'s requestId is
+  the *only* thing separating our tab from theirs.
+- **A link opened in a new tab must still answer the continuity question, and `current`
+  cannot** — hence `NavContext.inheritedFrom`, the *page* the tab's container came from,
+  read by the **disposable path only**. Without it every new-tab link failed every
+  same-site and same-group comparison there was, so opening a YouTube video from the
+  search results next to it bought a second throwaway and landed logged out, where
+  clicking the same link in place stays put. `buildNavContext` fills it only when the tab
+  is genuinely IN the opener's container (`tabs.create` can name an opener in any
+  container, and every CC reopen does exactly that) and the opener is on an **http(s)**
+  page — the disposable path reads a non-http url as "a throwaway nobody has browsed in
+  yet" and keeps the tab in it, which here would park every middle-clicked link in its
+  opener's throwaway whatever site it was headed for.
 - **`openerTabId` outlives the click that set it**, for the whole life of the tab, and
   `supersede` carries it across every reopen — so a tab CC routed still points at the tab
   that opened it, necessarily in a *different* container, since that difference is why it

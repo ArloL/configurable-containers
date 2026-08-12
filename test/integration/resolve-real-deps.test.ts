@@ -9,7 +9,7 @@ const deps: Deps = { matchRule, matchGroup, sameSite };
 
 const temp: ContainerRef = { kind: "temporary" };
 function nav(targetUrl: string, currentUrl: string): NavContext {
-  return { targetUrl, current: { url: currentUrl, container: temp }, initiator: null };
+  return { targetUrl, current: { url: currentUrl, container: temp }, initiator: null, inheritedFrom: null };
 }
 
 describe("resolve() on real matcher + real PSL", () => {

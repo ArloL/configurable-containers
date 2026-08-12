@@ -63,6 +63,19 @@ export interface NavContext {
   targetUrl: string;
   current: { url: string; container: ContainerRef } | null; // null = blank/new tab
   initiator: ContainerRef | null;
+  // The page this tab's container came from: the page a link was clicked on, for a tab
+  // the browser opened FOR that click and put in the clicked page's container. Null
+  // whenever the tab has a page of its own (`current` is then the same answer, and a
+  // better one), and null when the tab is NOT in its opener's container — an extension
+  // can open a tab anywhere and still name an opener, and then the opener's page says
+  // nothing about where this tab is.
+  //
+  // Only the disposable path reads it, and only to ask whether this navigation may keep
+  // the throwaway it is already in. It is deliberately NOT `current`: a tab with no page
+  // has nothing a rule could find it "already correctly contained" in, and treating the
+  // opener's page as its own would silence the choice screen for the very first
+  // navigation of a tab (F14's chain opens exactly that way).
+  inheritedFrom: { url: string; container: ContainerRef } | null;
 }
 
 export interface Deps {

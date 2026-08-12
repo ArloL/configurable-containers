@@ -182,7 +182,10 @@ order:
    see [Same site](#same-site-is-the-registrable-domain-via-the-public-suffix-list))
    — or within a declared `group` — keeps the current temporary container, so
    moving around an unmanaged site doesn't churn throwaways. Mirrors Temporary
-   Containers' `notsamedomain` isolation.
+   Containers' `notsamedomain` isolation. A link **opened in a new tab** is asked the
+   same question about the page it was clicked on: the browser starts that tab in the
+   clicked page's container, so a same-site (or same-group) link keeps the session it
+   came from, and only a cross-site one gets a throwaway of its own.
 
 3. **Explicit exemptions (`inherit` / `ignore` / `redirector`).** Exempt from both
    above. `inherit: true` keeps the tab in whichever container *initiated* the

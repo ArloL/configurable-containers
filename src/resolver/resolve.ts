@@ -20,7 +20,16 @@ function toward(current: ContainerRef | null, desired: ContainerRef): Decision {
 // Disposable path (spec §4 step 7): keep the current throwaway iff it exists and the
 // nav stays within the same registrable domain or the same group; else fresh temp.
 function disposablePath(nav: NavContext, config: Config, deps: Deps): Decision {
-  const current = nav.current;
+  // Which throwaway session, if any, does this navigation belong to? The page the tab is
+  // on — or, for a tab the browser opened FOR a link and put in the clicked page's
+  // container, that page. Both name a container the tab is ALREADY in, which is what
+  // makes "stay" a decision the engine performs by doing nothing.
+  //
+  // Without the second half, "open link in a new tab" answered differently from clicking
+  // the same link in place: the new tab has no page of its own, so every one of them —
+  // including a link to the site the click came from — bought a throwaway of its own and
+  // opened logged out. Reported for a YouTube search result opening a video.
+  const current = nav.current ?? nav.inheritedFrom;
   if (current && current.container.kind === "temporary") {
     // A throwaway the user has not browsed in yet — auto-temp puts every new tab in
     // one, sitting on about:newtab / about:home. Its first navigation belongs here:

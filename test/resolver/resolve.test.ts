@@ -1,6 +1,14 @@
 import { describe, it, expect } from "vitest";
 import { resolve } from "../../src/resolver/resolve";
-import { realMatchers, aConfigOf, aNavigation, theDefaultContainer, aThrowaway, theContainerNamed } from "./helpers";
+import {
+  realMatchers,
+  aConfigOf,
+  aNavigation,
+  aNavigationFromALinkOn,
+  theDefaultContainer,
+  aThrowaway,
+  theContainerNamed,
+} from "./helpers";
 import type { Rule } from "../../src/resolver/types";
 
 const deps = realMatchers();
@@ -106,6 +114,40 @@ describe("resolve — disposable path + continuity", () => {
   it("a *permanent* container on a new-tab page is not affected", () => {
     expect(resolve(
       aNavigation("https://kottke.org/", { url: "about:newtab", container: theContainerNamed("Work") }, theContainerNamed("Work")),
+      aConfigOf(), deps,
+    )).toEqual({ kind: "reopen", into: { kind: "temporary" } });
+  });
+
+  // A link opened in a NEW tab. The tab has no page of its own, so `current` cannot
+  // answer the continuity question — but the browser put it in the container of the page
+  // the click came from, and that page can. Without this, "open in a new tab" answered
+  // differently from clicking the same link in place: reported for a video opened from a
+  // YouTube search result, which landed in a throwaway of its own and logged out.
+  it("a link opened in a new tab keeps the throwaway it was clicked from, when same-site", () => {
+    expect(resolve(
+      aNavigationFromALinkOn({ url: "https://youtube.com/results", container: aThrowaway }, "https://youtube.com/watch?v=1"),
+      aConfigOf(), deps,
+    )).toEqual({ kind: "stay" });
+  });
+
+  it("a link opened in a new tab to another site still gets its own throwaway", () => {
+    expect(resolve(
+      aNavigationFromALinkOn({ url: "https://daringfireball.net/", container: aThrowaway }, "https://x.com/gruber"),
+      aConfigOf(), deps,
+    )).toEqual({ kind: "reopen", into: { kind: "temporary" } });
+  });
+
+  it("a link opened in a new tab keeps the throwaway across a group boundary", () => {
+    const cfg = aConfigOf([], [{ match: ["google.com", "youtube.com"] }]);
+    expect(resolve(
+      aNavigationFromALinkOn({ url: "https://google.com/", container: aThrowaway }, "https://youtube.com/"),
+      cfg, deps,
+    )).toEqual({ kind: "stay" });
+  });
+
+  it("a link opened in a new tab from a PERMANENT container is isolated as before", () => {
+    expect(resolve(
+      aNavigationFromALinkOn({ url: "https://work.example/", container: theContainerNamed("Work") }, "https://work.example/wiki"),
       aConfigOf(), deps,
     )).toEqual({ kind: "reopen", into: { kind: "temporary" } });
   });

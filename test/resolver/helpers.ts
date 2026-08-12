@@ -44,8 +44,18 @@ export function aNavigation(
   targetUrl: string,
   current: { url: string; container: ContainerRef } | null = null,
   initiator: ContainerRef | null = null,
+  inheritedFrom: { url: string; container: ContainerRef } | null = null,
 ): NavContext {
-  return { targetUrl, current, initiator };
+  return { targetUrl, current, initiator, inheritedFrom };
+}
+
+// A link opened in a NEW tab: the tab has no page of its own and sits in the container
+// of the page the click came from, which is the only thing that says where it came from.
+export function aNavigationFromALinkOn(
+  clickedPage: { url: string; container: ContainerRef },
+  targetUrl: string,
+): NavContext {
+  return { targetUrl, current: null, initiator: clickedPage.container, inheritedFrom: clickedPage };
 }
 
 // ContainerRef shorthands.

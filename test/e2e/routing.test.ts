@@ -171,6 +171,46 @@ describe("routing — a link opened in a new tab (real Firefox, CC + probe)", ()
   });
 });
 
+// The counterpart to the case above, and the one that has to answer the other way: a
+// link opened in a new tab to the site it was clicked ON. The tab Firefox makes for it
+// is pre-commit on about:blank, so nothing about the tab itself says which session it
+// belongs to — only the container it inherited and the page the click came from do.
+// Reported: reading YouTube in a throwaway and opening a video from the search results
+// in a new tab put it in a SECOND throwaway, logged out.
+describe("routing — a same-site link opened in a new tab (real Firefox, CC + probe)", () => {
+  let firefox: Session;
+  let serverPort: string;
+
+  beforeAll(async () => {
+    firefox = await launch({ extensions: ["probe", "cc"] });
+    serverPort = new URL(firefox.serverUrl).port;
+  });
+
+  afterAll(async () => {
+    await firefox?.close();
+  });
+
+  it("keeps the throwaway the click came from", async () => {
+    const linkTargetUrl = `http://nomatch.example:${serverPort}/watch`;
+    const openerUrl = `http://nomatch.example:${serverPort}/?link=${encodeURIComponent(linkTargetUrl)}`;
+    await firefox.driver.switchTo().newWindow("tab");
+    try {
+      await firefox.driver.get(openerUrl);
+    } catch {
+      // CC reopened the tab away — expected.
+    }
+    const openersContainer = await awaitContainerTab(firefox.driver, openerUrl);
+    expect(openersContainer.name).toMatch(/^tmp/);
+
+    await firefox.driver.findElement(By.id("go")).click();
+
+    const linkedTabsContainer = await awaitContainerTab(firefox.driver, linkTargetUrl);
+    expect(linkedTabsContainer.name).toBe(openersContainer.name);
+    // And no second one was minted on the way: the tab was left where Firefox put it.
+    expect((await readContainerList(firefox.driver)).filter((c) => c.startsWith("tmp"))).toEqual([openersContainer.name]);
+  });
+});
+
 describe("routing — a window.open popup (real Firefox, CC + probe)", () => {
   let firefox: Session;
   let serverPort: string;
