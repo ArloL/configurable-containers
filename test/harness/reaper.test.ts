@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { claimProfileDir, liveProfileDirs, reapAll, reapProfile } from "../../harness/reaper";
+import { eventually, isRunning } from "./process-state";
 
 // The reaper's kill mechanism, exercised against stand-in processes rather than real
 // Firefoxes: what is under test is "a process carrying this profile path in its argv
@@ -28,16 +29,17 @@ function sleeperIn(dir: string): ChildProcess {
   return child;
 }
 
-function alive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
+// "Still running", NOT `process.kill(pid, 0)`: a process the reaper has killed keeps its
+// pid until its parent reaps it, and answers signal 0 the whole time. See
+// ./process-state.ts — reading that as alive is what made these cases environment-
+// dependent rather than reaper-dependent.
+const alive = isRunning;
 
+// For asserting that something did NOT happen: give the thing that must not happen a
+// chance to, then look. The assertions in the other direction poll (`gone`) instead.
 const settle = () => new Promise((r) => setTimeout(r, 200));
+
+const gone = (pid: number, what = `pid ${pid}`) => eventually(() => !alive(pid), `${what} was still running`);
 
 afterEach(() => {
   for (const child of spawned.splice(0)) child.kill("SIGKILL");
@@ -52,9 +54,8 @@ describe("the harness reaper", () => {
     expect(alive(child.pid!)).toBe(true);
 
     reapProfile(dir);
-    await settle();
 
-    expect(alive(child.pid!)).toBe(false);
+    await gone(child.pid!, "the process in the reaped profile");
   });
 
   it("deletes the profile directory it reaps", () => {
@@ -100,9 +101,8 @@ describe("the harness reaper", () => {
     await settle();
 
     reapAll();
-    await settle();
 
-    expect(children.map((c) => alive(c.pid!))).toEqual([false, false]);
+    for (const child of children) await gone(child.pid!, "a process the sweep should have killed");
     expect(liveProfileDirs()).toEqual([]);
   });
 });
@@ -146,10 +146,7 @@ describe("a process that abandons the browser it launched", () => {
     return JSON.parse(line).pid as number;
   }
 
-  async function ended(proc: ChildProcess): Promise<void> {
-    await new Promise((r) => proc.once("exit", r));
-    await settle();
-  }
+  const ended = (proc: ChildProcess): Promise<unknown> => new Promise((r) => proc.once("exit", r));
 
   it("takes it down on a clean exit", async () => {
     const proc = abandon("process.exit(0);");
@@ -157,7 +154,7 @@ describe("a process that abandons the browser it launched", () => {
 
     await ended(proc);
 
-    expect(alive(pid)).toBe(false);
+    await gone(pid, "the abandoned browser");
   });
 
   it("takes it down when it dies of an unhandled throw", async () => {
@@ -166,7 +163,7 @@ describe("a process that abandons the browser it launched", () => {
 
     await ended(proc);
 
-    expect(alive(pid)).toBe(false);
+    await gone(pid, "the abandoned browser");
   });
 
   it("takes it down when it is terminated", async () => {
@@ -179,6 +176,6 @@ describe("a process that abandons the browser it launched", () => {
     proc.kill("SIGTERM");
     await ended(proc);
 
-    expect(alive(pid)).toBe(false);
+    await gone(pid, "the abandoned browser");
   });
 });
