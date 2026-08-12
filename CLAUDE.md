@@ -96,6 +96,16 @@ way* is in its own comment; the source is densely commented. This file carries o
   uncontainerized, as in TCP); `buildNavContext` reports `current: null` there (reporting
   the inherited container parks every middle-clicked link in its opener's throwaway); and
   `reopenedNav`'s requestId is the *only* thing separating our tab from theirs.
+- **`openerTabId` outlives the click that set it**, for the whole life of the tab, and
+  `supersede` carries it across every reopen — so a tab CC routed still points at the tab
+  that opened it, necessarily in a *different* container, since that difference is why it
+  was reopened. Hence `buildNavContext` reads `initiator` off the **page the tab is on**
+  and consults the opener only when there is none (`current === null`, i.e. pre-commit —
+  the `target=_blank` case the opener exists for). Asking the opener first made `inherit`
+  bounce a tab to the container it was reopened out of, and since each reopen makes the
+  source tab the new tab's opener, the next hop bounced it back: login tabs alternating
+  between two containers forever (F14, reported for a Slack link to `portal.azure.com`).
+  A url the user types has no opener, which is why that always looked fine.
 - **`tabs.onCreated` sometimes fires with `about:blank` before the real url** (bug 1586612),
   so auto-temp listens on **both** `onTabCreated` and `onTabUpdated`, deduped by a
   `processed` set. An `onCreated`-only draft passed L3 and silently failed in real Firefox.
