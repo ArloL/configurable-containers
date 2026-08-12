@@ -30,6 +30,7 @@ to prevent these):
 | F11 | **Cookie boundary crossed** — a routing construct assumed to move a cookie. | Identity bleed; the one thing containers must prevent. |
 | F12 | **Side-effect timing** — a seeded cookie or injected script lands *after* the page already read it; or a `redirector` tab closes *before* its redirect fires, or closes a tab that had already navigated on to a real destination. | No error; the consent banner just reappears, the pref doesn't apply, or a live tab silently vanishes. |
 | F13 | **Routing a request that is not a page navigation** — `view-source:` fetches the document it prints, so webRequest reports a main_frame GET for the *inner* url in a pre-commit tab: indistinguishable, from the request alone, from a middle-clicked link. | Routing it "works": a tab opens in the right container. It is just the rendered page, and the source tab is gone. |
+| F14 | **Stale tab lineage** — the `initiator` of a navigation read off `openerTabId`, which Firefox keeps for the life of a tab and `supersede` carries across every reopen, rather than off the page the tab is on. | An `inherit` host ping-pongs: each reopen makes the tab it came from the next tab's opener, so two containers take turns opening tabs forever. Only tabs that *have* an opener are affected, so the same url typed by hand works. |
 
 Every level below states which classes it owns. The [coverage
 matrix](#subtle-bug-coverage-matrix) proves no class is orphaned.
@@ -123,7 +124,7 @@ dangerous. Table-driven over the three grammars, plus fuzz:
 Everything stateful runs here, against a **mock `browser.*`** (fake `tabs`,
 `contextualIdentities`, `webRequest`, `webNavigation`, and a **fake clock**). We
 drive *sequences* of events and assert invariants after each step. This is the
-home of F1, F2, F7, F8, F10, F13.
+home of F1, F2, F7, F8, F10, F13, F14.
 
 - **Model-based / stateful property tests** (fast-check `commands`): generate
   random sequences of `navigate`, `redirect`, `clickLink`, `closeTab`,
@@ -271,6 +272,7 @@ three scenarios that had no test are recorded in
 | F11 cookie boundary        | ✅ |    |    | ✅ | ✅ |    |
 | F12 side-effect timing     |    |    | ✅ | ✅ | ✅ |    |
 | F13 non-navigation request |    |    | ✅ | ✅ |    |    |
+| F14 stale tab lineage      |    |    | ✅ |    |    |    |
 
 Every class now has at least one deterministic owner (L1–L3) *and*, where the
 browser is the source of truth (F1, F2, F7, F9, F10, F11, F12, F13), a real-Firefox

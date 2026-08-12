@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { aFakeBrowser } from "./mock-port";
 import { createEngine, type PauseRecorder } from "../../src/engine/engine";
+import { createPicker } from "../../src/engine/picker";
+import { parseConfig } from "../../src/config/parse";
 import { matchRule, matchGroup, hostMatcher } from "../../src/matcher/matcher";
 import { sameSite } from "../../src/psl/same-site";
 import type { Config, Decision, Deps, Target } from "../../src/resolver/types";
@@ -569,5 +571,117 @@ describe("engine — a view-source load", () => {
 
     expect(blockingResponse).toEqual({ cancel: true });
     expect(browser.openedTabs).toHaveLength(1);
+  });
+});
+
+// `initiator` answers "which container did this navigation come FROM". A tab's opener
+// answers that only while the tab has no page of its own: the moment it commits, the
+// page it is on is where the navigation comes from, and the opener is a tab the user
+// left behind — Firefox keeps `openerTabId` for the life of the tab, and `supersede`
+// carries it across every reopen.
+//
+// Reported (F14): on slack.com in "Haeger", clicking a link to portal.azure.com asked
+// which container, and picking "HSP" then opened login.microsoftonline.com tab after
+// tab, alternating Haeger and HSP. Opening portal.azure.com directly — or pasting the
+// same link into the location bar — worked, because those tabs have no opener.
+//
+// The loop needs no second bug to sustain it: reading the initiator off a stale opener
+// sends the HSP tab to Haeger, and `supersede` makes the tab it came from the new tab's
+// opener, so the next hop reads HSP and goes back. Each hop keeps the tab it left (both
+// are on a page), which is the tab-after-tab part.
+describe("engine — an inherit host in a tab that has an opener", () => {
+  const ssoConfig = () =>
+    parseConfig(`
+rules:
+  - match: login.sso.example
+    inherit: true
+  - match: azure.example
+    open: [Haeger, HSP]
+`);
+
+  it("inherits from the page the tab is on, not from the tab that opened it", async () => {
+    const browser = aFakeBrowser();
+    const haeger = browser.addContainerNamed({ name: "Haeger" });
+    const hsp = browser.addContainerNamed({ name: "HSP" });
+    // The tab the user is actually in, still pointing back at the Slack tab it came from.
+    const slackTab = browser.existingTab({ url: "https://slack.example/", cookieStoreId: haeger.cookieStoreId });
+    const azureTab = browser.existingTab({
+      url: "https://portal.azure.example/",
+      cookieStoreId: hsp.cookieStoreId,
+      openerTabId: slackTab.id,
+    });
+    createEngine({ port: browser.port, config: ssoConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
+
+    const blockingResponse = await browser.navigates(
+      aNavigationTo({ tabId: azureTab.id, url: "https://login.sso.example/oauth2/authorize" })
+    );
+
+    // The login belongs to the session HSP just started, not to Haeger.
+    expect(blockingResponse).toBeUndefined();
+    expect(browser.openedTabs).toHaveLength(0);
+  });
+
+  it("still inherits from the opener for a tab that has no page of its own", async () => {
+    const browser = aFakeBrowser();
+    const haeger = browser.addContainerNamed({ name: "Haeger" });
+    const opener = browser.existingTab({ url: "https://slack.example/", cookieStoreId: haeger.cookieStoreId });
+    // target=_blank / middle-click: pre-commit on about:blank, so the opener is the only
+    // thing that says where this navigation came from.
+    const blank = browser.existingTab({ url: "about:blank", cookieStoreId: "firefox-default", openerTabId: opener.id });
+    createEngine({ port: browser.port, config: ssoConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
+
+    const blockingResponse = await browser.navigates(aNavigationTo({ tabId: blank.id, url: "https://login.sso.example/oauth2/authorize" }));
+
+    expect(blockingResponse).toEqual({ cancel: true });
+    expect(browser.openedTabs[0].cookieStoreId).toBe(haeger.cookieStoreId);
+  });
+
+  it("F14: the reported chain — slack link, choice, HSP — leaves the login in HSP", async () => {
+    const browser = aFakeBrowser();
+    const haeger = browser.addContainerNamed({ name: "Haeger" });
+    const hsp = browser.addContainerNamed({ name: "HSP" });
+    const config = ssoConfig();
+    // Wired as `wireBackground` does: the picker reopens through the engine's own
+    // F1-guarded `reopen`, which is what carries the opener along.
+    let picker: ReturnType<typeof createPicker>;
+    const engine = createEngine({
+      port: browser.port,
+      config,
+      deps,
+      onChoice: (options, nav) => void picker.showChoice(nav.tabId, nav.url, options),
+      pause: noPause,
+      tmpSuffix: sequentialTmpSuffixes(),
+    });
+    picker = createPicker({ port: browser.port, config, deps, reopen: engine.reopen });
+    browser.port.onMessage((msg, sender) => picker.handleMessage(msg, sender));
+
+    const slackTab = browser.existingTab({ url: "https://slack.example/", cookieStoreId: haeger.cookieStoreId });
+    // Slack opens the link in a tab of its own: inherits Haeger, pre-commit, opener set.
+    const linkTab = browser.existingTab({ url: "about:blank", cookieStoreId: haeger.cookieStoreId, openerTabId: slackTab.id });
+
+    const portal = "https://portal.azure.example/";
+    expect(await browser.navigates(aNavigationTo({ requestId: "1", tabId: linkTab.id, url: portal }))).toEqual({ cancel: true });
+    await browser.settle();
+
+    const choiceTab = [...browser.openTabs.values()].find((t) => t.url.startsWith("moz-extension://"))!;
+    expect(await browser.receivesMessage({ type: "cc-pick", url: portal, container: "HSP" }, choiceTab)).toEqual({ ok: true });
+
+    const azureTab = [...browser.openTabs.values()].find((t) => t.url === portal)!;
+    expect(azureTab.cookieStoreId).toBe(hsp.cookieStoreId);
+    // The opener has ridden along through both supersedes — this is the stale pointer.
+    expect(azureTab.openerTabId).toBe(slackTab.id);
+
+    // Its own navigation, which reopenedNav owns from its first request.
+    expect(await browser.navigates(aNavigationTo({ requestId: "2", tabId: azureTab.id, url: portal }))).toBeUndefined();
+
+    // The portal then sends the user to the identity provider: a fresh navigation, no
+    // longer ours. Before the fix this reopened into Haeger and the ping-pong started.
+    const openedSoFar = browser.openedTabs.length;
+    const blockingResponse = await browser.navigates(
+      aNavigationTo({ requestId: "3", tabId: azureTab.id, url: "https://login.sso.example/common/oauth2/authorize" })
+    );
+
+    expect(blockingResponse).toBeUndefined();
+    expect(browser.openedTabs).toHaveLength(openedSoFar);
   });
 });

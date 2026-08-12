@@ -62,12 +62,28 @@ async function buildNavContext(
       ? { url: tab.url, container: await registry.toRef(tab.cookieStoreId) }
       : null;
 
+  // Which container did this navigation come FROM? The page the tab is on, whenever it
+  // has one — that is what the user was looking at when they clicked. The opener answers
+  // this only while the tab has nothing of its own: a target=_blank / middle-clicked link
+  // is pre-commit on about:blank, and its opener is the page the click came from.
+  //
+  // Asking the opener FIRST, as this did, reads a tab the user left behind. Firefox keeps
+  // `openerTabId` for the life of a tab and `supersede` carries it across every reopen, so
+  // a tab we routed still points at whatever opened it — in a different container, by
+  // definition, since that difference is why we reopened. An `inherit` host then bounces
+  // the tab to the opener's container, and because each reopen makes the tab it came from
+  // the new tab's opener, the next hop bounces it straight back: login.microsoftonline.com
+  // opening tab after tab, alternating between the two (F14). Reported against a Slack link
+  // to portal.azure.com; the same url typed into the location bar worked, because a tab the
+  // user navigated themselves has no opener.
   let initiator: ContainerRef | null;
-  if (tab.openerTabId != null) {
+  if (current) {
+    initiator = current.container;
+  } else if (tab.openerTabId != null) {
     const opener = await port.getTab(tab.openerTabId);
     initiator = opener ? await registry.toRef(opener.cookieStoreId) : null;
   } else {
-    initiator = current ? current.container : null;
+    initiator = null;
   }
 
   return { targetUrl: d.url, current, initiator };
