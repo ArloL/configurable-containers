@@ -234,6 +234,13 @@ step binding is regex matching over prose, and a shared step library is the same
 indirection by another name. Plain `describe` / `it` with well-chosen words
 carries the meaning without the layer.
 
+Which is why the [coverage matrix](#subtle-bug-coverage-matrix) has **no L5 column**. A
+column is a claim that a class is owned *there*, and nothing is owned here: every
+acceptance reading is a test at L1–L4, counted in that test's own column. The column that
+used to sit there ticked seven classes and could not say what the ticks meant — every
+test in the suite is named for its behaviour by policy, so a column that recorded "has a
+behaviour-named test" would tick all fourteen and prove nothing about any of them.
+
 This replaced a `TESTS.md` of 47 Gherkin-notation scenarios, written as reference
 before implementation. It was deleted once the tests asserted the same behaviour:
 two descriptions of one system, free to drift, only one of them executable. The
@@ -249,36 +256,76 @@ shared per host reds only the L3 one.
 ## Cross-cutting gates
 
 - **Mutation testing (Stryker)** — the direct answer to "are there subtle bugs the
-  tests miss." Mutates the resolver and matcher (L1/L2 are fast enough to mutate)
-  and fails if a mutant survives — i.e. if a logic change doesn't break a test. A
-  survived mutant in precedence or group code is a subtle-bug hole by definition.
-  Gated with a threshold; run nightly (too slow per-push).
+  tests miss." `npm run test:mutation` (`stryker.config.mjs`) mutates `src/resolver`,
+  `src/matcher` and `src/psl` — the pure modules — and fails if a mutant survives, i.e.
+  if a logic change doesn't break a test. A survived mutant in precedence or group code
+  is a subtle-bug hole by definition. **Gated at 100%**, which the scope earns: three
+  modules, no I/O, no clock, ~190 mutants in twenty seconds. Nightly all the same, and
+  not for the cost — a refactor can introduce an *equivalent* mutant honestly, and that
+  should file an issue for someone to name in a comment, not block a merge.
+
+  Two narrowings are what give the number meaning. Only the **pure** modules are
+  mutated: the stateful ones fail under mutation as "the mock does not model that" as
+  often as "nothing tests this". And only **L1/L2** may kill the mutants
+  (`vitest.mutation.config.ts`) — a mutant in `resolve()` that an L3 engine case notices
+  and no resolver case does is a hole in the level that owns that logic, and letting the
+  slow levels answer for it would hide exactly what the gate is for.
+
+  A survivor has two honest exits, and standing at 100% means every survivor so far took
+  one: write the missing L1/L2 case, or — when the change provably cannot alter an answer
+  — mark it `// Stryker disable … : <why>` in the source. There are four such comments,
+  each naming an equivalence a reader can check: a trailing `"/"` the URL parser would
+  supply anyway, two guards unreachable behind an earlier check, and a string tag that
+  prevents a collision that cannot occur. Lowering the threshold is not one of the exits.
+
+  It reads the code as it is, not as it is meant to be, so it also reports **dead
+  defences**: the port/userinfo check in `canonicalHost` and the empty-host check in
+  `urlHost` cannot fire for any input that reaches them, which nothing in the source said
+  before the gate asked.
 - **Coverage** — line/branch gate on L1–L3; coverage is necessary, mutation score
   is the real bar.
 - **Type checking** — `tsc --noEmit` and a lint pass; the `Decision` union is
   exhaustively `switch`ed (no default case) so a new variant fails to compile
   until handled.
 - **Determinism** — L1–L3 use a fake clock and seeded fast-check; a failing
-  property prints its seed for exact replay. No `sleep`, no wall-clock.
+  property prints its seed for exact replay. No `sleep`, no wall-clock. The mutation run
+  additionally **pins** fast-check's seed (`test/fast-check-seed.ts`, loaded by that
+  config alone): Stryker decides each mutant from one run of the suite, so a property
+  drawing a fresh sample each time would report a mutant killed one night and survived
+  the next from identical code. `npm test` keeps drawing freely — unseeded exploration is
+  why the property tests exist.
 
 ## Subtle-bug coverage matrix
 
-| Class | L1 | L2 | L3 | L4 | L5 | Mutation |
-|-------|----|----|----|----|----|----------|
-| F1 double-open / loop      |    |    | ✅ | ✅ |    |    |
-| F2 already-contained guard |    |    | ✅ | ✅ |    |    |
-| F3 continuity misfire      | ✅ |    | ✅ |    | ✅ | ✅ |
-| F4 group-by-target-URL     | ✅ |    | ✅ |    | ✅ | ✅ |
-| F5 precedence              | ✅ | ✅ |    |    | ✅ | ✅ |
-| F6 inherit neutrality      | ✅ |    |    |    | ✅ | ✅ |
-| F7 race / MAC              |    |    | ✅ | ✅ |    |    |
-| F8 MV3 restart             |    |    | ✅ |    |    |    |
-| F9 redirect binding        |    |    | ✅ | ✅ | ✅ |    |
-| F10 disposal timing        |    |    | ✅ | ✅ |    |    |
-| F11 cookie boundary        | ✅ |    |    | ✅ | ✅ |    |
-| F12 side-effect timing     |    |    | ✅ | ✅ | ✅ |    |
-| F13 non-navigation request |    |    | ✅ | ✅ |    |    |
-| F14 stale tab lineage      |    |    | ✅ |    |    |    |
+| Class | L1 | L2 | L3 | L4 | Mutation |
+|-------|----|----|----|----|----------|
+| F1 double-open / loop      |    |    | ✅ | ✅ |    |
+| F2 already-contained guard |    |    | ✅ | ✅ | ✅ |
+| F3 continuity misfire      | ✅ |    | ✅ |    | ✅ |
+| F4 group-by-target-URL     | ✅ |    | ✅ |    | ✅ |
+| F5 precedence              | ✅ | ✅ |    |    | ✅ |
+| F6 inherit neutrality      | ✅ |    |    |    | ✅ |
+| F7 race / MAC              |    |    | ✅ | ✅ |    |
+| F8 MV3 restart             |    |    | ✅ |    |    |
+| F9 redirect binding        |    |    | ✅ | ✅ |    |
+| F10 disposal timing        |    |    | ✅ | ✅ |    |
+| F11 cookie boundary        | ✅ |    |    | ✅ |    |
+| F12 side-effect timing     |    |    | ✅ | ✅ |    |
+| F13 non-navigation request |    |    | ✅ | ✅ |    |
+| F14 stale tab lineage      |    |    | ✅ |    |    |
+
+An L1–L4 tick means a test at that level owns the class. **Mutation** is not a level and
+means something stronger than any of them: the decision this class turns on is inside the
+mutation gate's scope, where **no** change to that code goes unnoticed by L1/L2 — not "a
+test exists" but "there is no test-shaped hole left". F2 is ticked for its pure half
+(`alreadyThere`: reopening a tab that is already in its target container is a wrong
+answer before it is a churn); the stateful half of that class, and every class whose
+decision lives in `src/engine`, is out of scope by design and carries no tick. The ticks
+move only when a decision moves into or out of `src/resolver`, `src/matcher`, `src/psl` —
+never as a score creeping up or down, because the gate is all-or-nothing.
+
+There is no L5 column, and the [L5 section](#l5--acceptance-the-tests-are-the-spec) says
+why: no test lives there to be counted.
 
 Every class now has at least one deterministic owner (L1–L3) *and*, where the
 browser is the source of truth (F1, F2, F7, F9, F10, F11, F12, F13), a real-Firefox
@@ -353,10 +400,11 @@ uploaded on every failure for deterministic repro.
   (addons-linter, what AMO runs server-side), then `npm test` end to end. The
   sketch's static/unit/build/integration split is not worth its overhead at this
   size; the Firefox `latest`/`esr` matrix is not built.
-- `.github/workflows/nightly.yml` — `disposal-realtime`, described above, plus a
-  `report-regression` job that opens **one** issue for a failing streak and comments
-  on it thereafter. Scheduled runs go unwatched, so a red night has to come and find
-  us; a second nightly job is where `mutation` lands when Stryker arrives.
+- `.github/workflows/nightly.yml` — `disposal-realtime` and `mutation`, both described
+  above, plus a `report-regression` job that opens **one** issue per failing guard rail
+  for a failing streak and comments on it thereafter. Scheduled runs go unwatched, so a
+  red night has to come and find us; the two rails fail for unrelated reasons and are
+  fixed by different work, so they get an issue each.
 
 ## What CI still can't catch (be honest)
 

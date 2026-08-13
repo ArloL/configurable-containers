@@ -5,11 +5,10 @@ import { TEMPORARY } from "./types";
 // no identity in L1, so any two temporaries compare equal — the common inherit case
 // is a same-tab hop where `current` already IS the initiator's throwaway.
 function alreadyThere(current: ContainerRef | null, desired: ContainerRef): boolean {
-  if (!current || current.kind !== desired.kind) return false;
-  if (current.kind === "permanent" && desired.kind === "permanent") {
-    return current.name === desired.name;
+  if (desired.kind === "permanent") {
+    return current?.kind === "permanent" && current.name === desired.name;
   }
-  return true; // default==default, temporary==temporary
+  return current?.kind === desired.kind; // default==default, temporary==temporary
 }
 
 // Reopen into `desired` unless already there. ContainerRef is structurally a Target.
@@ -75,7 +74,7 @@ export function resolve(nav: NavContext, config: Config, deps: Deps): Decision {
         }
 
         // Multi-open: already in an eligible (permanent) container -> stay.
-        if (current && current.kind === "permanent" && containers.includes(current.name)) {
+        if (current?.kind === "permanent" && containers.includes(current.name)) {
           return { kind: "stay" };
         }
         // A configured default decides automatically.

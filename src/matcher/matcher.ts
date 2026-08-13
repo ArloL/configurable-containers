@@ -10,20 +10,34 @@ export type Matcher = HostMatcher; // extensible later: | PatternMatcher | Regex
 // the URL parser. Throws if the input is not a bare hostname (has a scheme, path,
 // port, whitespace, or is empty).
 function canonicalHost(hostish: string): string {
-  if (hostish === "" || /[\s/\\?#@:]/.test(hostish)) {
+  // Reject the characters that would let the parser read the input as something other
+  // than a bare hostname (scheme, path, port, userinfo, whitespace) before it gets the
+  // chance. The empty string is left to the parser rather than checked here: "http:///"
+  // does not parse, so it lands on the same throw one line later, and a check that only
+  // ever repeats an answer the next line gives is one no test can tell from its absence.
+  if (/[\s/\\?#@:]/.test(hostish)) {
     throw new Error(`not a bare hostname: ${JSON.stringify(hostish)}`);
   }
   let u: URL;
   try {
+    // Stryker disable next-line StringLiteral: the trailing "/" spells out the empty path
+    // this is asking the parser about; with no "/" the input is a bare authority and every
+    // hostname parses to the same thing, because the class above rejected every character
+    // that could have started a path.
     u = new URL("http://" + hostish + "/");
   } catch {
     throw new Error(`not a bare hostname: ${JSON.stringify(hostish)}`);
   }
   // Reject anything the parser reinterpreted (userinfo, port, non-empty path is
   // impossible here since we appended "/"; hostname must equal the whole input).
+  // Stryker disable all: unreachable from any input that gets this far — a port needs ":"
+  // and userinfo needs "@", both rejected above, and an http url with no host does not
+  // parse at all. It is the second line of defence for the character class above, and it
+  // earns its place there: drop ":" from that class and this is what still throws.
   if (u.hostname === "" || u.port !== "") {
     throw new Error(`not a bare hostname: ${JSON.stringify(hostish)}`);
   }
+  // Stryker restore all
   return stripTrailingDot(u.hostname);
 }
 
@@ -41,6 +55,9 @@ function urlHost(url: string): string | null {
     return null;
   }
   if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+  // Stryker disable next-line all: unreachable — an http(s) url with no host does not
+  // parse ("http:///" throws), so this cannot fire for anything the line above let past.
+  // Kept because the null-return contract is this function's, not the URL parser's.
   if (u.hostname === "") return null;
   return stripTrailingDot(u.hostname);
 }

@@ -50,10 +50,37 @@ jobs:
           FIREFOX_BIN: ${{ steps.firefox.outputs.firefox-path }}
         run: npm run test:realtime
 
+  mutation:
+    name: Mutation gate (L1/L2)
+    runs-on: ubuntu-latest
+    # Three pure modules, ~190 mutants, no browser: about half a minute of work plus npm.
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      # No Firefox and no mac here — the suite Stryker runs is L1/L2 only, on purpose
+      # (vitest.mutation.config.ts says why).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Fails under 100%. The log names every surviving mutant and the tests that ran
+      # against it, which is what the follow-up work needs.
+      - name: Mutate the resolver, the matcher and the same-site check
+        run: npm run test:mutation
+
   report-regression:
     name: Report a regression
     needs:
     - disposal-realtime
+    - mutation
     # Nobody watches a scheduled run, so a red night has to come and find us. Only on
     # failure — a cancelled or skipped run is not a regression.
     if: failure()
@@ -66,18 +93,27 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         GH_REPO: ${{ github.repository }}
-        TITLE: Nightly real-delay disposal is failing
         RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        DISPOSAL_RESULT: ${{ needs.disposal-realtime.result }}
+        MUTATION_RESULT: ${{ needs.mutation.result }}
       run: |
         set -euo pipefail
-        # One issue for the whole streak: a nightly that fails for a week should not
-        # file seven of them.
-        existing="$(gh issue list --state open --limit 100 --json number,title \
-          --jq 'first(.[] | select(.title == env.TITLE) | .number) // empty')"
-        if [ -n "$existing" ]; then
-          gh issue comment "$existing" --body "Still failing: $RUN_URL"
-        else
-          gh issue create --title "$TITLE" --body "$(cat <<EOF
+        # One issue per failing guard rail — they fail for unrelated reasons and are
+        # fixed by different work — and one issue for the whole streak: a nightly that
+        # fails for a week should not file seven of them.
+        report() {
+          export TITLE="$1" # exported: the jq filter below reads it from the environment
+          existing="$(gh issue list --state open --limit 100 --json number,title \
+            --jq 'first(.[] | select(.title == env.TITLE) | .number) // empty')"
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "Still failing: $RUN_URL"
+          else
+            gh issue create --title "$TITLE" --body "$2"
+          fi
+        }
+
+        if [ "$DISPOSAL_RESULT" = failure ]; then
+          report "Nightly real-delay disposal is failing" "$(cat <<EOF
         \`npm run test:realtime\` failed: $RUN_URL
 
         That case waits out the shipped five-minute grace in a real Firefox, so a
@@ -88,6 +124,26 @@ jobs:
         - **never removed** — a long background-page timer was throttled, coalesced or
           dropped. Every other disposal test uses a fake clock or a 500ms grace and
           would stay green through it (TESTING.md, F10).
+        EOF
+        )"
+        fi
+
+        if [ "$MUTATION_RESULT" = failure ]; then
+          report "Nightly mutation gate is failing" "$(cat <<EOF
+        \`npm run test:mutation\` failed: $RUN_URL
+
+        A survivor is a change to the resolver, the matcher or the same-site check that
+        no L1/L2 test notices. The log lists each one with the tests that ran against
+        it. Two ways it goes green again, and the mutant says which is honest:
+
+        - **a behaviour nothing asserts** — write the case at L1/L2. That is the whole
+          point of the gate; a case at L3 would leave the level that owns the logic
+          still unable to tell.
+        - **an equivalent mutant** — the change cannot alter an answer. Then it needs a
+          \`// Stryker disable\` comment saying *why*, next to the code (TESTING.md,
+          "Cross-cutting gates").
+
+        Not a way it goes green: lowering \`thresholds.break\`.
         EOF
         )"
         fi

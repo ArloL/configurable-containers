@@ -110,8 +110,9 @@ The rest of the checks:
 
 ```
 npm run typecheck
-npm run lint:ext  # addons-linter, the validator AMO runs
-npm test          # unit + e2e; launches real Firefox via Selenium
+npm run lint:ext      # addons-linter, the validator AMO runs
+npm test              # unit + e2e; launches real Firefox via Selenium
+npm run test:mutation # nightly guard rail: mutates the pure modules, gated at 100%
 ```
 
 Releases are cut by `.github/workflows/release.yaml`, which stamps the version from a
