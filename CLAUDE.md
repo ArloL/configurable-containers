@@ -378,6 +378,18 @@ way* is in its own comment; the source is densely commented. This file carries o
 - **GitHub immutable releases are ENABLED**: assets can't be edited, so the dev xpi ships in
   the same `gh release create`, and a rollback is *deleting* a release plus republishing the
   manifest.
+- **`npm audit` is loud and `npm audit --omit=dev` is the one that means anything.** The xpi
+  is an esbuild bundle of `src/`, so no `node_modules` package ships and every current
+  advisory is transitive dev tooling with no upstream fix (`image-size` under
+  `addons-linter`, `brace-expansion` under two `minimatch` lines, `nanoid`, `qs`).
+  `npm audit fix` advertises a fix for them and changes nothing — check its `--dry-run`
+  before believing it; both `brace-expansion` lines are already newest-of-line, and npm's
+  `image-size` fix is web-ext 5.x, four majors back. **Don't silence any of it with
+  `overrides`**: forcing a transitive dev dependency past what its dependent declares is a
+  standing compatibility risk taken for a warning no user sees, and the last pair
+  (`adm-zip`, `shell-quote`, for two Dependabot alerts) needed a web-ext release before it
+  could be retired. After any change here `npm run lint:ext` is the check that matters —
+  web-ext is the only thing that consumes these packages.
 
 ## `tcp/` and `mac/`
 
