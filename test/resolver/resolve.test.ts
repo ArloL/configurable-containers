@@ -32,6 +32,17 @@ describe("resolve — exemptions & single open", () => {
     )).toEqual({ kind: "stay" });
   });
 
+  // The mirror of the F2 guard: "already contained" is the container's identity, not its
+  // kind. Comparing only the kind would answer "stay" for every permanent container there
+  // is, and a rule would move a tab exactly once — the first time it left the default
+  // container — and never again.
+  it("single open reopens a tab that is in a *different* named container", () => {
+    expect(resolve(
+      aNavigation("https://mail.google.com/", { url: "https://mail.google.com/", container: theContainerNamed("Work") }, theContainerNamed("Work")),
+      aConfigOf([gmail]), deps,
+    )).toEqual({ kind: "reopen", into: { kind: "permanent", name: "Gmail" } });
+  });
+
   it("inherit keeps the initiating container", () => {
     expect(resolve(
       aNavigation("https://accounts.google.com/", { url: "https://x.com/", container: theContainerNamed("Work") }, theContainerNamed("Work")),
@@ -51,6 +62,17 @@ describe("resolve — exemptions & single open", () => {
       .toEqual({ kind: "reopen", into: { kind: "default" } });
   });
 
+  // The common inherit case, and the one where "already there" has no name to compare:
+  // a same-tab hop inside the throwaway the initiator is browsing in. Two throwaways are
+  // indistinguishable to the resolver, so a comparison that demanded an identity here
+  // would reopen an SSO hop into a *second* throwaway and log the user out mid-flow.
+  it("inherit stays in the throwaway the initiator is already browsing in", () => {
+    expect(resolve(
+      aNavigation("https://accounts.google.com/", { url: "https://x.com/", container: aThrowaway }, aThrowaway),
+      aConfigOf([inheritGoogle]), deps,
+    )).toEqual({ kind: "stay" });
+  });
+
   it("ignore leaves the tab alone", () => {
     expect(resolve(
       aNavigation("https://getpocket.com/", { url: "https://x.com/", container: theContainerNamed("Work") }, theContainerNamed("Work")),
@@ -61,6 +83,17 @@ describe("resolve — exemptions & single open", () => {
   it("redirector does not isolate the hop (stays in current)", () => {
     expect(resolve(
       aNavigation("https://t.co/abc", { url: "https://x.com/", container: aThrowaway }, aThrowaway),
+      aConfigOf([redirTco]), deps,
+    )).toEqual({ kind: "stay" });
+  });
+
+  // `stay` for a redirector means *this tab, wherever it is* — not "wherever the click
+  // came from". The distinction only shows when the two differ, which is precisely the
+  // shim-in-another-container case: routing the hop would spend a reopen on a url the
+  // user will never see, and the destination is decided one navigation later anyway.
+  it("redirector stays put even when the initiator is somewhere else", () => {
+    expect(resolve(
+      aNavigation("https://t.co/abc", { url: "https://x.com/", container: theContainerNamed("Work") }, theContainerNamed("Personal")),
       aConfigOf([redirTco]), deps,
     )).toEqual({ kind: "stay" });
   });
@@ -84,6 +117,29 @@ describe("resolve — disposable path + continuity", () => {
       aNavigation("https://imgur.com/", { url: "https://reddit.com/", container: aThrowaway }),
       aConfigOf(), deps,
     )).toEqual({ kind: "reopen", into: { kind: "temporary" } });
+  });
+
+  // http is a browsed page like any other. Reading only https as one would send every
+  // plain-http tab down the "nobody has browsed here yet" branch, where a throwaway is
+  // kept no matter where the tab is going: one LAN box or one un-upgraded site, and a
+  // throwaway would follow the user across the web.
+  it("a plain-http page still answers the continuity question", () => {
+    expect(resolve(
+      aNavigation("https://imgur.com/", { url: "http://reddit.com/", container: aThrowaway }),
+      aConfigOf(), deps,
+    )).toEqual({ kind: "reopen", into: { kind: "temporary" } });
+  });
+
+  // `view-source:https://reddit.com/` is the shape that makes the anchor load-bearing:
+  // an unanchored test finds "https:" inside it and reads the tab as being ON reddit.com.
+  // The tab is showing source, not browsing; there is nothing to compare, so it keeps the
+  // container it is in rather than buying a throwaway off a comparison against a url
+  // that names no page.
+  it("a tab showing source is not read as a page on the site it prints", () => {
+    expect(resolve(
+      aNavigation("https://imgur.com/", { url: "view-source:https://reddit.com/", container: aThrowaway }),
+      aConfigOf(), deps,
+    )).toEqual({ kind: "stay" });
   });
 
   it("group members share continuity across registrable domains", () => {

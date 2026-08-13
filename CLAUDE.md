@@ -227,6 +227,18 @@ way* is in its own comment; the source is densely commented. This file carries o
   and browsing re-triggers the sweep. `*.realtime.test.ts` is the one thing `npm test` does
   not run (`npm run test:realtime`, nightly), and cases there must **not** pass `ccGraceMs`:
   the point is that the bundle carries the shipped constant.
+- **The mutation gate is at 100% and `npm test` does not run it** (`npm run test:mutation`,
+  nightly). It mutates only the pure modules and lets only **L1/L2** kill the mutants, so
+  a new branch in `resolve`/`matcher`/`same-site` needs a *resolver or matcher* case — an
+  L3 engine case that covers it leaves the gate red. A survivor is killed or named
+  (`// Stryker disable … : why`), never absorbed by lowering the threshold; the four
+  existing comments each state an equivalence. Two settings in `stryker.config.mjs` are
+  load-bearing and fail as `stryker run` dying at startup rather than as a bad score:
+  `tsconfigFile: "none"` (its tsconfig rewriter calls `ts.parseConfigFileTextToJson`,
+  which **TypeScript 7 no longer exports**) and `vitest.related: false` (Vitest 4 answers
+  "no related test files", so the dry run finds no tests at all). The run also pins
+  fast-check's seed — a property drawing fresh samples makes each mutant's verdict a coin
+  flip — via a setup file `npm test` deliberately does not load.
 - **The pause's toolbar button and badge have no L4 coverage and cannot.** WebDriver
   cannot click a `browser_action` or read chrome UI. `test/e2e/pause.test.ts` drives the
   **options-page** arming route instead, and because both routes call one `arm()` the

@@ -3,15 +3,6 @@
 Things deliberately left needing a re-check, and where to look. Delete an entry
 once it is resolved.
 
-## What the L5 and Mutation columns of the coverage matrix mean (2026-07-28)
-
-`TESTING.md`'s subtle-bug matrix ticks L5 for F3, F4, F5, F6, F9, F11 and F12, and
-Mutation for F3, F4, F5 and F6. There is no acceptance suite and no Stryker config, so
-the ticks encode something other than "a test exists at this level" — the author did not
-recall what, and the prose that would have defined it was rewritten when TESTS.md went.
-The matrix was deliberately left untouched rather than guessed at. Resolve it by deciding
-what the columns should mean, then making them true.
-
 ## `reopenedNav` does not survive a background restart (2026-07-28)
 
 The F1 reopen guard (`src/engine/engine.ts`) is the one piece of guard state nothing can

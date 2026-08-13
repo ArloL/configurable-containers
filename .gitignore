@@ -4,6 +4,9 @@
 
 test-results/
 
+# Stryker's mutation report (npm run test:mutation)
+reports/
+
 # Built CC extension bundles (esbuild output; produced at test launch)
 extensions/cc/background.js
 extensions/cc/choice.js
