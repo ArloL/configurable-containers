@@ -160,6 +160,31 @@ describe("resolve — disposable path + continuity", () => {
   });
 });
 
+// A rule is enforcement, not a preference: `resolve` consults `matchRule` before the
+// disposable path, so a matched host leaves its throwaway even when everything the
+// continuity checks look at says it could stay. Structurally true — these pin it, because
+// swapping those two steps is a one-line change that no other case notices.
+describe("resolve — a rule outranks continuity", () => {
+  it("a matched rule switches container within the same registrable domain", () => {
+    // www.google.com and mail.google.com are one site by every continuity test there is;
+    // the Gmail rule must still take the hop out of the throwaway it was browsed in.
+    expect(resolve(
+      aNavigation("https://mail.google.com/", { url: "https://www.google.com/", container: aThrowaway }),
+      aConfigOf([gmail]), deps,
+    )).toEqual({ kind: "reopen", into: { kind: "permanent", name: "Gmail" } });
+  });
+
+  it("a group does not override an open rule", () => {
+    // The mirror of the above for groups: youtube.com and mail.google.com share a group
+    // and nothing else, so the group is the only thing that could have said "stay".
+    const cfg = aConfigOf([gmail], [{ match: ["google.com", "youtube.com"] }]);
+    expect(resolve(
+      aNavigation("https://mail.google.com/", { url: "https://youtube.com/", container: aThrowaway }),
+      cfg, deps,
+    )).toEqual({ kind: "reopen", into: { kind: "permanent", name: "Gmail" } });
+  });
+});
+
 describe("resolve — multi-open", () => {
   const withDefault: Rule = {
     match: ["trello.com"],

@@ -237,8 +237,14 @@ carries the meaning without the layer.
 This replaced a `TESTS.md` of 47 Gherkin-notation scenarios, written as reference
 before implementation. It was deleted once the tests asserted the same behaviour:
 two descriptions of one system, free to drift, only one of them executable. The
-three scenarios that had no test are recorded in
-[`FOLLOWUPS.md`](FOLLOWUPS.md) rather than lost.
+three scenarios that had no test at the time were carried in `FOLLOWUPS.md` rather
+than lost, and now have one each: two independent blank tabs to the same unmatched
+site are isolated (L3, `test/engine/engine.test.ts`), and a rule outranks both
+same-site and same-group continuity (L1, `test/resolver/resolve.test.ts` — the
+`www.google.com → mail.google.com` switch and a domain in both a group and an open
+rule). Each was revert-verified against a mutant that no other case catches:
+continuity consulted before `matchRule` reds only the two L1 cases, and a throwaway
+shared per host reds only the L3 one.
 
 ## Cross-cutting gates
 
