@@ -3,26 +3,6 @@
 Things deliberately left needing a re-check, and where to look. Delete an entry
 once it is resolved.
 
-## Behaviour described in TESTS.md but not asserted anywhere (2026-07-28)
-
-TESTS.md was deleted when the tests became the only behaviour spec
-(`docs/superpowers/specs/2026-07-28-bdd-test-naming-design.md`). Its 47 decided
-scenarios were audited against the suite first; these three had no test, and are kept
-here so the intent is not lost with the file. Each needs a failing test written first —
-they are coverage gaps, not renames.
-
-- **Two blank tabs to the same unmatched site are isolated.** Every existing isolation
-  test drives one tab, or a link from an opener. Nothing asserts that two *independent*
-  blank tabs navigating to the same unmatched host get separate throwaways. `resolve` is
-  pure and takes one navigation, so this is only expressible at L3 or L4.
-- **Rule enforcement overrides same-site continuity.** `resolve` consults `matchRule`
-  before `disposablePath`, so a matched rule structurally always wins — but no test pins
-  it. The scenario is the `www.google.com` (throwaway) → `mail.google.com` (Gmail rule)
-  hop: same registrable domain, yet it must still switch container.
-- **A group does not override an open rule.** The mirror of the above for groups: a
-  domain in both a group and an `open` rule must follow the rule. The existing group
-  tests all cover continuity *within* the disposable path, which is the other direction.
-
 ## Nothing pins the literal value of TMP_PREFIX (2026-07-28)
 
 `test/engine/registry.test.ts` imports `TMP_PREFIX` and interpolates it, so changing

@@ -289,6 +289,24 @@ describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
     expect(browser.createdContainers[0].name).toMatch(/^tmp/);
   });
 
+  it("two independent blank tabs to the same unmatched site are isolated from each other", async () => {
+    const browser = aFakeBrowser();
+    // Two new tabs, neither opened from the other: no page of their own, no opener, and
+    // nothing in common but the address typed into both. Every other isolation case
+    // drives one tab, or a link from an opener — so nothing else says that the same site
+    // in two unrelated tabs is two sessions, which is the whole promise of a throwaway.
+    const first = browser.existingTab({ url: "about:blank", cookieStoreId: "firefox-default" });
+    const second = browser.existingTab({ url: "about:blank", cookieStoreId: "firefox-default" });
+    createEngine({ port: browser.port, config: { rules: [], groups: [] }, deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
+
+    await browser.navigates(aNavigationTo({ requestId: "1", tabId: first.id, url: "https://unmatched.test/" }));
+    await browser.navigates(aNavigationTo({ requestId: "2", tabId: second.id, url: "https://unmatched.test/" }));
+
+    expect(browser.createdContainers.map((c) => c.name)).toEqual(["tmp1", "tmp2"]);
+    const [forFirst, forSecond] = browser.openedTabs;
+    expect(forFirst.cookieStoreId).not.toBe(forSecond.cookieStoreId);
+  });
+
   it("skips non-http(s) navigations", async () => {
     const browser = aFakeBrowser();
     const tab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
