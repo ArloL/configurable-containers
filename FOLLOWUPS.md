@@ -3,15 +3,6 @@
 Things deliberately left needing a re-check, and where to look. Delete an entry
 once it is resolved.
 
-## Nothing pins the literal value of TMP_PREFIX (2026-07-28)
-
-`test/engine/registry.test.ts` imports `TMP_PREFIX` and interpolates it, so changing
-`"tmp"` to anything else moves both sides of every assertion and the suite stays green
-(verified by mutation). The behaviour — prefix-based identification — *is* covered; the
-value is not. That value is crucial across a background restart: CC recognises its
-own throwaways by name, so changing the prefix would silently orphan every `tmp…`
-container in a live profile. A test asserting the literal would catch it.
-
 ## What the L5 and Mutation columns of the coverage matrix mean (2026-07-28)
 
 `TESTING.md`'s subtle-bug matrix ticks L5 for F3, F4, F5, F6, F9, F11 and F12, and

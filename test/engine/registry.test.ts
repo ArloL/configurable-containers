@@ -7,6 +7,25 @@ function sequentialTmpSuffixes(): () => string {
   return () => String(++n);
 }
 
+describe("TMP_PREFIX", () => {
+  // The literal, said out loud once. Every other case here interpolates the constant, so
+  // a rename moves both sides of the assertion and they stay green; the cases that do
+  // hardcode "tmp1" (highestTmpSuffix, the engine's reopen expectations) fail for their
+  // own reasons and say nothing about why the value matters.
+  //
+  // It matters because a throwaway is recognised as ours by NAME, and the name is the
+  // only record that outlives the background context: a config save calls
+  // runtime.reload(), and every in-memory structure dies with it. Renaming the prefix
+  // therefore orphans every tmp<N> container already in a live profile — the disposer
+  // stops seeing them, so they are never reclaimed, and highestTmpSuffix stops counting
+  // them, so the counter reissues from 1 beside containers that already hold that name.
+  // Both are silent. This is a compatibility constant, not an implementation detail:
+  // change it only with a migration that renames what is already out there.
+  it("is 'tmp'", () => {
+    expect(TMP_PREFIX).toBe("tmp");
+  });
+});
+
 describe("ContainerRegistry.toRef", () => {
   it("firefox-default maps to default (without querying identities)", async () => {
     const browser = aFakeBrowser();
