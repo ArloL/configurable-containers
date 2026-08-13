@@ -63,21 +63,3 @@ assertion, and neither Temporary Containers nor Multi-Account Containers attempt
 It needs the `requestBody` webRequest opt-in, urlencoded and multipart handling, and a
 `moz-extension:` page forging a cross-origin POST. See
 `docs/superpowers/specs/2026-07-28-f9-redirect-binding-design.md` §1.
-
-## `overrides` in package.json (2026-07-28)
-
-`adm-zip` and `shell-quote` are forced past what their own dependents declare
-(`firefox-profile` asks for `~0.5.x`, `fx-runner` pins `1.8.4` exactly) to clear
-two Dependabot alerts on transitive **dev** dependencies of `web-ext`. Nothing
-here ships — `npm audit --omit=dev` is clean and the xpi is an esbuild bundle of
-`src/` — so these are a standing compatibility risk rather than a fix:
-`firefox-profile` was written against `adm-zip` 0.5.
-
-Drop them once a `web-ext` release past 10.5.0 pulls in dependents that already
-ask for the patched versions. After any change here `npm run lint:ext` is the
-check that matters — web-ext is the only thing that consumes these packages.
-
-`npm audit` also reports `brace-expansion` advisories under `eslint →
-addons-linter`. Left alone: the installed `1.x` is already the newest of its
-line, and the advisory is only fixed in `5.x`, which `minimatch@3` cannot take.
-GitHub raises no Dependabot alert for it either.
