@@ -81,17 +81,3 @@ check that matters — web-ext is the only thing that consumes these packages.
 addons-linter`. Left alone: the installed `1.x` is already the newest of its
 line, and the advisory is only fixed in `5.x`, which `minimatch@3` cannot take.
 GitHub raises no Dependabot alert for it either.
-
-## F14 (stale tab lineage) has no L4 owner (2026-08-12)
-
-The opener-vs-current fix in `buildNavContext` is pinned at L3 only
-(`test/engine/engine.test.ts`, "an inherit host in a tab that has an opener"), and the
-coverage matrix ticks F14 for L3 alone. The browser is the source of truth for how long
-Firefox keeps `openerTabId` — the L3 mock keeps it because the mock was written to, not
-because it was measured — so a real-Firefox case would be worth having. It is awkward
-rather than impossible: the chain needs a real `target=_blank` anchor (the harness
-server's `?link=`, since a scripted `tabs.create` does not reproduce inheritance), then
-the *choice page*, which the driver can only operate once something else has opened it,
-then a second navigation in the resulting tab. Pinning just the second half — a tab with
-a cross-container opener navigating to an `inherit` host — would cover the fix without
-the picker.

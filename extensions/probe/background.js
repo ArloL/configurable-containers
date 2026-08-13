@@ -121,6 +121,10 @@ browser.runtime.onMessage.addListener(async (msg, sender) => {
     return tabs.map((t) => ({
       id: t.id, url: t.url, cookieStoreId: t.cookieStoreId, index: t.index,
       windowId: t.windowId,
+      // The tab a link (or a reopen) came from. Reported because it is the fact F14
+      // turns on and nothing else can see it: a case about a stale opener would pass
+      // just as happily on a browser that had dropped the opener altogether.
+      openerTabId: t.openerTabId,
       container: names[t.cookieStoreId] || "",
     }));
   }

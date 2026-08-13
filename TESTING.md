@@ -181,6 +181,14 @@ create/dispose, real redirects.
   Only the browser can produce that load, and only it decides what webRequest is told
   about one; an L3 case can pin the guard, but not that the guard is watching the right
   event.
+- **Stale tab lineage (F14)** — click a real `target=_blank` link out of one container
+  into a host that belongs in another, so CC's own reopen leaves a tab in the second
+  container still pointing at an opener in the first, then navigate it to an `inherit`
+  host and assert it stays where it is. How long Firefox keeps `openerTabId`, and whether
+  `tabs.create({ openerTabId })` reproduces that lineage across a reopen, are facts only
+  the browser holds — the L3 mock keeps the opener because it was written to. So the case
+  asserts the opener itself midway: without that, it would pass on a browser that had
+  quietly dropped the lineage and prove nothing.
 - **MAC interop (F2/F7)** — install *actual* Multi-Account Containers alongside,
   assign a domain in MAC, and assert our engine defers (no double-open, no churn).
   This is the Phase-1 coexistence contract executed for real.
@@ -312,7 +320,7 @@ shared per host reds only the L3 one.
 | F11 cookie boundary        | ✅ |    |    | ✅ |    |
 | F12 side-effect timing     |    |    | ✅ | ✅ |    |
 | F13 non-navigation request |    |    | ✅ | ✅ |    |
-| F14 stale tab lineage      |    |    | ✅ |    |    |
+| F14 stale tab lineage      |    |    | ✅ | ✅ |    |
 
 An L1–L4 tick means a test at that level owns the class. **Mutation** is not a level and
 means something stronger than any of them: the decision this class turns on is inside the
@@ -328,7 +336,7 @@ There is no L5 column, and the [L5 section](#l5--acceptance-the-tests-are-the-sp
 why: no test lives there to be counted.
 
 Every class now has at least one deterministic owner (L1–L3) *and*, where the
-browser is the source of truth (F1, F2, F7, F9, F10, F11, F12, F13), a real-Firefox
+browser is the source of truth (F1, F2, F7, F9, F10, F11, F12, F13, F14), a real-Firefox
 confirmation. F9 was the long-standing exception: POST bodies and redirect
 bindings don't exist in a pure resolver. It gained an L3 owner when the decision
 *not* to reopen a non-GET navigation moved into the engine, where a mock port can

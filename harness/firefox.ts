@@ -437,6 +437,10 @@ export interface ProbeTab {
   cookieStoreId: string;
   index: number; // position in its window — what "opened beside it" is asserted against
   windowId: number; // which window — what "the popup survived" is asserted against
+  // The tab this one was opened from, absent when there is none. Optional because
+  // Firefox omits it, not because a test may ignore it: it is the lineage F14 reads,
+  // and only the browser can say whether it really survives a reopen.
+  openerTabId?: number;
   container: string;
 }
 
