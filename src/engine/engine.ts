@@ -133,6 +133,32 @@ export function targetLabel(decision: Declinable): string {
   }
 }
 
+// Whether a declined navigation is worth interrupting the user for. Narrows the
+// NOTIFICATION only — the decline below is unconditional, because the body would be
+// dropped either way.
+//
+// The toast earns its interruption by naming a container the config names, so it reads
+// as "a rule of yours did not get applied, and here is which one": *stayed in tmp9
+// instead of Haeger* says the login just landed somewhere it cannot work, and points at
+// the rule to fix. That is the SSO case, and it is the reason this notification exists.
+//
+// A temporary target cannot say that. Its message is *stayed in tmp9 instead of a new
+// temporary container* — two throwaways, indistinguishable to the user and with nothing
+// to act on. And it is the shape the COMMON case takes: a card payment at a site with no
+// rule, where the 3-D Secure host posts back cross-site and staying put is exactly what
+// made the checkout work. Interrupting a payment to report a non-event is the one thing
+// this toast should never do.
+//
+// `default` sits with `temporary` rather than `permanent`: it is Firefox's no-container,
+// not something a rule opens into, so it names no rule either. It is reachable only via
+// `inherit` from a pre-commit tab with no opener — a `target=_blank` POST — which is rare
+// enough that a wrong answer here costs nothing.
+export function namesAConfiguredContainer(decision: Declinable): boolean {
+  // A choice always lists containers straight out of the config, whatever `Temporary`
+  // sits among them.
+  return decision.kind === "choice" || decision.into.kind === "permanent";
+}
+
 export function createEngine(opts: EngineOptions): Engine {
   const { port, config, deps, onChoice, pause } = opts;
   const registry = createRegistry(port, opts.tmpSuffix ?? defaultSuffix());
@@ -330,9 +356,14 @@ export function createEngine(opts: EngineOptions): Engine {
     // before handled.add (this path adds no state, so it is fail-open by construction).
     // The reopenedNav guard has already returned for navigations that are ours.
     if ((decision.kind === "reopen" || decision.kind === "choice") && d.method !== "GET") {
-      // Floated, never awaited: a navigation must not wait on a toast, and a
-      // notification that cannot be raised must not break routing.
-      void announceDeclined(d, tab, decision).catch((e) => console.warn("[engine] notify failed", e));
+      // The decline is unconditional; only the toast is selective. Keeping the two
+      // apart is the point — a silent decline is still the right EFFECT, and tying the
+      // notification to it would make "say less" mean "route differently".
+      if (namesAConfiguredContainer(decision)) {
+        // Floated, never awaited: a navigation must not wait on a toast, and a
+        // notification that cannot be raised must not break routing.
+        void announceDeclined(d, tab, decision).catch((e) => console.warn("[engine] notify failed", e));
+      }
       return; // no cancel — the POST proceeds in the tab's current container
     }
 
