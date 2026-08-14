@@ -2,8 +2,9 @@
 
 This document is the design of the user configuration. It is a snapshot of
 decisions made so far; open questions are collected at the end. The config
-**format** (YAML / JSON / JSON5 / TOML) is not yet chosen — examples use YAML for
-readability, and a bare hostname is shorthand for `*://*.<host>/*`.
+**format is YAML** — parsed by `src/config/parse.ts`, seeded and stored as YAML
+text, and shipped that way since the first release. A bare hostname is shorthand
+for `*://*.<host>/*`.
 
 See [`configurable-containers.config.yaml`](configurable-containers.config.yaml)
 for the author's real config, generated from Multi-Account Containers + Temporary
@@ -460,7 +461,6 @@ and uploads it if an account is ever connected.
 ## Open questions
 
 **Config surface**
-- **Config format** — YAML / JSON / JSON5 / TOML. YAML is provisional.
 - **A per-machine sync opt-out** — syncing is on for every install and has no off
   switch. A machine that should keep its config to itself has no way to say so short of
   uninstalling. Deferred until something says the default is wrong.
@@ -468,10 +468,13 @@ and uploads it if an account is ever connected.
 **Vocabulary / schema**
 - **`default` vs `auto`** — the rule-level auto-select key reuses `default`, a word
   previously retired as a top-level global; may mislead.
-- **Validity rules to codify** — a rule's action must be at most one of
-  `open` / `inherit` / `ignore` / `redirector`; a `default` must be a member of its
-  `open` list; `Temporary` is a reserved name; the `cookies` / `scripts` overlay
-  keys may accompany any action except `ignore`.
+- **`Temporary` is reserved by interpretation, not by validation** — `parseConfig`
+  accepts it as a container name and the resolver reads it as "disposable"
+  (`src/resolver/types.ts` `TEMPORARY`), so a user who means a permanent container of
+  that name gets throwaways instead, with no error. Same shape as the unenforced `tmp`
+  name prefix. (The other three validity rules once listed here are codified:
+  at-most-one action, `default` a member of its `open` list, and no `cookies` /
+  `scripts` on an `ignore` rule — `src/config/parse.ts`.)
 
 **Groups**
 - **Symmetric group vs directional "target domains"** — groups are symmetric

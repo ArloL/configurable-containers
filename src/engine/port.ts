@@ -1,5 +1,13 @@
-// The narrow browser.* facade the L3 engine depends on. The ONLY module aware
-// that browser.* exists. Real adapter is an L4 concern; L3 tests use a mock.
+// The narrow browser.* facade the L3 engine depends on. Real adapter is an L4
+// concern (browser-port.ts); L3 tests use a mock.
+//
+// It is the seam for the ENGINE AND ITS SIBLINGS — everything under src/engine/ —
+// and not for the extension as a whole: src/extension/{config,config-sync,options,
+// choice}.ts touch browser.* directly by design, because a page script and the
+// storage/sync plumbing are not what the L3 harness drives. Widening this to "the
+// only module aware browser.* exists" is the claim to resist: it reads as an
+// invitation to route those four through here, which buys nothing and puts storage
+// and page-side code behind a mock that was built for navigation.
 
 import type { HttpHeader } from "../overlays/cookies";
 export type { HttpHeader };
