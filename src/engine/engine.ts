@@ -149,6 +149,13 @@ export function targetLabel(decision: Declinable): string {
 // made the checkout work. Interrupting a payment to report a non-event is the one thing
 // this toast should never do.
 //
+// Silenced with it, and the one genuine loss here: *stayed in Haeger instead of a new
+// temporary container* — a POST out of a permanent container that would have been
+// isolated. That message is NOT empty; it says the body went out under a named identity
+// rather than an isolated one. It goes anyway because it still reports no unapplied rule
+// and offers nothing to do about it, which is the line this predicate draws. Reopen if a
+// case turns up where the exposure alone is worth an interruption.
+//
 // `default` sits with `temporary` rather than `permanent`: it is Firefox's no-container,
 // not something a rule opens into, so it names no rule either. It is reachable only via
 // `inherit` from a pre-commit tab with no opener — a `target=_blank` POST — which is rare

@@ -164,6 +164,13 @@ way* is in its own comment; the source is densely commented. This file carries o
   argument: for a config like `configurable-containers.config.yaml` every `inherit` host
   resolves to `stay` and every named rule short-circuits once the tab is already in it, so
   this fires a handful of times a month at most.
+- **A POST that resolves to `choice` may be unreachable outside L3** — don't burn a day
+  trying to reproduce it in a browser. The choice screen only appears when the tab is in
+  **none** of the eligible containers, and picking one puts it in an eligible container,
+  which is exactly the condition under which multi-open returns `stay`. Every auth POST
+  arrives *after* that pick, so the ordinary "log in through the choice screen" flow can
+  never produce one; it would take a cross-site POST into a multi-open host from a tab in
+  none of its containers. `post-binding.test.ts` owns the path.
 - **Firefox awaits a blocking listener's returned promise** — the only reason `gatedPort`
   can delay an early navigation, and the only reason the engine can `cancel` after an async
   effect. MV2 only.
