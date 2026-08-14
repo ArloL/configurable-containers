@@ -1,4 +1,5 @@
 import { TMP_PREFIX } from "./registry";
+import { supersede } from "./supersede";
 import type { BrowserPort, Tab } from "./port";
 
 function defaultSuffix(): () => string {
@@ -46,20 +47,19 @@ export function createAutoTemp(opts: AutoTempOptions): void {
       color: "blue",
       icon: "circle",
     });
-    await port.createTab({
-      // No url on purpose. Firefox refuses `tabs.create({ url: "about:newtab" })`
-      // ("Illegal URL") — and about:home likewise — so passing the tab's own url
-      // here made every containerize throw *after* the tmp identity was created:
-      // orphan tmp containers, tab never moved. Omitting url gives the user's real
-      // new-tab page, which is what we want anyway. TCP does the same (it passes
-      // url only when it matches /^https?:/).
-      cookieStoreId: ci.cookieStoreId,
-      windowId: tab.windowId, // a new tab in a second window must not jump to the first
-      index: tab.index,
-      active: tab.active,
-      openerTabId: tab.openerTabId,
-    });
-    await port.removeTab(tab.id);
+    // Placement is `supersede`'s, not ours — window, index, active and openerTabId
+    // all come from the tab being taken over, and a candidate here is always an
+    // about: page, so it takes supersede's replace branch (create, then remove the
+    // original). This was a hand-rolled second copy of that rule until it was folded
+    // in; the same duplication had already drifted once in the picker.
+    //
+    // No url on purpose. Firefox refuses `tabs.create({ url: "about:newtab" })`
+    // ("Illegal URL") — and about:home likewise — so passing the tab's own url here
+    // made every containerize throw *after* the tmp identity was created: orphan tmp
+    // containers, tab never moved. Omitting url gives the user's real new-tab page,
+    // which is what we want anyway. TCP does the same (it passes url only when it
+    // matches /^https?:/).
+    await supersede(port, tab, { cookieStoreId: ci.cookieStoreId });
   }
 
   // Startup sweep: containerize pre-existing about:newtab / about:home tabs

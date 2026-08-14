@@ -21,9 +21,11 @@ way* is in its own comment; the source is densely commented. This file carries o
 - **Tab placement is `src/engine/supersede.ts` — add a caller, never a copy.** Callers:
   `engine.reopen`, `picker.showChoice` (the picker reopens through the injected
   `engine.reopen` — hence `createEngine` returning `{ reopen }` — because a hand-rolled
-  reopen skips `reopenedNav` and reopens forever). The rule was copied into the picker once
-  and drifted inside the slice: the choice page loaded into the triggering tab, destroying
-  the user's page. **`auto-temp.containerize` is a surviving second copy** — fold it in.
+  reopen skips `reopenedNav` and reopens forever), `auto-temp.containerize` (an about:
+  page never matches `keep`, so it takes the replace branch — which is the whole of what
+  its hand-rolled copy used to do). The rule was copied into the picker once and drifted
+  inside the slice: the choice page loaded into the triggering tab, destroying the user's
+  page. There is no second copy left; keep it that way.
 - **A guard on the engine's own webRequest handling stays IN `engine.ts`** — `handled`,
   `reopenedNav` and `viewSourceNav` are one family, each keyed on a navigation and read
   inside the blocking handler. A sibling module is for behaviour with a life of its own
