@@ -48,14 +48,53 @@ flight at the restart (a floated `containerize` mid-`await`). Firefox kills it; 
 harness lets it land. Every current case drives the restart from a settled state, so
 nothing is in flight — a future case that needs it has to close this first.
 
-## Notification volume on declined POSTs (2026-07-28)
+## Notification volume on declined POSTs (2026-07-28) — CLOSED, narrowed 2026-08-14
 
-Every cross-site form POST that would change container now raises a notification,
+Every cross-site form POST that would change container raised a notification,
 deduplicated per host per background session. Payment-gateway returns are the common
 case, and there staying put is the *desirable* outcome — so the toast may prove to be
 noise. The narrower trigger (notify only when the denied target was a **permanent**
 container, i.e. a rule that went unapplied) is a one-line change at the same site in
 `src/engine/engine.ts`. Revisit after real use.
+
+**Narrowed as proposed, but "revisit after real use" was the wrong test and the volume
+framing was the wrong question.** Two things came out of pricing it against a real config
+(`configurable-containers.config.yaml`) rather than waiting:
+
+- **The volume worry was unfounded, and no soak would have shown it.** Almost nothing can
+  reach the guard. An `inherit` rule resolves `desired` to `nav.initiator ?? current`, and
+  for a tab that is on a page those are the same container — so the whole SSO and 3DS
+  exemption block returns `stay` and is structurally incapable of toasting. A named rule
+  short-circuits the same way once the tab is already in its container, which is where
+  every auth return lands, having started there. What survives is a top-level POST to a
+  host **no rule matches** — a card payment at an unmatched shop — a handful of times a
+  month. Nobody was ever going to be annoyed by the count.
+- **What settles it is the message, not the rate.** In that surviving case both halves of
+  the sentence name a throwaway: *stayed in tmp9 instead of a new temporary container*.
+  There is no user-visible difference between those states and nothing to act on, so the
+  message carries no information at any frequency. That is readable off `targetLabel`
+  today and needed no production data at all.
+
+So the split lands where the followup guessed, for a better reason: announce only when the
+decision names a container the **config** names, because only then is there an unapplied
+rule to report. `namesAConfiguredContainer` in `src/engine/engine.ts`, with the decline
+left unconditional; two L3 cases in `test/engine/post-binding.test.ts` pin the silence
+(revert-verified), and the e2e keeps the permanent-target toast.
+
+Deliberately silenced with it: *stayed in Haeger instead of a new temporary container* —
+a POST out of a **permanent** container that would have been isolated. Unlike the
+throwaway-to-throwaway case that message does say something (the body went out under a
+named identity rather than an isolated one), but it still reports no unapplied rule and
+offers nothing to do about it. Reopen this if a case turns up where that distinction
+matters.
+
+Also learned, and worth knowing before anyone tests the `choice` half by hand: **a POST
+that resolves to `choice` may be unreachable in ordinary browsing.** The choice screen
+only appears when the tab is in none of the eligible containers, and picking one puts it
+in an eligible container — which is exactly the condition under which multi-open returns
+`stay`. Every auth POST comes back *after* that pick. It would take a cross-site POST into
+a multi-open host from a tab in none of its containers. L3 covers the path; the wild may
+not contain it.
 
 Not done here either: **replaying** the POST into the target container via a generated
 auto-submitting form page. It is the only option that would actually route the

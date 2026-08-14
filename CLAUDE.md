@@ -153,6 +153,17 @@ way* is in its own comment; the source is densely commented. This file carries o
   (`d.method !== "GET"`, before `macOwns` and `handled.add`, so it adds no state and is
   fail-open). Reopening a POST drops the SAML assertion. It sits in the engine, not the
   resolver: the routing answer is right, the *effect* can't be performed losslessly.
+- **The decline is unconditional; the TOAST is not** (`namesAConfiguredContainer`). Only a
+  decision naming a container the config names is announced — a `choice`, or a `reopen`
+  into a `permanent`. A temporary target is declined in silence, because its message
+  ("stayed in tmp9 instead of a new temporary container") names two throwaways the user
+  can neither tell apart nor act on, and that is the shape the **common** case takes: a
+  card payment at an unmatched site, where the 3DS host posts back cross-site and staying
+  put is what makes checkout work. Keep the two separate — wiring the notification back
+  into the guard makes "say less" mean "route differently". Frequency was never the
+  argument: for a config like `configurable-containers.config.yaml` every `inherit` host
+  resolves to `stay` and every named rule short-circuits once the tab is already in it, so
+  this fires a handful of times a month at most.
 - **Firefox awaits a blocking listener's returned promise** — the only reason `gatedPort`
   can delay an early navigation, and the only reason the engine can `cancel` after an async
   effect. MV2 only.

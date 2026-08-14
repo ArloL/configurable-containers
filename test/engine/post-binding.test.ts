@@ -51,7 +51,7 @@ describe("engine — a non-GET navigation is never reopened (F9)", () => {
     );
   });
 
-  it("declines a POST that would have bought a fresh throwaway", async () => {
+  it("declines a POST that would have bought a fresh throwaway — silently", async () => {
     const browser = aFakeBrowser();
     const tab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
     createEngine({ port: browser.port, config: { rules: [], groups: [] }, deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
@@ -59,9 +59,31 @@ describe("engine — a non-GET navigation is never reopened (F9)", () => {
     const blockingResponse = await browser.navigates(aNavigationTo({ tabId: tab.id }));
     await browser.settle();
 
+    // The decline is unconditional — the body would be dropped whatever the target.
     expect(blockingResponse).toBeUndefined();
     expect(browser.openedTabs).toEqual([]);
-    expect(browser.notifications[0].message).toContain("stayed in the default container instead of a new temporary container");
+    // But there is nothing to say: no rule named this destination, so the message would
+    // have been "instead of a new temporary container" — a state the user cannot tell
+    // from the one they are in, and cannot act on.
+    expect(browser.notifications).toEqual([]);
+  });
+
+  it("stays silent when a POST out of a named container would only have been isolated", async () => {
+    const browser = aFakeBrowser();
+    const work = browser.addContainerNamed({ name: "Work" });
+    // In Work, posting to a host no rule matches: the disposable path wants a throwaway.
+    const tab = browser.existingTab({ url: "https://example.com/a", cookieStoreId: work.cookieStoreId });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
+
+    const blockingResponse = await browser.navigates(aNavigationTo({ tabId: tab.id, url: "https://nomatch.test/pay" }));
+    await browser.settle();
+
+    // This is the payment-return shape, and the one that would fire most often in
+    // ordinary use: staying put is what makes the checkout work, so there is no
+    // unapplied rule to report.
+    expect(blockingResponse).toBeUndefined();
+    expect(browser.openedTabs).toEqual([]);
+    expect(browser.notifications).toEqual([]);
   });
 
   it("declines a POST that would have raised the choice screen", async () => {

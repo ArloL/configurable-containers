@@ -274,9 +274,16 @@ to an app, or a 3DS processor returning to a shop — is **never reopened**. Mov
 means opening a new one, and that can only issue a GET, so the body would be dropped
 silently: the login just fails, or the payment never confirms.
 
-So CC leaves it in the container it started in and raises a notification naming the
-container the rules asked for. The routing rule genuinely does not apply to that one
-navigation, which is why it is announced rather than passed over.
+So CC leaves it in the container it started in — and if a **rule of yours** named where
+it should have gone, raises a notification saying so ("stayed in tmp9 instead of
+Haeger"). That rule genuinely did not apply to that one navigation, and it is usually
+why a login just failed.
+
+CC stays **silent** when the submission would only have been isolated into a fresh
+temporary container, because there is nothing there to tell you: both the container it
+stayed in and the one it did not move to are throwaways, and no rule went unapplied. That
+is the common case — a card payment at a site you have no rule for, where the processor
+posts back cross-site and staying put is exactly what lets the checkout complete.
 
 For an SSO chain this is a signal to add `inherit: true` to the identity provider. The
 IdP then sits in the app's own container, the assertion posts back to that same
