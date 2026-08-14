@@ -14,7 +14,7 @@ way* is in its own comment; the source is densely commented. This file carries o
   the non-GET declination, the MAC handshake and the `handled` dedupe.
 - **`BrowserPort` is the browser seam for the engine and its siblings only** (`port.ts` is
   types, `browser-port.ts` the implementation). `src/extension/{config,config-sync,options,choice}.ts`
-  touch `browser.*` directly by design — `port.ts`'s own header overclaims here.
+  touch `browser.*` directly by design, and `port.ts`'s header now says so.
 - **New background behaviour is a sibling in `wireBackground` (`src/extension/wiring.ts`),
   never nested in `createEngine`.** `background.ts` is that call plus an async tail; the L3
   restart harness drives the same function, so startup order can't drift.
@@ -231,6 +231,19 @@ way* is in its own comment; the source is densely commented. This file carries o
   now only make disposal punctual — losing one costs lateness, never earliness. Deliberate
   consequence: a `tmp` container with no stored note starts its grace *now*, since emptiness
   never written down is indistinguishable from a live grace.
+- **A `scripts:` snippet in the seed config is the one place nothing type-checks or
+  tests** (it ships as a string inside YAML), and the shipped YouTube original-audio
+  snippet carries two measured facts that make the two obvious rewrites of it wrong.
+  **Patching `ytInitialPlayerResponse` does nothing**: the player does not trust that
+  global, it re-derives from its own `/youtubei/v1/player` fetch — the retarget was
+  verified to land before the player read it (`de-DE.10 -> en-US.4` at t=790) and German
+  played anyway. And **the player applies an audio-track switch, then reverts it** seconds
+  later as playback commits (set t=874, applied t=1055, back on the dub t=5750), announcing
+  it through none of the 48 event types the page fires — so no one-shot design is reliable,
+  event-driven or not, and `video.audioTracks` reads length 0 because YouTube feeds audio
+  through MSE. Hence a held invariant on a poll, which also collapses SPA navigation, back
+  navigation and the revert into one case. Full notes:
+  `docs/superpowers/specs/2026-07-31-youtube-original-audio-design.md` §2.
 
 ## What a green test run can still hide
 
