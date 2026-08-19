@@ -44,6 +44,10 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint:ext
 
+      # The deterministic levels with a coverage floor (TESTING.md, "Cross-cutting
+      # gates"). Seconds, and it fails before the Firefox suite spends minutes.
+      - run: npm run test:coverage
+
       - name: Run tests (headless Firefox via Selenium)
         env:
           FIREFOX_BIN: ${{ steps.firefox.outputs.firefox-path }}

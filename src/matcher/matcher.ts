@@ -59,6 +59,8 @@ function canonicalHost(hostish: string): string {
   // and userinfo needs "@", both rejected above, and an http url with no host does not
   // parse at all. It is the second line of defence for the character class above, and it
   // earns its place there: drop ":" from that class and this is what still throws.
+  /* v8 ignore next 3 -- unreachable, as the note above says; named for the coverage
+     gate the same way the Stryker note names it for the mutation one. */
   if (u.hostname === "" || u.port !== "") {
     throw new Error(`not a bare hostname: ${JSON.stringify(hostish)}`);
   }
@@ -85,6 +87,7 @@ function httpUrl(url: string): URL | null {
   // Stryker disable next-line all: unreachable — an http(s) url with no host does not
   // parse ("http:///" throws), so this cannot fire for anything the line above let past.
   // Kept because the null-return contract is this function's, not the URL parser's.
+  /* v8 ignore next -- unreachable, as the note above says. */
   if (u.hostname === "") return null;
   return u;
 }

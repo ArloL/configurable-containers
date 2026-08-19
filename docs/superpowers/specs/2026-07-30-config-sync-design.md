@@ -1,7 +1,7 @@
 # Syncing the Config Between Machines — Design
 
 **Date:** 2026-07-30
-**Status:** Approved, pending implementation plan
+**Status:** Implemented
 **Topic:** Mirror the stored config into `browser.storage.sync` so a config edited on one
 machine reaches every other machine the user is signed into Firefox Sync on. Amends the
 2026-07-28 storage slice, whose §1 out-of-scope list said "`storage.sync`. Single-machine

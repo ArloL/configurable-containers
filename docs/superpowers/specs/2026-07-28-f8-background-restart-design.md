@@ -1,7 +1,7 @@
 # F8 — Background Restart Injection — Design
 
 **Date:** 2026-07-28
-**Status:** Approved, pending implementation plan
+**Status:** Implemented
 **Topic:** Give F8 (background restart mid-flow) a real L3 owner: a harness that drops every
 in-memory guard and re-runs the invariants against the same browser, plus the extraction that
 lets it drive the *actual* startup path rather than a test-local imitation of it.

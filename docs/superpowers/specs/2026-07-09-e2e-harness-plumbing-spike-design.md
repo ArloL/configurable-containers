@@ -1,7 +1,7 @@
 # E2E Harness Plumbing Spike — Design
 
 **Date:** 2026-07-09
-**Status:** Approved, pending implementation plan
+**Status:** Implemented
 **Topic:** Prove the L4/L5 test-harness plumbing before Configurable Containers (CC) exists.
 
 ## 1. Goal & scope

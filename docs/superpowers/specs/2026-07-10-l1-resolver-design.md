@@ -1,7 +1,7 @@
 # L1 Resolver — Design
 
 **Date:** 2026-07-10
-**Status:** Approved, pending implementation plan
+**Status:** Implemented
 **Topic:** The pure routing-decision function at the base of the TESTING.md pyramid.
 
 ## 1. Goal & scope

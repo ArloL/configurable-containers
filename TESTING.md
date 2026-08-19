@@ -300,8 +300,28 @@ shared per host reds only the L3 one.
   defences**: the port/userinfo check in `canonicalHost` and the empty-host check in
   `urlHost` cannot fire for any input that reaches them, which nothing in the source said
   before the gate asked.
-- **Coverage** — line/branch gate on L1–L3; coverage is necessary, mutation score
-  is the real bar.
+- **Coverage** — `npm run test:coverage` (`vitest.coverage.config.ts`, v8), a floor on
+  the deterministic levels, run on every push in CI before the Firefox suite spends its
+  minutes. It answers a weaker question than mutation and a different one: not "is there
+  logic no test would notice changing" over three modules, but "is any of `src/` reached
+  by no deterministic test at all". Coverage is necessary; the mutation score is the real
+  bar.
+
+  The thresholds are floors a point or two under what the suite measures (~92% statements,
+  ~89% branches), **except** `src/resolver`, `src/matcher` and `src/psl`, held at 100 —
+  the mutation gate owns those three, and this catches a new uncovered branch in them on
+  the push that adds it rather than that night. Three files are excluded, for reasons that
+  are facts about the platform rather than gaps to close: `background.ts` (the MV2 entry
+  point, whose listeners must register as the file evaluates — L3 drives the
+  `wireBackground` it delegates to), and `choice.ts` / `options.ts` (DOM, and there is no
+  jsdom in this repo; what could be decided without a document already was, in
+  `picker-protocol.ts` at 100%). Left in at 0% they would force a threshold low enough to
+  report nothing about the rest.
+
+  The gate also has the mutation gate's habit of finding **dead defences**, and the same
+  exit: the two in `matcher.ts` that Stryker already reports unreachable now carry a
+  `/* v8 ignore */` beside their `// Stryker disable`, naming the same fact for both
+  gates. Excluding a file, or lowering a floor, is not one of the exits.
 - **Type checking** — `tsc --noEmit` and a lint pass; the `Decision` union is
   exhaustively `switch`ed (no default case) so a new variant fails to compile
   until handled.

@@ -99,6 +99,30 @@ describe("parseConfig — rule validation", () => {
     expect(e.path).toBe("rules[0].default");
   });
 
+  // `tmp<N>` is what the registry mints for a throwaway, and the name is the only thing
+  // that tells the two apart: a permanent container named `tmp1` is deleted by the
+  // disposer once its last tab closes, and until then a tab in it reads as already-in-a-
+  // throwaway. Both are silent, so the config is refused instead. Only the exact shape:
+  // `tmpwork` and `tmpfiles.org` are ordinary names and stay legal.
+  it("rejects a container named like a throwaway, wherever the name comes from", () => {
+    const fromOpen = err(`rules:\n  - match: x.com\n    open: tmp1\n`);
+    expect(fromOpen.message).toMatch(/reserved name of a throwaway/);
+    expect(fromOpen.path).toBe("rules[0].open");
+
+    const fromList = err(`rules:\n  - match: x.com\n    open: [Work, tmp42]\n`);
+    expect(fromList.path).toBe("rules[0].open[1]");
+
+    // Nobody typed a container name here at all: `tmp1` is a legal hostname, and an
+    // action-less rule names its container after it.
+    const fromAutoName = err(`rules:\n  - match: tmp1\n`);
+    expect(fromAutoName.message).toMatch(/reserved name of a throwaway/);
+    expect(fromAutoName.path).toBe("rules[0].match[0]");
+
+    for (const name of ["tmpwork", "tmpfiles.org", "tmp", "Temporary"]) {
+      expect(() => parseConfig(`rules:\n  - match: x.com\n    open: ${name}\n`)).not.toThrow();
+    }
+  });
+
   it("rejects an unknown key", () => {
     expect(err(`rules:\n  - match: x.com\n    opne: X\n`).message).toMatch(/unknown key "opne"/);
   });

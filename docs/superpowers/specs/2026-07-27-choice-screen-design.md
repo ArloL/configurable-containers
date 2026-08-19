@@ -1,7 +1,7 @@
 # Choice Screen + Reopen Picker — Design
 
 **Date:** 2026-07-27
-**Status:** Approved, pending implementation plan
+**Status:** Implemented
 **Topic:** The keyboard-driven picker for multi-`open` rules — both the **automatic
 choice screen** (multi-`open` with no `default`, not already in an eligible container)
 and the **manual reopen picker** (a keyboard command that re-offers the matching rule's

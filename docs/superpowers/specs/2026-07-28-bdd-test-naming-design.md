@@ -1,7 +1,7 @@
 # The Tests Are the Spec — Design
 
 **Date:** 2026-07-28
-**Status:** Approved, pending implementation plan
+**Status:** Implemented
 **Topic:** Delete `TESTS.md` and move the behaviour reading into the test source, carried by
 descriptive variable and method names. A naming-only refactor: 344 tests, zero behaviour
 change.

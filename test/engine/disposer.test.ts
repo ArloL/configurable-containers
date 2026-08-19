@@ -53,6 +53,24 @@ describe("disposer — targeted grace disposal", () => {
     expect(browser.removedContainers).toEqual([]);
   });
 
+  // The regression the name shape exists to prevent: `tmpwork` is a container a user
+  // would plausibly write (`open: tmpwork`), and an auto-named rule for a host like
+  // `tmpfiles.org` produces one without anyone typing a container name at all. Matching
+  // on the prefix alone reclaimed both — silently, once the last tab closed, with every
+  // login inside them.
+  it("never removes a container that merely starts with tmp", async () => {
+    const { browser, clock, advance } = aBrowserWithFakeClock();
+    const named = ["tmpwork", "tmpfiles.org", "tmp"].map((name) => browser.addContainerNamed({ name }));
+    createDisposer({ port: browser.port, clock, graceMs: GRACE });
+    const tabs = [];
+    for (const c of named) tabs.push(await browser.opensTab({ url: "https://a.test/", cookieStoreId: c.cookieStoreId }));
+    await advance(0); // startup
+
+    for (const t of tabs) await browser.closesTab(t);
+    await advance(GRACE * 2);
+    expect(browser.removedContainers).toEqual([]);
+  });
+
   it("does not remove while other tabs remain in the container", async () => {
     const { browser, clock, advance } = aBrowserWithFakeClock();
     const throwaway = browser.addContainerNamed({ name: "tmp1" });

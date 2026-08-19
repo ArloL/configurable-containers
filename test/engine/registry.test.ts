@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { aFakeBrowser } from "./mock-port";
-import { createRegistry, TMP_PREFIX } from "../../src/engine/registry";
+import { createRegistry, isThrowawayName, TMP_PREFIX } from "../../src/engine/registry";
 
 function sequentialTmpSuffixes(): () => string {
   let n = 0;
@@ -23,6 +23,26 @@ describe("TMP_PREFIX", () => {
   // change it only with a migration that renames what is already out there.
   it("is 'tmp'", () => {
     expect(TMP_PREFIX).toBe("tmp");
+  });
+
+  // The digits are not decoration. The prefix ALONE claims every container a user could
+  // reasonably name — `tmpwork`, or `tmpfiles.org` from an auto-named rule for that host
+  // — and claiming one is two silent losses: the disposer deletes it once its last tab
+  // closes, with the logins in it, and toRef reads a tab in it as already-in-a-throwaway,
+  // so routing answers the continuity question about a permanent container.
+  it("recognises a throwaway by tmp + digits, and nothing else", () => {
+    for (const name of ["tmp1", "tmp42", "tmp0", "tmp1000"]) {
+      expect(isThrowawayName(name)).toBe(true);
+    }
+    for (const name of ["tmp", "tmpwork", "tmpfiles.org", "tmp 1", "tmp1x", "xtmp1", "Tmp1", "tmp-1", "tmp1.5"]) {
+      expect(isThrowawayName(name)).toBe(false);
+    }
+  });
+
+  // Both minting sites build the name as TMP_PREFIX + a decimal counter; if either ever
+  // stopped, the container it created would be invisible to the disposer and leak.
+  it("recognises the names the registry itself mints", () => {
+    expect(isThrowawayName(TMP_PREFIX + "7")).toBe(true);
   });
 });
 
@@ -51,6 +71,13 @@ describe("ContainerRegistry.toRef", () => {
     const container = browser.addContainerNamed({ name: "Work" });
     const reg = createRegistry(browser.port, sequentialTmpSuffixes());
     expect(await reg.toRef(container.cookieStoreId)).toEqual({ kind: "permanent", name: "Work" });
+  });
+
+  it("a tmp-PREFIXED but not tmp-numbered container is permanent, not a throwaway", async () => {
+    const browser = aFakeBrowser();
+    const container = browser.addContainerNamed({ name: "tmpwork" });
+    const reg = createRegistry(browser.port, sequentialTmpSuffixes());
+    expect(await reg.toRef(container.cookieStoreId)).toEqual({ kind: "permanent", name: "tmpwork" });
   });
 
   it("a missing container maps to default", async () => {

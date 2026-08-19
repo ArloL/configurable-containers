@@ -1,7 +1,7 @@
 # PSL `sameSite` — Design
 
 **Date:** 2026-07-10
-**Status:** Approved, pending implementation plan
+**Status:** Implemented
 **Topic:** The real registrable-domain (eTLD+1) same-site check that replaces the L1/L3 injected double.
 
 ## 1. Goal & scope
