@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { hostMatcher, matches, matcherToPatterns } from "../../src/matcher/matcher";
+import { hostMatcher, matches, matcherToPatterns, patternMatcher, regexMatcher } from "../../src/matcher/matcher";
 
 const bandcamp = hostMatcher("bandcamp.com");
 const mailGoogle = hostMatcher("mail.google.com");
@@ -91,5 +91,198 @@ describe("matcherToPatterns", () => {
       .toEqual(["*://bandcamp.com/*", "*://*.bandcamp.com/*"]);
     expect(matcherToPatterns(hostMatcher("münchen.de")))
       .toEqual(["*://xn--mnchen-3ya.de/*", "*://*.xn--mnchen-3ya.de/*"]);
+  });
+
+  // A pattern is already one, and it is handed over in its CANONICAL form: registering
+  // `*://*.BandCamp.COM/*` while matching `bandcamp.com` here is the drift that would
+  // put an overlay's script on a different set of pages than its rule routes.
+  it("hands a pattern over as itself, canonicalized", () => {
+    expect(matcherToPatterns(patternMatcher("https://app.example.com/work/*")))
+      .toEqual(["https://app.example.com/work/*"]);
+    expect(matcherToPatterns(patternMatcher("*://*.BandCamp.COM./x")))
+      .toEqual(["*://*.bandcamp.com/x"]);
+    expect(matcherToPatterns(patternMatcher("*://*/*"))).toEqual(["*://*/*"]);
+  });
+
+  // No finite set of match patterns describes an arbitrary regex, and the wider one
+  // that would compile — `*://*/*` — is the user's snippet on every page they open.
+  // `config/parse` keeps this unreachable by refusing `scripts` on a regex rule; the
+  // throw is what makes a hand-built config say so instead of over-injecting.
+  it("refuses a regex, which has no pattern form", () => {
+    expect(() => matcherToPatterns(regexMatcher("^https://x\\.com/")))
+      .toThrow(/no URL-pattern form/);
+  });
+});
+
+// ── Match patterns ────────────────────────────────────────────────────────────────
+// The WebExtension grammar, and the two ways it differs from the shorthand above: a
+// bare host in a pattern is EXACTLY that host (no subdomains — `*.` is what asks for
+// them), and the path is matched, so a rule can be narrower than a site.
+describe("patternMatcher / matches — WebExtension match patterns", () => {
+  it("matches the host it names and, without \"*.\", only that host", () => {
+    const exact = patternMatcher("https://app.example.com/*");
+    expect(matches(exact, "https://app.example.com/")).toBe(true);
+    expect(matches(exact, "https://app.example.com/deep/path?q=1")).toBe(true);
+    expect(matches(exact, "https://example.com/")).toBe(false);
+    expect(matches(exact, "https://www.app.example.com/")).toBe(false); // "*." not asked for
+  });
+
+  it("\"*.\" covers the host and everything under it", () => {
+    const sub = patternMatcher("https://*.example.com/*");
+    expect(matches(sub, "https://example.com/")).toBe(true);
+    expect(matches(sub, "https://a.b.example.com/")).toBe(true);
+    expect(matches(sub, "https://notexample.com/")).toBe(false);
+    expect(matches(sub, "https://example.com.evil.tld/")).toBe(false);
+  });
+
+  it("the bare \"*\" host matches any http(s) host", () => {
+    const any = patternMatcher("https://*/admin*");
+    expect(matches(any, "https://a.com/admin")).toBe(true);
+    expect(matches(any, "https://b.example.org/admin/users")).toBe(true);
+    expect(matches(any, "https://a.com/public")).toBe(false);
+  });
+
+  it("pins the scheme when it names one, and \"*\" means http+https", () => {
+    const secure = patternMatcher("https://example.com/*");
+    expect(matches(secure, "http://example.com/")).toBe(false);
+    expect(matches(secure, "https://example.com/")).toBe(true);
+
+    const plain = patternMatcher("http://example.com/*");
+    expect(matches(plain, "https://example.com/")).toBe(false);
+    expect(matches(plain, "http://example.com/")).toBe(true);
+
+    const either = patternMatcher("*://example.com/*");
+    expect(matches(either, "http://example.com/")).toBe(true);
+    expect(matches(either, "https://example.com/")).toBe(true);
+    // Never anything else, whatever the pattern says: a matcher only ever answers for a
+    // top-level http(s) navigation.
+    expect(matches(either, "ftp://example.com/")).toBe(false);
+    expect(matches(either, "about:blank")).toBe(false);
+    expect(matches(either, "not a url")).toBe(false);
+  });
+
+  // The path is the reason a pattern exists at all — a host-shaped rule is shorter
+  // written as a bare hostname. Anchored at both ends: a pattern for /work must not be
+  // answered by /workshop, and one for /b must not be answered by /a/b.
+  it("matches the path glob anchored at both ends", () => {
+    const work = patternMatcher("https://app.example.com/work/*");
+    expect(matches(work, "https://app.example.com/work/")).toBe(true);
+    expect(matches(work, "https://app.example.com/work/a/b")).toBe(true);
+    expect(matches(work, "https://app.example.com/workshop/")).toBe(false);
+    expect(matches(work, "https://app.example.com/")).toBe(false);
+
+    const exactPath = patternMatcher("https://example.com/a");
+    expect(matches(exactPath, "https://example.com/a")).toBe(true);
+    expect(matches(exactPath, "https://example.com/ab")).toBe(false); // not a prefix match
+    expect(matches(exactPath, "https://example.com/x/a")).toBe(false); // nor a suffix one
+
+    const inner = patternMatcher("https://example.com/*/edit");
+    expect(matches(inner, "https://example.com/doc/edit")).toBe(true);
+    expect(matches(inner, "https://example.com/a/b/c/edit")).toBe(true); // "*" spans "/"
+    expect(matches(inner, "https://example.com/doc/view")).toBe(false);
+  });
+
+  // A path glob is a glob, not a regex: everything but "*" is literal. Without the
+  // escape, "/a.b" would also route "/axb" — a rule for one page silently owning a
+  // family of them.
+  it("treats regex metacharacters in the path as literals", () => {
+    const dotted = patternMatcher("https://example.com/a.b");
+    expect(matches(dotted, "https://example.com/a.b")).toBe(true);
+    expect(matches(dotted, "https://example.com/axb")).toBe(false);
+    const bracketed = patternMatcher("https://example.com/(x)+[y]");
+    expect(matches(bracketed, "https://example.com/(x)+[y]")).toBe(true);
+    expect(matches(bracketed, "https://example.com/xy")).toBe(false);
+  });
+
+  // The config promises query matching ("scheme, host, path, query"), and the fragment
+  // is deliberately outside it: it never reaches the server and no navigation is routed
+  // on it.
+  it("matches path + query, never the fragment", () => {
+    const q = patternMatcher("https://example.com/s?q=cats*");
+    expect(matches(q, "https://example.com/s?q=cats")).toBe(true);
+    expect(matches(q, "https://example.com/s?q=cats&safe=1")).toBe(true);
+    expect(matches(q, "https://example.com/s?q=dogs")).toBe(false);
+
+    const noQuery = patternMatcher("https://example.com/a");
+    expect(matches(noQuery, "https://example.com/a#section")).toBe(true); // fragment ignored
+    expect(matches(noQuery, "https://example.com/a?x=1")).toBe(false); // query is not
+  });
+
+  it("canonicalizes the host it was written with, on both sides", () => {
+    const shouty = patternMatcher("*://*.BandCamp.COM./*");
+    expect(matches(shouty, "https://www.bandcamp.com/")).toBe(true);
+    expect(matches(shouty, "https://bandcamp.com./")).toBe(true); // trailing dot on the URL
+    expect(matches(patternMatcher("*://münchen.de/*"), "https://xn--mnchen-3ya.de/")).toBe(true);
+  });
+
+  // Every rejection here is read by a person editing their config, so each one names
+  // what is wrong rather than "invalid pattern".
+  it("rejects the malformed patterns, naming what is wrong", () => {
+    expect(() => patternMatcher("example.com/*")).toThrow(/needs a scheme/);
+    expect(() => patternMatcher("https://example.com")).toThrow(/needs a path/);
+    expect(() => patternMatcher("ftp://example.com/*")).toThrow(/unsupported scheme "ftp"/);
+    expect(() => patternMatcher("file://*/*")).toThrow(/unsupported scheme "file"/);
+    // The one a Google-ccTLD config reaches for first. It is not a match pattern in
+    // Firefox either, and reading it leniently would look like it covered google.de.
+    expect(() => patternMatcher("*://*.google.*/*")).toThrow(/host wildcard/);
+    expect(() => patternMatcher("*://*google.com/*")).toThrow(/host wildcard/);
+    expect(() => patternMatcher("https://ex ample.com/*")).toThrow(/"ex ample.com" is not a hostname/);
+    expect(() => patternMatcher("https://user@example.com/*")).toThrow(/is not a hostname/);
+    expect(() => patternMatcher("https://example.com:8443/*")).toThrow(/is not a hostname/); // a port is not
+    expect(() => patternMatcher("https:///*")).toThrow(/is not a hostname/); // empty host
+    // Every one of them is an Error carrying that message, and both halves matter:
+    // `config/parse` re-raises `(e as Error).message` into the ConfigError the options
+    // page prints, so a rejection that threw something without one would reach the user
+    // as an empty complaint about a line they cannot find.
+    for (const bad of ["example.com/*", "ftp://example.com/*", "*://*.google.*/*"]) {
+      let thrown: unknown;
+      try { patternMatcher(bad); } catch (e) { thrown = e; }
+      expect(thrown).toBeInstanceOf(Error);
+      expect((thrown as Error).message).toMatch(/not a valid match pattern/);
+    }
+  });
+});
+
+// ── Regex ─────────────────────────────────────────────────────────────────────────
+describe("regexMatcher / matches — the escape hatch", () => {
+  // The case the form exists for: one expression covering ~190 Google ccTLDs, which no
+  // match pattern can express (a host wildcard is only a leading "*.").
+  const googleAnyTld = regexMatcher("^https?://([^/]+\\.)?google\\.[a-z]{2,3}(\\.[a-z]{2})?/");
+
+  it("matches every ccTLD shape the pattern grammar cannot", () => {
+    for (const url of [
+      "https://google.com/", "https://google.be/", "https://www.google.de/search?q=x",
+      "https://google.co.uk/", "https://google.com.au/", "https://images.google.fr/",
+    ]) {
+      expect(matches(googleAnyTld, url)).toBe(true);
+    }
+    for (const url of ["https://notgoogle.com/", "https://google.evil.tld/", "https://mygoogle.de/"]) {
+      expect(matches(googleAnyTld, url)).toBe(false);
+    }
+  });
+
+  it("is matched against the canonical URL, so an anchored expression holds", () => {
+    const anchored = regexMatcher("^https://x\\.com/$");
+    expect(matches(anchored, "https://x.com")).toBe(true); // the parser supplies the "/"
+    expect(matches(anchored, "https://X.COM")).toBe(true); // and lowercases the host
+    expect(matches(anchored, "https://x.com/a")).toBe(false);
+    expect(matches(anchored, "https://evil.test/?u=https://x.com/")).toBe(false);
+  });
+
+  it("answers false for a non-http(s) URL however permissive the expression", () => {
+    const anything = regexMatcher(".");
+    expect(matches(anything, "https://a.test/")).toBe(true);
+    expect(matches(anything, "about:blank")).toBe(false);
+    expect(matches(anything, "moz-extension://abc/choice.html")).toBe(false);
+    expect(matches(anything, "not a url")).toBe(false);
+  });
+
+  // Compiled while the config is being read, because inside the blocking request
+  // handler there is nobody left to tell: a throw there is a navigation that never
+  // resolves.
+  it("rejects an uncompilable or empty expression", () => {
+    expect(() => regexMatcher("(")).toThrow(/not a valid regular expression/);
+    expect(() => regexMatcher("[z-a]")).toThrow(/not a valid regular expression/);
+    expect(() => regexMatcher("")).toThrow(/not a valid regular expression: empty/);
   });
 });

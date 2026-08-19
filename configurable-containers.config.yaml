@@ -289,11 +289,25 @@ rules:
 
 # Isolation-continuity groups: sites in one group stay in the SAME throwaway as you
 # move between them, while crossing to anything outside it spins up a clean one.
-# Each group is a plain list of hostnames — no "match:" key here, unlike a rule.
+# Each group is a plain list of matchers — no "match:" key here, unlike a rule — in
+# the same grammar rules use (hostname, "scheme://host/path" pattern, { regex: … }).
 # Order-significant, first-match wins; a URL resolves to at most one group. Groups
 # never route and never override a rule.
 groups:
-  - [google.com, google.de, youtube.com]
+  # Google is ~190 registrable domains, one per ccTLD, and a redirect between two of
+  # them (google.com -> google.de) is a cross-site navigation that would otherwise cost
+  # the throwaway you were signed into. No match pattern can say this — a host wildcard
+  # is only a leading "*." — so it is the regex form or 190 lines. Single-quoted so the
+  # backslashes are the regex's own and not YAML escapes.
+  #
+  # It is deliberately loose at the tail: `google.zz` is inside the group whether or not
+  # Google owns it. The cost of that is a stranger's site sharing a THROWAWAY with a
+  # Google session that is itself disposable, which is a non-event; the cost of being
+  # strict is enumerating every ccTLD and re-checking the list forever.
+  - [
+      { regex: '^https?://([^/]+\.)?google\.[a-z]{2,3}(\.[a-z]{2})?/' },
+      youtube.com, youtu.be,
+    ]
   - [oracle.com, oraclecloud.com, identity.oraclecloud.com]
   - [check24.de, check24.com]
   - [conrad.de, conrad.com]

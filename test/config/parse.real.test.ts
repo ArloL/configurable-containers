@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parseConfig } from "../../src/config/parse";
+import { matchGroup } from "../../src/matcher/matcher";
 import type { Config, Action } from "../../src/resolver/types";
 
 const yamlPath = fileURLToPath(new URL("../../configurable-containers.config.yaml", import.meta.url));
@@ -78,7 +79,26 @@ describe("parseConfig — real configurable-containers.config.yaml", () => {
 
   it("parses the google and microsoft groups", () => {
     const hasHost = (g: { match: unknown[] }, h: string) => g.match.some((m) => hostOf(m) === h);
-    expect(config.groups.some((g) => hasHost(g, "google.com") && hasHost(g, "youtube.com"))).toBe(true);
+    expect(config.groups.some((g) => hasHost(g, "youtube.com"))).toBe(true);
     expect(config.groups.some((g) => hasHost(g, "microsoft.com"))).toBe(true);
+  });
+
+  // The google group is written as a regex because Google is one registrable domain per
+  // ccTLD and the PSL makes each of them a different site — so what has to hold is the
+  // MEMBERSHIP, not the spelling. Asserted through matchGroup, the same lookup the
+  // engine does: the ccTLDs, YouTube and the SSO host that carries a login between them
+  // (F4's chain) all resolve to ONE group, and a lookalike resolves to none of it.
+  it("puts every google ccTLD, youtube and accounts.google.com in one group", () => {
+    const g = matchGroup("https://www.google.de/", config.groups);
+    expect(g).not.toBeNull();
+    for (const url of [
+      "https://google.com/", "https://google.be/", "https://google.co.uk/maps",
+      "https://google.com.au/", "https://accounts.google.com/signin",
+      "https://www.youtube.com/watch?v=x", "https://youtu.be/x",
+    ]) {
+      expect(matchGroup(url, config.groups)).toBe(g);
+    }
+    expect(matchGroup("https://notgoogle.com/", config.groups)).not.toBe(g);
+    expect(matchGroup("https://google.com.evil.tld/", config.groups)).not.toBe(g);
   });
 });

@@ -112,12 +112,22 @@ dangerous. Table-driven over the three grammars, plus fuzz:
 - Shorthand `company.com` expands to `*://*.company.com/*` — and **does not** match
   `notcompany.com`, `company.com.evil.tld`, or bare `company.com` without a dot
   boundary. (classic suffix-match bug)
-- Match-pattern semantics match the WebExtension spec (path globs, port, scheme).
-- Regex escape hatch is anchored/tested as written; a catastrophic-backtracking
-  guard (timeout per match) is asserted.
-- Fuzz: random hostnames/URLs against random patterns, cross-checked against an
-  independent reference matcher; assert no pattern ever matches a URL of a
-  different registrable domain unless it explicitly says so.
+- Match-pattern semantics match the WebExtension spec (scheme, host wildcard, path
+  glob), including the two places it differs from the shorthand: a bare host in a
+  pattern is *only* that host, and the path is anchored at both ends and escaped, so
+  `/work` is not answered by `/workshop` and `/a.b` is not answered by `/axb`.
+- Regex escape hatch is anchored/tested as written, against the canonical URL, and is
+  compiled at parse time so a broken expression is a config error. There is **no**
+  catastrophic-backtracking guard and there cannot be one: a JavaScript regex is
+  synchronous and uninterruptible, so a per-match timeout would need a different regex
+  engine — a dependency this repo does not take for a single-user escape hatch. The
+  risk is documented in `CONFIG.md` instead.
+- Fuzz (`test/matcher/matcher.props.test.ts`): a host matcher's `matcherToPatterns`
+  expansion matches exactly what the matcher itself matches, cross-checking the suffix
+  test against the pattern machinery — the two independent paths behind routing and
+  script registration. Plus totality: `matches()` returns a boolean and never throws for
+  an arbitrary string, in all three grammars, because it runs inside the blocking
+  handler where a throw is a navigation that never completes.
 
 ## L3 — Model-based interception & lifecycle
 

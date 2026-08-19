@@ -135,6 +135,78 @@ possible. Three forms, plus lists:
 - match: [trello.com, "https://*.atlassian.net/*"]    # any-of list
 ```
 
+The parser tells the three apart by shape: a mapping is the regex form, a string
+containing `://` is a match pattern (the scheme is what makes a pattern a pattern), and
+anything else is read as a bare hostname. A malformed entry is a config error naming the
+entry — never a rule that loads and quietly matches nothing.
+
+### Bare hostname
+
+`company.com` covers `company.com` and every subdomain of it, on http and https, at any
+path. Case, a trailing dot and IDN/punycode are normalized on both sides, so
+`BandCamp.COM.` and `münchen.de` match what you would expect. A port is not part of a
+host: `company.com:8443` is an error, and `https://company.com:8443/` matches
+`company.com` like any other URL of that host.
+
+It is the only form that **auto-names a container** (a rule with no action opens in a
+container named after its first match entry) — a pattern or a regex has no single host to
+take a name from, so an action-less rule written in either is refused, and the fix is to
+add `open:`.
+
+### Match pattern
+
+The [WebExtension match-pattern](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Match_patterns)
+grammar, `<scheme>://<host><path>`, with two narrowings — both refused loudly rather than
+accepted and left inert:
+
+- **Scheme** is `http`, `https` or `*` (which means those two). Firefox's grammar also has
+  `ws`, `file`, `ftp` and `data`; a rule naming one could never fire, because routing only
+  ever sees a top-level http(s) navigation.
+- **Host** is a hostname, a hostname with a leading `*.` (that host *and* everything under
+  it), or a bare `*` (any host). A wildcard anywhere else — `*.google.*`, `*google.com` —
+  is not a match pattern in Firefox either, and is exactly the thing the regex form exists
+  for.
+
+Note the difference from the shorthand: in a pattern a bare host is **only** that host, so
+`https://example.com/*` does not match `www.example.com`. Write `https://*.example.com/*`
+for the subtree.
+
+The **path** is required (`https://example.com` is an error; `https://example.com/*` is
+what you meant) and is a glob whose only metacharacter is `*` — any run of any characters,
+`/` included. Everything else is literal, so `/a.b` matches `/a.b` and not `/axb`. It is
+anchored at both ends: a pattern for `/work` is not answered by `/workshop`. It is matched
+against the path **and query** — `https://example.com/s?q=cats*` works — but never the
+fragment, which is not sent to the server and is not what a navigation is routed on.
+
+### Regex
+
+The escape hatch, for the sets neither other form can describe. It is matched against the
+**whole canonical URL** (`https://www.google.de/search?q=x`) and, like every other form,
+only ever against an http(s) one. It is compiled when the config is read, so a broken
+expression is a config error rather than a navigation that never completes; there are no
+flags, and the scheme and host of the URL it sees are already lowercase.
+
+Prefer **single quotes** in YAML, where a backslash is a backslash — in a double-quoted
+scalar every `\` has to be written `\\` before the regex ever sees it.
+
+The canonical case is a company with one registrable domain per country, where the
+[Public Suffix List](#same-site-is-the-registrable-domain-via-the-public-suffix-list)
+makes each ccTLD a different site — so a redirect between two of them would otherwise cost
+the throwaway you were signed into:
+
+```yaml
+groups:
+  # google.com, google.de, google.be, google.co.uk, … — ~190 domains in one line
+  - [{ regex: '^https?://([^/]+\.)?google\.[a-z]{2,3}(\.[a-z]{2})?/' }, youtube.com]
+```
+
+Two things to know before reaching for it. A regex this loose is **deliberately
+approximate** — `google.zz` is in the group whether or not Google owns it, which for a
+continuity group costs nothing and for an `open:` rule would be worth tightening. And the
+expression runs inside the blocking request handler on **every** navigation: a
+catastrophically backtracking one (nested quantifiers over a long URL) hangs the tab, and
+there is no timeout to save you, because a JavaScript regex cannot be interrupted.
+
 **First match wins**; order is significant. Put specific matches above broad ones.
 This applies **independently to each list**: the first matching `rule` decides
 routing, and the first matching `group` decides membership (see
@@ -390,6 +462,12 @@ container like any content script.
     - at: document_start
       run: "localStorage.setItem('yt-player-sticky-caption', JSON.stringify({…}));"
 ```
+
+**Not available on a `regex` rule.** A content script is registered against URL patterns
+before any navigation happens, and a regex has no pattern form. The two ways to accept one
+anyway are registering `*://*/*` — the snippet on every page you open — or on some subset
+of what the rule routes, so the config is refused instead: give the script's hosts a rule
+of their own. `cookies` are seeded per navigation and are unaffected.
 
 **Capability note:** this is arbitrary code execution in the page and needs broad
 host permissions; under MV3 it's delivered via the `userScripts` API. It is a

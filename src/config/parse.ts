@@ -1,8 +1,10 @@
 // Parse + normalize + validate the user's YAML config into the resolver's Config.
-// See docs/superpowers/specs/2026-07-10-config-parser-design.md.
+// See docs/superpowers/specs/2026-07-10-config-parser-design.md, and
+// docs/superpowers/specs/2026-08-19-match-patterns-and-regex-design.md §3 for the three
+// match forms and the two rules that fall out of them (auto-naming, scripts-on-regex).
 import { parse, YAMLParseError } from "yaml";
-import { hostMatcher, type HostMatcher } from "../matcher/matcher";
-import type { Action, Config, CookieSpec, Group, Matcher, Rule, ScriptSpec } from "../resolver/types";
+import { hostMatcher, patternMatcher, regexMatcher, type Matcher } from "../matcher/matcher";
+import type { Action, Config, CookieSpec, Group, Rule, ScriptSpec } from "../resolver/types";
 
 export class ConfigError extends Error {
   readonly path?: string;
@@ -33,34 +35,61 @@ function isMapping(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-// Turn one raw `match` entry into a Matcher. Only bare hostnames are supported;
-// match patterns and the regex object form raise a clear ConfigError.
+// Turn one raw `match` entry into a Matcher. Three forms, told apart by shape: the
+// mapping `{ regex: … }`, a string containing "://" (a match pattern — the scheme is
+// what makes a pattern a pattern), and anything else, read as a bare hostname.
 const GLOB_META = /[*?[]/;
+const PATTERN_SEP = "://";
 
-function toMatcher(entry: unknown, path: string): HostMatcher {
-  if (isMapping(entry) && "regex" in entry) {
-    throw new ConfigError(`${path}: regex matches are not supported yet (bare hostnames only for now)`, { path });
+function toMatcher(entry: unknown, path: string): Matcher {
+  if (isMapping(entry)) {
+    for (const k of Object.keys(entry)) {
+      if (k !== "regex") throw new ConfigError(`unknown key "${k}" in ${path} (a regex match is { regex: "…" })`, { path });
+    }
+    if (typeof entry.regex !== "string") {
+      throw new ConfigError(`${path}.regex must be a string`, { path: `${path}.regex` });
+    }
+    try {
+      return regexMatcher(entry.regex);
+    } catch (e) {
+      throw new ConfigError(`${path}: ${(e as Error).message}`, { path });
+    }
   }
   if (typeof entry !== "string") {
-    throw new ConfigError(`${path}: match entry must be a bare hostname string`, { path });
+    throw new ConfigError(`${path}: a match entry is a hostname, a match pattern, or { regex: "…" }`, { path });
   }
+  if (entry.includes(PATTERN_SEP)) {
+    try {
+      return patternMatcher(entry);
+    } catch (e) {
+      throw new ConfigError(`${path}: ${(e as Error).message}`, { path });
+    }
+  }
+  // A glob with no scheme is the near-miss worth naming: `*.example.com` is what
+  // somebody writes who means the match pattern, and the bare-hostname parser would
+  // otherwise reject it as if the wildcard itself were the problem.
   if (GLOB_META.test(entry)) {
-    throw new ConfigError(`${path}: "${entry}" is not a bare hostname (match patterns/regex not supported yet)`, { path });
+    throw new ConfigError(`${path}: "${entry}" is not a bare hostname — a wildcard needs the full pattern form, as in "*://*.example.com/*"`, { path });
   }
   try {
     return hostMatcher(entry);
-  } catch {
-    throw new ConfigError(`${path}: "${entry}" is not a bare hostname (match patterns/regex not supported yet)`, { path });
+  } catch (e) {
+    throw new ConfigError(`${path}: ${(e as Error).message}`, { path });
   }
 }
 
-function parseMatch(raw: unknown, path: string): { matchers: Matcher[]; firstHost: string } {
+// `firstHost` is the container name an action-less rule auto-names itself after, and it
+// is null unless the FIRST entry is a bare hostname: a pattern or a regex has no host to
+// take a name from (`*://*.example.com/*` could plausibly mean three different names,
+// and a regex none at all), so such a rule has to say `open:`.
+function parseMatch(raw: unknown, path: string): { matchers: Matcher[]; firstHost: string | null } {
   const list = Array.isArray(raw) ? raw : [raw];
   if (list.length === 0) {
     throw new ConfigError(`${path}.match must not be empty`, { path: `${path}.match` });
   }
   const matchers = list.map((e, j) => toMatcher(e, `${path}.match[${j}]`));
-  return { matchers, firstHost: matchers[0].host }; // canonical host of the first match entry
+  const first = matchers[0];
+  return { matchers, firstHost: first.kind === "host" ? first.host : null };
 }
 
 function parseOpen(raw: Record<string, unknown>, path: string): Action {
@@ -196,6 +225,9 @@ function parseRule(raw: unknown, i: number): Rule {
 
   let action: Action;
   if (present.length === 0) {
+    if (firstHost === null) {
+      throw new ConfigError(`${path} has no action and its first match is not a bare hostname, so there is no host to name a container after; add "open:"`, { path });
+    }
     action = { kind: "open", containers: [firstHost] }; // auto-name after the first host
   } else {
     switch (present[0]) {
@@ -243,6 +275,14 @@ function parseRule(raw: unknown, i: number): Rule {
     if (action.kind === "ignore") {
       throw new ConfigError(`${path}.scripts is not allowed on an "ignore" rule`, { path: `${path}.scripts` });
     }
+    // A content script is registered against URL patterns, before any navigation, and a
+    // regex has no pattern form (`matcher.matcherToPatterns`). Refused here, where the
+    // user is looking at the rule: the alternatives are registering `*://*/*` — their
+    // snippet on every page they open — or dropping the regex and injecting on a subset
+    // of what the rule routes, which is a silent wrong answer.
+    if (matchers.some((m) => m.kind === "regex")) {
+      throw new ConfigError(`${path}.scripts is not allowed on a rule with a regex match (a content script registers by URL pattern, which a regex has none of); give the script's hosts a rule of their own`, { path: `${path}.scripts` });
+    }
     out.scripts = parseScripts(raw.scripts, path);
   }
 
@@ -251,7 +291,7 @@ function parseRule(raw: unknown, i: number): Rule {
 
 function parseGroup(raw: unknown, i: number): Group {
   const path = `groups[${i}]`;
-  if (!Array.isArray(raw)) throw new ConfigError(`${path} must be a list of hostnames`, { path });
+  if (!Array.isArray(raw)) throw new ConfigError(`${path} must be a list of matchers`, { path });
   if (raw.length === 0) throw new ConfigError(`${path} must not be empty`, { path });
   const match = raw.map((e, j) => toMatcher(e, `${path}[${j}]`));
   return { match };
