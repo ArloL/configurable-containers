@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { parseConfig, ConfigError } from "../../src/config/parse";
-import { hostMatcher as hm } from "../../src/matcher/matcher";
+import { hostMatcher as hm, matchGroup } from "../../src/matcher/matcher";
 
 function err(yaml: string): ConfigError {
   try {
@@ -32,7 +32,20 @@ describe("parseConfig — groups", () => {
     expect(err(`groups:\n  - []\n`).path).toBe("groups[0]");
   });
 
-  it("rejects a pattern/regex entry in a group", () => {
-    expect(err(`groups:\n  - ["https://x.com/*"]\n`).message).toMatch(/not a bare hostname|bare hostnames only/);
+  // Groups use the same grammar as rules — the regex form is what makes a group of
+  // "every Google ccTLD" writable at all, since no match pattern can wildcard a TLD.
+  it("accepts a pattern and a regex entry, and matches through them", () => {
+    const c = parseConfig(`groups:\n  - [youtube.com, { regex: "^https?://([^/]+\\\\.)?google\\\\.[a-z]{2,3}(\\\\.[a-z]{2})?/" }]\n  - ["https://*.check24.de/*"]\n`);
+    expect(matchGroup("https://google.be/", c.groups)).toBe(0);
+    expect(matchGroup("https://www.google.co.uk/maps", c.groups)).toBe(0);
+    expect(matchGroup("https://youtube.com/", c.groups)).toBe(0);
+    expect(matchGroup("https://www.check24.de/", c.groups)).toBe(1);
+    expect(matchGroup("https://example.org/", c.groups)).toBeNull();
+  });
+
+  it("rejects a malformed entry, naming the group it is in", () => {
+    const e = err(`groups:\n  - [google.com]\n  - ["ftp://x.com/*"]\n`);
+    expect(e.message).toMatch(/unsupported scheme "ftp"/);
+    expect(e.path).toBe("groups[1][0]");
   });
 });

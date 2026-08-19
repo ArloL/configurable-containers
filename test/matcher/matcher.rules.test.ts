@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { hostMatcher, matchRule, matchGroup } from "../../src/matcher/matcher";
+import { hostMatcher, matchRule, matchGroup, patternMatcher, regexMatcher } from "../../src/matcher/matcher";
 import type { Rule, Group } from "../../src/resolver/types";
 
 // Rules carry canonical HostMatchers in their `match` arrays (as the config parser
@@ -38,5 +38,32 @@ describe("matchGroup — first-match index", () => {
 
   it("returns null when no group matches", () => {
     expect(matchGroup("https://example.org/", groups)).toBeNull();
+  });
+});
+
+// The three grammars in one list, which is how a real config mixes them: a narrow
+// path-scoped pattern above the site's own rule. First-match-wins has to be decided by
+// POSITION and not by grammar — a pattern that does not match must fall through to the
+// host rule under it, or path-scoped routing would swallow the whole site.
+describe("matchRule — the three grammars in one list", () => {
+  const mixed: Rule[] = [
+    { match: [patternMatcher("https://app.example.com/work/*")], action: open("Work") },
+    { match: [hostMatcher("app.example.com")], action: open("Personal") },
+    { match: [regexMatcher("^https?://([^/]+\\.)?google\\.[a-z]{2,3}(\\.[a-z]{2})?/")], action: open("Google") },
+  ];
+
+  it("takes the first rule that matches, whatever grammar it is written in", () => {
+    expect(matchRule("https://app.example.com/work/x", mixed)).toBe(mixed[0]);
+    expect(matchRule("https://app.example.com/personal", mixed)).toBe(mixed[1]); // pattern fell through
+    expect(matchRule("https://www.google.be/search?q=x", mixed)).toBe(mixed[2]);
+    expect(matchRule("https://example.org/", mixed)).toBeNull();
+  });
+
+  it("matches a group written as a regex — the whole point of the escape hatch", () => {
+    const g: Group[] = [{ match: [regexMatcher("^https?://([^/]+\\.)?google\\.[a-z]{2,3}(\\.[a-z]{2})?/"), hostMatcher("youtube.com")] }];
+    expect(matchGroup("https://google.de/", g)).toBe(0);
+    expect(matchGroup("https://google.co.uk/maps", g)).toBe(0);
+    expect(matchGroup("https://youtube.com/watch", g)).toBe(0); // still an any-of with hosts
+    expect(matchGroup("https://google.evil.tld/", g)).toBeNull();
   });
 });

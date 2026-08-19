@@ -12,6 +12,23 @@ way* is in its own comment; the source is densely commented. This file carries o
 - **Routing answers go in `src/resolver/` (pure `resolve`) or `src/matcher/`; effects go in
   `src/engine/engine.ts`**, which is not a passthrough — it owns the `reopenedNav` guard,
   the non-GET declination, the MAC handshake and the `handled` dedupe.
+- **The three match grammars are one `Matcher` union in `src/matcher/matcher.ts`, and
+  the regex arm is the one that cannot be turned back into a URL pattern.**
+  `matcherToPatterns` is what the script-injector registers content scripts with, so it
+  has to cover *exactly* what `matches()` answers true for — hence a host expanding to
+  two patterns, a pattern being handed over in its canonical form, and a regex
+  **throwing**. Do not make that throw return `*://*/*` to "fix" a crash: that is the
+  user's snippet injected into every page they open. `config/parse` is what keeps it
+  unreachable, by refusing `scripts` on a rule whose match list holds a regex — the only
+  overlay affected, because `cookies` are seeded per navigation and need no pattern.
+  Two more things a reasonable-looking edit gets wrong: in a **pattern** a bare host is
+  only that host (`https://example.com/*` is not `www.example.com` — `*.` is what asks
+  for the subtree, and widening it would silently widen every path-scoped rule), and a
+  pattern's path glob is escaped and anchored at both ends, so `/work` is not answered by
+  `/workshop` nor `/a.b` by `/axb`. A regex is compiled at parse time (a throw inside the
+  blocking handler is a navigation that never completes) and gets **no** backtracking
+  guard, because a JavaScript regex cannot be interrupted — `TESTING.md` L2 says why that
+  is a documented risk rather than a missing feature.
 - **`BrowserPort` is the browser seam for the engine and its siblings only** (`port.ts` is
   types, `browser-port.ts` the implementation). `src/extension/{config,config-sync,options,choice}.ts`
   touch `browser.*` directly by design, and `port.ts`'s header now says so.

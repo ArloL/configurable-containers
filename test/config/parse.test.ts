@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { parseConfig, ConfigError } from "../../src/config/parse";
-import { hostMatcher as hm } from "../../src/matcher/matcher";
+import { hostMatcher as hm, matchRule } from "../../src/matcher/matcher";
 
 describe("parseConfig — rule forms", () => {
   it("auto-names a bare single-host rule", () => {
@@ -107,16 +107,67 @@ describe("parseConfig — rule validation", () => {
     expect(err(`rules:\n  - open: X\n`).message).toMatch(/missing "match"/);
   });
 
-  it("rejects a match pattern / regex (bare hosts only)", () => {
-    expect(err(`rules:\n  - match: "https://app.example.com/x/*"\n`).message).toMatch(/not a bare hostname|bare hostnames only/);
-    expect(err(`rules:\n  - match:\n      regex: "^https://x/"\n`).message).toMatch(/regex/);
+  // The other two grammars, told apart by shape: "://" makes a string a match pattern,
+  // a mapping makes it a regex. Both reach the resolver as opaque matchers, so what is
+  // pinned here is that the parser BUILT one — a rule that silently dropped its matcher
+  // would parse just as quietly.
+  it("accepts a match pattern and a regex, and matches through them", () => {
+    const c = parseConfig(`rules:\n  - match: "https://app.example.com/work/*"\n    open: Work\n  - match: { regex: "^https?://([^/]+\\\\.)?google\\\\.[a-z]{2,3}/" }\n    open: Google\n`);
+    expect(matchRule("https://app.example.com/work/x", c.rules)).toBe(c.rules[0]);
+    expect(matchRule("https://app.example.com/elsewhere", c.rules)).toBeNull();
+    expect(matchRule("https://www.google.be/", c.rules)).toBe(c.rules[1]);
   });
 
-  it("rejects a bare glob match entry (no scheme/slash)", () => {
+  it("rejects a malformed pattern and an uncompilable regex, with the yaml path", () => {
+    const p = err(`rules:\n  - match: "ftp://x.com/*"\n    open: X\n`);
+    expect(p.message).toMatch(/unsupported scheme "ftp"/);
+    expect(p.path).toBe("rules[0].match[0]");
+    const r = err(`rules:\n  - match: { regex: "(" }\n    open: X\n`);
+    expect(r.message).toMatch(/not a valid regular expression/);
+    expect(r.path).toBe("rules[0].match[0]");
+    expect(err(`rules:\n  - match: { rgex: "x" }\n    open: X\n`).message).toMatch(/unknown key "rgex"/);
+    expect(err(`rules:\n  - match: { regex: 7 }\n    open: X\n`).message).toMatch(/regex must be a string/);
+    expect(err(`rules:\n  - match: [7]\n    open: X\n`).message).toMatch(/hostname, a match pattern, or/);
+  });
+
+  // Auto-naming reads the first match entry as a hostname; a pattern or regex has none,
+  // so the rule has to say where it opens. Refused rather than guessed: `*://*.x.com/a`
+  // has three defensible names and a regex has no name at all.
+  it("rejects an action-less rule whose first match has no hostname", () => {
+    const e = err(`rules:\n  - match: "https://app.example.com/work/*"\n`);
+    expect(e.message).toMatch(/no host to name a container after/);
+    expect(e.path).toBe("rules[0]");
+    expect(err(`rules:\n  - match: { regex: "^https://x/" }\n`).message).toMatch(/no host to name a container after/);
+    // A bare host FIRST still auto-names, whatever follows it.
+    const ok = parseConfig(`rules:\n  - match: [x.com, "https://y.com/*"]\n`);
+    expect(ok.rules[0].action).toEqual({ kind: "open", containers: ["x.com"] });
+  });
+
+  // A content script is registered by URL pattern before any navigation happens, and a
+  // regex has no pattern form. The alternatives are injecting on `*://*/*` — the
+  // snippet on every page the user opens — or on a subset of what the rule routes, so
+  // the config is refused instead. `cookies` are seeded per navigation and need none of
+  // this, which is why only `scripts` is affected.
+  it("rejects scripts on a regex rule, and allows cookies on one", () => {
+    const e = err(`rules:\n  - match: { regex: "^https://x/" }\n    open: X\n    scripts:\n      - { run: "1" }\n`);
+    expect(e.message).toMatch(/regex match/);
+    expect(e.path).toBe("rules[0].scripts");
+    const c = parseConfig(`rules:\n  - match: { regex: "^https://x/" }\n    open: X\n    cookies:\n      - { name: a, url: "https://x/" }\n`);
+    expect(c.rules[0].cookies).toHaveLength(1);
+    // A pattern HAS a pattern form, so scripts on one are fine.
+    const q = parseConfig(`rules:\n  - match: "https://x.com/a/*"\n    open: X\n    scripts:\n      - { run: "1" }\n`);
+    expect(q.rules[0].scripts).toHaveLength(1);
+  });
+
+  // A wildcard with no scheme is the near-miss worth naming: it is what somebody writes
+  // who means the match pattern, and it is not one — Firefox's grammar has no pattern
+  // without a scheme either.
+  it("rejects a bare glob match entry, pointing at the pattern form", () => {
     for (const host of ["*.example.com", "ex?mple.com", "[abc].com"]) {
       const e = err(`rules:\n  - match: "${host}"\n`);
       expect(e).toBeInstanceOf(ConfigError);
-      expect(e.message).toMatch(/not a bare hostname|bare hostnames only/);
+      expect(e.message).toMatch(/not a bare hostname/);
+      expect(e.message).toMatch(/\*:\/\/\*\.example\.com\/\*/); // names the form that would work
     }
   });
 

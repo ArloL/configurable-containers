@@ -162,7 +162,7 @@ describe("packageExtension", () => {
     try {
       await expect(
         packageExtension({ version: "2607.0.103", seedPath: badSeed, outDir }),
-      ).rejects.toThrow(/bare hostname/);
+      ).rejects.toThrow(/rules\[0\]\.match\[0\]: a match entry is/); // names the entry, not just "invalid"
     } finally {
       rmSync(outDir, { recursive: true, force: true });
     }

@@ -122,3 +122,15 @@ describe("scriptRegistrations", () => {
     expect(scriptRegistrations(c)).toEqual([]);
   });
 });
+
+// A path-scoped rule registers its script on that path only. This is the one overlay
+// where the matcher's answer has to survive being restated in Firefox's grammar, so the
+// registration must carry the pattern itself and not the site around it.
+describe("scriptRegistrations — a path-scoped pattern rule", () => {
+  it("registers the pattern verbatim, not the whole host", () => {
+    const c = parseConfig(`rules:\n  - match: "https://app.example.com/work/*"\n    open: Work\n    scripts:\n      - { run: "work();" }\n`);
+    expect(scriptRegistrations(c)).toEqual([
+      { matches: ["https://app.example.com/work/*"], code: "work();", runAt: "document_start" },
+    ]);
+  });
+});
