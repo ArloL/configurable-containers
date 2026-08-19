@@ -1,7 +1,7 @@
 # Scripts Overlay — Design
 
 **Date:** 2026-07-27
-**Status:** Approved, pending implementation plan
+**Status:** Implemented
 **Topic:** Inject a rule's configured `scripts` snippets at `document_start` so they
 run *before* the page's own scripts (F12) — the sibling of the `cookies` overlay. Full
 parity with the Temporary Containers `scripts` carry-over. Proven pure/at L3 (mock

@@ -1,7 +1,7 @@
 # L4 — Real Firefox Adapter — Design
 
 **Date:** 2026-07-27
-**Status:** Approved, pending implementation plan
+**Status:** Implemented
 **Topic:** The first real execution of the L3 engine in Firefox: a real
 `BrowserPort` over `browser.*`, packaged as an MV2 extension, proven with a
 Selenium/geckodriver L4 test that a matching host is reopened into its named

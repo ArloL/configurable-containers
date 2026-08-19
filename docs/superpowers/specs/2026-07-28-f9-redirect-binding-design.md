@@ -1,7 +1,7 @@
 # Redirect Binding Across a Container Switch (F9) — Design
 
 **Date:** 2026-07-28
-**Status:** Approved, pending implementation plan
+**Status:** Implemented
 **Topic:** Close the last open failure class in TESTING.md's coverage matrix. A GET
 redirect carrying a `code` parameter must survive a reopen intact; a POST-binding
 navigation that would change container must **not** be reopened — because reopening it

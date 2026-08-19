@@ -178,6 +178,13 @@ anchored at both ends: a pattern for `/work` is not answered by `/workshop`. It 
 against the path **and query** — `https://example.com/s?q=cats*` works — but never the
 fragment, which is not sent to the server and is not what a navigation is routed on.
 
+**A path-scoped rule is decided per navigation, and an in-app route change is not one.**
+Routing happens on a top-level navigation, so a single-page app that rewrites its own path
+client-side (`/work` → `/personal` with no request) is never re-decided: the tab stays in
+the container the navigation it *did* make resolved to. Scope a rule by path when the paths
+are separate page loads; a rule that has to follow an SPA's own routing cannot be written
+here at all.
+
 ### Regex
 
 The escape hatch, for the sets neither other form can describe. It is matched against the
@@ -549,10 +556,11 @@ and uploads it if an account is ever connected.
 - **`Temporary` is reserved by interpretation, not by validation** — `parseConfig`
   accepts it as a container name and the resolver reads it as "disposable"
   (`src/resolver/types.ts` `TEMPORARY`), so a user who means a permanent container of
-  that name gets throwaways instead, with no error. Same shape as the unenforced `tmp`
-  name prefix. (The other three validity rules once listed here are codified:
-  at-most-one action, `default` a member of its `open` list, and no `cookies` /
-  `scripts` on an `ignore` rule — `src/config/parse.ts`.)
+  that name gets throwaways instead, with no error. It is the last of its shape: the
+  `tmp<N>` collision that stood beside it *is* validated now (a container named like a
+  throwaway is refused, because the disposer would delete it), and the other three
+  validity rules are codified too — at-most-one action, `default` a member of its `open`
+  list, and no `cookies` / `scripts` on an `ignore` rule (`src/config/parse.ts`).
 
 **Groups**
 - **Symmetric group vs directional "target domains"** — groups are symmetric
@@ -563,8 +571,11 @@ and uploads it if an account is ever connected.
   All containers, or a "pinned" subset? Restriction is opt-in via `open` today.
 - **Multi-home default behavior** — whether a multi-`open` site should default to
   a choice screen or auto-open; deferred to daily use.
-- **Full-URL / path matching reach** — accepted, but path/query matching plus
-  client-side SPA path mutation is a known risk surface.
+- **Full-URL / path matching reach** — accepted, and live since match patterns shipped.
+  The SPA half of the risk is now stated where it bites, under
+  [Match pattern](#match-pattern): an in-app route change is not a navigation, so a
+  path-scoped rule never re-decides on one. What stays open is whether that ever wants
+  more than a documented limit.
 
 **Temporary Containers parity — resolved**
 - Redirector auto-close → the `redirector` rule action (a container/lifecycle

@@ -1,7 +1,7 @@
 # F10 — Temporary-Container Disposal — Design
 
 **Date:** 2026-07-27
-**Status:** Approved, pending implementation plan
+**Status:** Implemented
 **Topic:** Dispose a throwaway (`tmp…`) container when its last tab closes, after a
 keep-alive grace, plus a garbage-collect sweep for orphans — mirroring TCP's
 `cleanup.ts`. Proven at L3 (mock `browser.*` + fake clock) and confirmed once in

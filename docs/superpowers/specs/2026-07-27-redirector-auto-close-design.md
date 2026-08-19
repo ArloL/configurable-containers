@@ -1,7 +1,7 @@
 # Redirector Auto-Close — Design
 
 **Date:** 2026-07-27
-**Status:** Approved, pending implementation plan
+**Status:** Implemented
 **Topic:** Close a `redirector`-rule tab after a short delay **iff it is still stranded on
 the shim domain** — the third Temporary Containers carry-over alongside the `cookies`
 and `scripts` overlays. Proven pure/at L3 (mock `browser.*` + fake clock) and confirmed

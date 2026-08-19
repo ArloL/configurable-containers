@@ -4,6 +4,10 @@
 // match forms and the two rules that fall out of them (auto-naming, scripts-on-regex).
 import { parse, YAMLParseError } from "yaml";
 import { hostMatcher, patternMatcher, regexMatcher, type Matcher } from "../matcher/matcher";
+// The naming contract belongs to the registry, which mints the names; imported rather
+// than restated so the two halves of it cannot drift. (Types only from there at runtime
+// — no browser reaches the config parser.)
+import { isThrowawayName } from "../engine/registry";
 import type { Action, Config, CookieSpec, Group, Rule, ScriptSpec } from "../resolver/types";
 
 export class ConfigError extends Error {
@@ -92,11 +96,27 @@ function parseMatch(raw: unknown, path: string): { matchers: Matcher[]; firstHos
   return { matchers, firstHost: first.kind === "host" ? first.host : null };
 }
 
+// `tmp<N>` is the name the registry mints for a throwaway, and a name is the only thing
+// that tells one apart — so a permanent container of that name is deleted by the disposer
+// once its last tab closes, taking whatever was logged in inside it, and until then a tab
+// in it is read as "already in a throwaway". Both are silent, which is why this is an
+// error and not a warning. Only the exact shape is reserved: `tmpwork` and `tmpfiles.org`
+// (which an auto-named rule for that host produces) are ordinary names.
+function checkContainerName(name: string, path: string): void {
+  if (isThrowawayName(name)) {
+    throw new ConfigError(
+      `${path} "${name}" is the reserved name of a throwaway container (tmp + a number), which the disposer deletes once it is empty; pick another name`,
+      { path },
+    );
+  }
+}
+
 function parseOpen(raw: Record<string, unknown>, path: string): Action {
   const open = raw.open;
   let containers: string[];
   if (typeof open === "string") {
     if (open === "") throw new ConfigError(`${path}.open must not be an empty container name`, { path: `${path}.open` });
+    checkContainerName(open, `${path}.open`);
     containers = [open];
   } else if (Array.isArray(open)) {
     if (open.length === 0) throw new ConfigError(`${path}.open must not be empty`, { path: `${path}.open` });
@@ -107,6 +127,7 @@ function parseOpen(raw: Record<string, unknown>, path: string): Action {
       if (c === "") {
         throw new ConfigError(`${path}.open[${j}] must not be an empty container name`, { path: `${path}.open[${j}]` });
       }
+      checkContainerName(c, `${path}.open[${j}]`);
       return c;
     });
   } else {
@@ -228,6 +249,9 @@ function parseRule(raw: unknown, i: number): Rule {
     if (firstHost === null) {
       throw new ConfigError(`${path} has no action and its first match is not a bare hostname, so there is no host to name a container after; add "open:"`, { path });
     }
+    // The auto-named case reaches the same check: `- match: tmp1` is a legal hostname and
+    // would name its container after it.
+    checkContainerName(firstHost, `${path}.match[0]`);
     action = { kind: "open", containers: [firstHost] }; // auto-name after the first host
   } else {
     switch (present[0]) {

@@ -1,7 +1,7 @@
 # Storage-Backed Config, Built-In Editor, and a Real Install Path — Design
 
 **Date:** 2026-07-28
-**Status:** Approved, pending implementation plan
+**Status:** Implemented
 **Topic:** Move the config from a build-time constant into `browser.storage.local`, add the
 built-in text editor README promises, and set up a CalVer-tagged GitHub Actions release
 that publishes CC as a **listed** add-on on addons.mozilla.org. The first slice whose goal

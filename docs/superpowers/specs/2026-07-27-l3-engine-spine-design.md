@@ -1,7 +1,7 @@
 # L3 Engine — Minimal Spine — Design
 
 **Date:** 2026-07-27
-**Status:** Approved, pending implementation plan
+**Status:** Implemented
 **Topic:** The thin interception adapter that turns real navigations into a
 `NavContext`, calls the pure `resolve()`, and executes the returned `Decision` —
 proven at L3 (model-based, mock `browser.*` + no clock). The minimal spine only:

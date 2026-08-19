@@ -1,7 +1,7 @@
 # Cookies Overlay — Design
 
 **Date:** 2026-07-27
-**Status:** Approved, pending implementation plan
+**Status:** Implemented
 **Topic:** Seed a rule's configured cookies into a tab's own container so they exist
 before the page reads them (F12) and never cross the identity boundary (F11).
 Full parity with Temporary Containers' "Set Cookies" feature — `cookies.set` **plus**

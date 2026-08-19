@@ -1,9 +1,24 @@
 import type { BrowserPort } from "./port";
 import type { ContainerRef, Target } from "../resolver/types";
 
-// Reserved name prefix: any contextualIdentity whose name starts with this is one
-// of our throwaways. Identity is derived from the name, so it survives a restart.
+// Reserved name prefix: our throwaways are named `tmp<N>`. Identity is derived from the
+// name, so it survives a restart — the background context (and every map in it) dies on
+// every config save, and the name is the only durable record left.
 export const TMP_PREFIX = "tmp";
+
+// The reserved name in full: the prefix AND a decimal suffix, which is what
+// `createIdentity` mints. The suffix is not decoration — the prefix alone would claim
+// every container a USER named `tmpwork` or `tmpfiles.org` (an auto-named rule for that
+// host produces exactly the latter), and claiming one means two silent losses: the
+// disposer deletes it once its last tab closes, taking the logins in it, and `toRef`
+// reads a tab in it as "in a throwaway", so routing answers the continuity question
+// about a permanent container. `config/parse` refuses a config that names a container
+// of this exact shape, which is the other half of keeping the two sets apart.
+const TMP_NAME = /^tmp(\d+)$/;
+
+export function isThrowawayName(name: string): boolean {
+  return TMP_NAME.test(name);
+}
 
 // The largest N among existing `tmp<N>` container names, or 0 if there are none.
 // The suffix counter is in-memory, so a background restart would otherwise reissue
@@ -12,10 +27,9 @@ export const TMP_PREFIX = "tmp";
 export function highestTmpSuffix(names: string[]): number {
   let max = 0;
   for (const name of names) {
-    if (!name.startsWith(TMP_PREFIX)) continue;
-    const rest = name.slice(TMP_PREFIX.length);
-    if (!/^\d+$/.test(rest)) continue;
-    max = Math.max(max, Number(rest));
+    const m = TMP_NAME.exec(name);
+    if (!m) continue;
+    max = Math.max(max, Number(m[1]));
   }
   return max;
 }
@@ -41,7 +55,7 @@ export function createRegistry(port: BrowserPort, tmpSuffix: () => string): Cont
         console.warn(`[registry] container ${cookieStoreId} no longer exists; treating as default`);
         return { kind: "default" };
       }
-      if (ci.name.startsWith(TMP_PREFIX)) {
+      if (isThrowawayName(ci.name)) {
         return { kind: "temporary" };
       }
       return { kind: "permanent", name: ci.name };

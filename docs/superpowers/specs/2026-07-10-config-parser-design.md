@@ -1,7 +1,7 @@
 # Config Parser (YAML → Config) — Design
 
 **Date:** 2026-07-10
-**Status:** Approved, pending implementation plan
+**Status:** Implemented
 **Topic:** Parse + normalize + validate the user's YAML config into the resolver's `Config`.
 
 ## 1. Goal & scope

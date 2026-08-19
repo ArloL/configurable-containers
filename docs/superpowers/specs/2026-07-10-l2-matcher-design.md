@@ -1,7 +1,8 @@
 # L2 Matcher (bare-hostname) — Design
 
 **Date:** 2026-07-10
-**Status:** Approved, pending implementation plan
+**Status:** Implemented; §1's deferral of match patterns and the regex escape hatch is
+superseded by `2026-08-19-match-patterns-and-regex-design.md`
 **Topic:** The real URL→matcher predicate + first-match `matchRule`/`matchGroup`, bare-hostname grammar only.
 
 ## 1. Goal & scope

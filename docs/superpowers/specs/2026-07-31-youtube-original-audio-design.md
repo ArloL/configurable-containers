@@ -1,7 +1,7 @@
 # Always Play YouTube's Original Audio — Design
 
 **Date:** 2026-07-31
-**Status:** Approved, pending implementation plan
+**Status:** Implemented
 **Topic:** YouTube auto-selects an auto-dubbed audio track for a German-locale browser.
 Force the original track — whatever language it is — on every watch page, via the
 `scripts` overlay.

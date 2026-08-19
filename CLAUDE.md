@@ -238,9 +238,15 @@ way* is in its own comment; the source is densely commented. This file carries o
 - **Saving is a full extension restart, so every in-memory structure dies** — `handled`,
   `reopenedNav`, warned hosts, the `tmpSuffix` counter (hence `highestTmpSuffix`, or every
   save reissues `tmp1` beside a live `tmp1`). Don't add a cache expecting it to survive.
-- **`tmp` is a reserved name prefix with no enforcement.** Identity derives from the name so
-  it survives a restart — but a user rule `open: tmpwork` creates a permanent container the
-  disposer **deletes once empty**. Suspect this first when a container vanishes.
+- **A throwaway is `tmp` PLUS A NUMBER, and the digits are load-bearing** (`isThrowawayName`,
+  `src/engine/registry.ts` — the one predicate the disposer and `toRef` both ask). Identity
+  derives from the name because the name is all that survives a restart, so the shape has to
+  separate ours from the user's exactly: on the prefix alone, `open: tmpwork` — or an
+  action-less rule for a host like `tmpfiles.org`, where nobody typed a container name at
+  all — was **deleted by the disposer once empty**, with the logins in it, and read by
+  `toRef` as a throwaway until then. Two silent losses, hence a *shape*, not a prefix. The
+  other half is `config/parse` refusing a config that names a container `tmp<N>`; keep the
+  two in step, and mint only through `TMP_PREFIX + <counter>`.
 - **The disposer's grace is a STORED FACT** (`cookieStoreId -> emptySince`, remaining grace
   re-derived per sweep), because a pending `setTimeout` dies with the background context and
   every save reloads: the timer version lost each pending grace on Save and its startup sweep
