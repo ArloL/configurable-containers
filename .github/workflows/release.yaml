@@ -52,7 +52,7 @@ jobs:
           FIREFOX_BIN: ${{ steps.firefox.outputs.firefox-path }}
         run: npm test
 
-      - uses: ArloL/calver-tag-action@0e91bea86df7d9b445b6dbde498d30c273032ea0 # v2607.0.105
+      - uses: ArloL/calver-tag-action@6cc2895eee289523746b1092b0e91b6b15846c0e # v2608.0.103
         id: version
 
       # zip records mtimes, so the archive is only reproducible against a known
