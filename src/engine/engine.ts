@@ -7,17 +7,16 @@ import { supersede } from "./supersede";
 export const MAC_ID = "@testpilot-containers";
 
 export interface Engine {
-  // The F1-guarded reopen effect. Opens `url` in `target` beside `tab` — keeping `tab`
-  // when it is on a page, replacing it when it has nothing to lose — and leaves the
-  // reopened tab's whole navigation alone via `reopenedNav`. Throws (callers react).
+  // Opens `url` in `target` beside `tab`: keeps `tab` if it is on a page, replaces it if
+  // it has nothing to lose. `reopenedNav` then leaves the new tab's navigation alone (F1).
+  // Throws; callers react.
   reopen(tab: Tab, url: string, target: Target): Promise<void>;
 }
 
-// The pause seam. Narrow and SYNCHRONOUS by contract: `isPaused` is consulted inside the
-// blocking webRequest handler, where an await would sit in every navigation's latency,
-// and `record` returns void so a navigation never waits on bookkeeping. Required, not
-// optional — an optional field is one a mock forgets to set, and the coverage quietly
-// stops.
+// The pause seam, synchronous by contract: `isPaused` runs inside the blocking webRequest
+// handler, where an await would cost every navigation latency, and `record` returns void so
+// a navigation never waits on bookkeeping. Required, not optional: a mock forgets to set an
+// optional field and coverage stops silently.
 export interface PauseRecorder {
   isPaused(cookieStoreId: string): boolean;
   record(cookieStoreId: string, url: string, decision: Decision): void;
@@ -53,33 +52,27 @@ async function buildNavContext(
   registry: ContainerRegistry,
   port: BrowserPort
 ): Promise<NavContext> {
-  // A pre-commit tab ("about:blank" until its navigation commits, "" when brand new)
-  // reports no `current` even though its container is known: what the disposable path
-  // needs is the site the tab was ON, and that is genuinely unknown here. Reporting
-  // the container instead would keep a middle-clicked link in its opener's throwaway.
+  // A pre-commit tab ("about:blank", or "" when brand new) has no `current`, even though
+  // its container is known: the disposable path needs the site the tab was ON, and that is
+  // genuinely unknown here. Naming the container instead parks a middle-clicked link in its
+  // opener's throwaway.
   const current =
     tab.url && tab.url !== "about:blank"
       ? { url: tab.url, container: await registry.toRef(tab.cookieStoreId) }
       : null;
 
-  // The opener, read once for both questions below, and only while the tab is
-  // pre-commit — after that it is the stale pointer F14 is about.
+  // Read once for both questions below, and only while the tab is pre-commit: after that
+  // it is the stale pointer F14 is about.
   const opener = current === null && tab.openerTabId != null ? await port.getTab(tab.openerTabId) : null;
 
-  // Which container did this navigation come FROM? The page the tab is on, whenever it
-  // has one — that is what the user was looking at when they clicked. The opener answers
-  // this only while the tab has nothing of its own: a target=_blank / middle-clicked link
-  // is pre-commit on about:blank, and its opener is the page the click came from.
+  // Which container did this navigation come FROM? The page the tab is on, whenever it has
+  // one. The opener answers only while the tab has nothing of its own — a target=_blank or
+  // middle-clicked link, pre-commit on about:blank.
   //
-  // Asking the opener FIRST, as this did, reads a tab the user left behind. Firefox keeps
-  // `openerTabId` for the life of a tab and `supersede` carries it across every reopen, so
-  // a tab we routed still points at whatever opened it — in a different container, by
-  // definition, since that difference is why we reopened. An `inherit` host then bounces
-  // the tab to the opener's container, and because each reopen makes the tab it came from
-  // the new tab's opener, the next hop bounces it straight back: login.microsoftonline.com
-  // opening tab after tab, alternating between the two (F14). Reported against a Slack link
-  // to portal.azure.com; the same url typed into the location bar worked, because a tab the
-  // user navigated themselves has no opener.
+  // Asking the opener FIRST reads a tab the user left behind: `openerTabId` outlives the
+  // click and `supersede` carries it across every reopen, so a routed tab points at one in a
+  // different container. `inherit` sends the tab back there, the next reopen makes it the
+  // opener again, and the tab alternates between two containers forever (F14).
   let initiator: ContainerRef | null;
   if (current) {
     initiator = current.container;
@@ -87,20 +80,15 @@ async function buildNavContext(
     initiator = opener ? await registry.toRef(opener.cookieStoreId) : null;
   }
 
-  // Which PAGE did this tab's container come from? Only the disposable path asks, and
-  // only so that "open link in a new tab" answers the way clicking the same link in
-  // place does: a tab with no page of its own used to fail every same-site and
-  // same-group comparison there was, so a video opened from a YouTube search result
-  // landed in a throwaway of its own, logged out of the session it was clicked from.
+  // Which PAGE did this tab's container come from? Only the disposable path asks, so that
+  // "open link in a new tab" answers like clicking in place: without it a new tab failed
+  // every same-site and same-group comparison, so a video opened from a YouTube search
+  // result landed in its own throwaway, logged out.
   //
-  // Both conditions are load-bearing. The tab must actually be IN the opener's
-  // container — Firefox puts a link's new tab there, but `tabs.create` can name an
-  // opener in any container at all, and CC's own reopens do exactly that (the whole
-  // point of a reopen is that the two differ). And the opener must be on an http(s)
-  // page, because the disposable path reads a non-http url as "a throwaway nobody has
-  // browsed in yet" and keeps the tab in it — which for a middle-clicked link would
-  // park every one of them in its opener's throwaway, the very thing `current: null`
-  // was protecting against.
+  // Both conditions matter. The tab must really be IN the opener's container, since
+  // `tabs.create` can name an opener in any container and CC's reopens do. And the opener
+  // must be on http(s), because the disposable path reads a non-http url as "a throwaway
+  // nobody has browsed in yet" and would park every middle-clicked link in it.
   const inheritedFrom =
     opener && initiator && opener.cookieStoreId === tab.cookieStoreId && /^https?:/.test(opener.url)
       ? { url: opener.url, container: initiator }
@@ -109,10 +97,9 @@ async function buildNavContext(
   return { targetUrl: d.url, current, initiator, inheritedFrom };
 }
 
-// The two decisions the engine executes by opening a tab — and therefore the two it
-// cannot execute for a request that carries a body. Exported because the pause record
-// describes a declined action in the SAME words as the F9 notification: one function, so
-// the toast and the record cannot drift apart.
+// The two decisions the engine performs by opening a tab, and so the two it cannot perform
+// for a request with a body. Exported because the pause record describes a declined action
+// in the same words as the F9 notification: one function, so the two cannot drift.
 export type Declinable = Extract<Decision, { kind: "reopen" } | { kind: "choice" }>;
 
 // How the notification names where the tab is, and where the rules wanted it.
@@ -134,35 +121,22 @@ export function targetLabel(decision: Declinable): string {
 }
 
 // Whether a declined navigation is worth interrupting the user for. Narrows the
-// NOTIFICATION only — the decline below is unconditional, because the body would be
-// dropped either way.
+// NOTIFICATION only; the decline is unconditional, since the body would be dropped anyway.
 //
-// The toast earns its interruption by naming a container the config names, so it reads
-// as "a rule of yours did not get applied, and here is which one": *stayed in tmp9
-// instead of Haeger* says the login just landed somewhere it cannot work, and points at
-// the rule to fix. That is the SSO case, and it is the reason this notification exists.
+// A toast earns its interruption by naming a container the config names: *stayed in tmp9
+// instead of Haeger* says the login landed where it cannot work and points at the rule to
+// fix. That is the SSO case this exists for.
 //
-// A temporary target cannot say that. Its message is *stayed in tmp9 instead of a new
-// temporary container* — two throwaways, indistinguishable to the user and with nothing
-// to act on. And it is the shape the COMMON case takes: a card payment at a site with no
-// rule, where the 3-D Secure host posts back cross-site and staying put is exactly what
-// made the checkout work. Interrupting a payment to report a non-event is the one thing
-// this toast should never do.
-//
-// Silenced with it, and the one genuine loss here: *stayed in Haeger instead of a new
-// temporary container* — a POST out of a permanent container that would have been
-// isolated. That message is NOT empty; it says the body went out under a named identity
-// rather than an isolated one. It goes anyway because it still reports no unapplied rule
-// and offers nothing to do about it, which is the line this predicate draws. Reopen if a
-// case turns up where the exposure alone is worth an interruption.
-//
-// `default` sits with `temporary` rather than `permanent`: it is Firefox's no-container,
-// not something a rule opens into, so it names no rule either. It is reachable only via
-// `inherit` from a pre-commit tab with no opener — a `target=_blank` POST — which is rare
-// enough that a wrong answer here costs nothing.
+// A temporary target cannot say that. *Stayed in tmp9 instead of a new temporary container*
+// names two throwaways the user can neither tell apart nor act on — and that is the COMMON
+// case: a card payment at an unmatched site, where the 3-D Secure host posts back cross-site
+// and staying put is what makes checkout work. Silenced with it: a POST out of a permanent
+// container that would have been isolated. It still names no unapplied rule and nothing to
+// do, which is the line this draws. `default` sits with `temporary` — it is Firefox's
+// no-container, not a rule's target.
 export function namesAConfiguredContainer(decision: Declinable): boolean {
-  // A choice always lists containers straight out of the config, whatever `Temporary`
-  // sits among them.
+  // A choice always lists containers straight out of the config, `Temporary` among them
+  // or not.
   return decision.kind === "choice" || decision.into.kind === "permanent";
 }
 
@@ -170,91 +144,68 @@ export function createEngine(opts: EngineOptions): Engine {
   const { port, config, deps, onChoice, pause } = opts;
   const registry = createRegistry(port, opts.tmpSuffix ?? defaultSuffix());
   const handled = new Set<string>();
-  // Hosts already warned about a declined non-GET. Session-scoped: the
-  // runtime.reload() a config save triggers clears it, which is what we want — the
-  // rules just changed, so the user should hear about them again.
+  // Hosts already warned about a declined non-GET. Session-scoped: the runtime.reload() a
+  // config save triggers clears it, which is right — the rules changed, so warn again.
   const warnedHosts = new Set<string>();
-  // The navigation each tab we reopened is still performing: tabId -> the requestId
-  // once its first request arrives, or the url we are still waiting for until then.
-  // That whole navigation must be left alone: in a real browser onBeforeRequest fires
-  // before the new tab's url commits, so it still reads as about:blank and resolve()
-  // cannot tell it is already correctly contained — without this it would reopen
-  // forever (F1).
+  // The navigation each tab we reopened is still performing: tabId -> the requestId once
+  // its first request arrives, or the url we are waiting for until then. onBeforeRequest
+  // fires before the new tab's url commits, so the tab still reads as about:blank and
+  // resolve() cannot tell it is already correctly contained. Without this: reopens forever
+  // (F1).
   //
-  // Tracking the requestId, not just "the first request", is what makes the guard
-  // cover a REDIRECT CHAIN: every hop reuses the requestId and the tab stays
-  // pre-commit throughout, so a one-shot guard let hop 2 look like an unrouted
-  // navigation and bought it another throwaway (tmp2 -> tmp3 on a single click).
-  // Keying on the requestId also keeps the guard off tabs we did NOT route: a
-  // middle-clicked link inherits its opener's container and is pre-commit too, and
-  // it must still be isolated into a throwaway of its own.
-  //
-  // Holding the awaited URL, rather than a bare "not yet" marker, bounds the wait: a
-  // reopened tab whose own request never arrives (load aborted, user typed elsewhere
-  // first) would otherwise let the guard absorb whatever navigation came next, which
-  // leaves that site unrouted in the container we reopened INTO — an unmatched site
-  // riding in a permanent container's cookie jar. Matched by site, not exact url,
-  // because Firefox can legitimately rewrite the url before the first request (HSTS
-  // upgrades the scheme); the site is what survives that and what routing turns on.
+  // Three details, each paid for by a bug:
+  //   requestId, not "the first request" — a redirect chain reuses one requestId while the
+  //     tab stays pre-commit, so a one-shot guard read hop 2 as unrouted (tmp2 -> tmp3 on
+  //     one click). Keying on it also keeps the guard off tabs we did NOT route.
+  //   the awaited url, not a bare "not yet" — a reopened tab whose request never arrives
+  //     (load aborted, user typed elsewhere) would let the guard absorb the next navigation,
+  //     leaving that site unrouted inside the container we reopened INTO.
+  //   matched by site, not exact url — Firefox rewrites the url first on an HSTS upgrade.
   const reopenedNav = new Map<number, { awaiting: string } | { requestId: string }>();
 
   // Tabs whose pending top-level navigation is a `view-source:` load.
   //
-  // "View Page Source" fetches the document it is about to print, so it issues an
-  // ordinary main_frame GET — and webRequest reports that request under the INNER url:
-  // `view-source:https://site/` arrives here as plain `https://site/`, with the tab
-  // still pre-commit on about:blank. Nothing in the details says otherwise, so the
-  // engine used to route it like any other navigation: cancel, and reopen `https://site/`
-  // elsewhere. That drops the `view-source:` wrapper (a reopen can only issue a plain
-  // GET, exactly as it cannot carry a POST body), and because the tab Firefox just made
-  // is pre-commit, `supersede` replaces it rather than keeping it. Ctrl+U therefore
-  // destroyed its own tab and rendered the page in a throwaway instead of showing the
-  // source. Multi-Account Containers carries the same report unresolved
+  // "View Page Source" fetches the document it prints, so webRequest sees an ordinary
+  // main_frame GET under the INNER url: `view-source:https://site/` arrives as plain
+  // `https://site/`, tab still pre-commit on about:blank. Nothing says otherwise, so the
+  // engine used to route it — dropping the `view-source:` wrapper (a reopen issues a plain
+  // GET) and, the tab being pre-commit, replacing it. Ctrl+U destroyed its own tab and
+  // rendered the page in a throwaway. MAC has the same bug open
   // (mozilla/multi-account-containers#2582).
   //
   // webNavigation is the one place the wrapped url is visible, and Firefox fires
-  // onBeforeNavigate before the webRequest that navigation issues — measured in
-  // Firefox 153, for the view-source tab and for every ordinary navigation in the same
-  // session (test/e2e/view-source.test.ts pins the outcome end to end). So the mark is
-  // written there and read, without an await, inside the blocking handler.
+  // onBeforeNavigate before that navigation's webRequest (measured in FF153, for the
+  // view-source tab and every ordinary navigation beside it). So the mark is written there
+  // and read, without an await, inside the blocking handler.
   //
-  // Nothing has to expire it: every top-level navigation in a tab announces itself here
-  // first, so the next one clears the mark, and a redirect of the view-source load
-  // itself keeps it — which is what that hop needs. A tab closed while still showing
-  // source leaves its id behind; that is one integer, and NOT worth a third listener on
-  // an event `pause` and the disposer already share.
+  // Nothing expires it: the next top-level navigation in the tab overwrites it, and a
+  // redirect of the view-source load keeps it, which that hop needs. A tab closed while
+  // showing source leaks one integer — not worth a third listener on an event `pause` and
+  // the disposer already share.
   const viewSourceNav = new Set<number>();
 
   // One top-level navigation at a time per tab.
   //
   // Deciding a navigation is a read-then-act across four awaits — `getTab`, the MAC
-  // handshake, `createIdentity`, `createTab` — and Firefox can deliver a SECOND
-  // main_frame request for the same tab inside that window. Run concurrently, both
-  // requests read the same pre-commit `about:blank` tab, both resolve to "isolate this
-  // into a throwaway", and one click on "Open Link in New Tab" opens two tabs in two
-  // fresh containers (F1: reported for a YouTube search result and for links out of
-  // daringfireball.net to x.com, where a static destination on the same page never showed
-  // it). `handled` cannot catch that pair — it is keyed on the requestId, and these are
-  // two requestIds for one navigation.
+  // handshake, `createIdentity`, `createTab` — and Firefox can deliver a SECOND main_frame
+  // request for the same tab inside that window. Run concurrently, both read the same
+  // pre-commit `about:blank` tab, both decide "isolate into a throwaway", and one "Open Link
+  // in New Tab" opens two tabs in two containers (F1: seen on YouTube and on links out of
+  // daringfireball.net to x.com). `handled` cannot catch that pair — it keys on the
+  // requestId, and these are two requestIds for one navigation.
   //
-  // Serialised, the second request is decided against the state the first one LEFT:
-  // `supersede` has already replaced the pre-commit tab it belonged to, `getTab` returns
-  // null, and it falls open having done nothing. Nothing here decides anything — the
-  // ordering is the whole fix, and every existing answer is unchanged whenever a tab has
-  // only one navigation in flight, which is every ordinary case.
+  // Serialised, the second is decided after `supersede` replaced the tab it belonged to, so
+  // `getTab` returns null and it falls open. The ordering is the whole fix.
   //
-  // Per TAB, not one global queue: a queue shared across tabs would put an unrelated
-  // tab's navigation behind this one's MAC roundtrip, and that is latency in front of
-  // every navigation in the browser. Entries are dropped as each tab's queue drains, so
-  // this holds nothing for a tab that is not navigating right now.
+  // Per TAB: one global queue would put an unrelated tab's navigation behind this one's MAC
+  // roundtrip, which is latency in front of every navigation.
   const routing = new Map<number, Promise<unknown>>();
 
   async function inTurn<T>(tabId: number, work: () => Promise<T>): Promise<T> {
     const ahead = routing.get(tabId);
     const mine = ahead ? ahead.then(work) : work();
-    // What the next request waits on swallows the outcome: a request that threw is
-    // reported to ITS caller (Firefox, which fails the navigation open), and must not
-    // take the tab's next navigation down with it.
+    // What the next request waits on swallows the outcome: a throw goes to ITS caller
+    // (Firefox, which fails the navigation open) and must not take the next one down.
     const settled = mine.then(() => {}, () => {});
     routing.set(tabId, settled);
     try {
@@ -270,14 +221,13 @@ export function createEngine(opts: EngineOptions): Engine {
     else viewSourceNav.delete(d.tabId);
   });
 
-  // The F1-guarded reopen effect. Shared by the engine's own `case "reopen"` and the
-  // picker (choice screen / reopen picker). Throws on failure — callers decide whether
-  // to swallow (the engine's request-time path clears `handled` and fails open) or to
-  // surface the result (the picker reports {ok:false} to the choice page).
+  // Shared by the engine's own `case "reopen"` and the picker. Throws on failure: the
+  // engine's request path clears `handled` and fails open, the picker reports {ok:false}
+  // to the choice page.
   async function reopen(tab: Tab, url: string, target: Target): Promise<void> {
     const store = await registry.toStoreId(target);
-    // `supersede` owns the keep-or-replace rule and the window; the picker's choice tab
-    // goes through the same function, so the two cannot drift.
+    // `supersede` owns the keep-or-replace rule and the window; the picker goes through
+    // the same function, so the two cannot drift.
     await supersede(port, tab, { url, cookieStoreId: store }, (created) => {
       reopenedNav.set(created.id, { awaiting: url }); // leave its whole navigation alone (see 1b)
     });
@@ -301,12 +251,10 @@ export function createEngine(opts: EngineOptions): Engine {
     // (0) Scope: only top-level http(s) navigations.
     if (d.type !== "main_frame") return;
     if (!/^https?:/.test(d.url)) return;
-    // …and not the document fetch behind a `view-source:` load, which arrives here
-    // wearing the inner url. Sits with the scheme test because it is the same
-    // question — is this a page the user is navigating to, or something else this
-    // request is only the raw material for. Adds no state and never cancels, so it is
-    // fail-open by construction: if the mark is somehow missing, routing carries on
-    // exactly as it did before.
+    // …and not the document fetch behind a `view-source:` load, which arrives wearing the
+    // inner url. Same question as the scheme test: is the user navigating to this page, or
+    // is the request only raw material for something else. Adds no state and never cancels,
+    // so a missing mark just routes as before.
     if (viewSourceNav.has(d.tabId)) return;
 
     // (1) F1 loop guard — re-fires of a request we already acted on.
@@ -336,38 +284,33 @@ export function createEngine(opts: EngineOptions): Engine {
     // (3) Pure decision.
     const decision = resolve(nav, config, deps);
 
-    // (3a) The user armed this container: record what routing would have done, and do
-    // nothing. Three boundaries, each required by something specific:
+    // (3a) The user armed this container: record what routing would have done, do nothing.
+    // Each boundary is required by something specific:
     //
-    //   after (3)  — the record's value is the COUNTERFACTUAL. "would have been reopened
-    //                into a new temporary container" is what tells the user the rule was
-    //                needed; "no action" is what tells them it was not. resolve() is pure
-    //                and cheap, so computing a decision we then decline costs nothing.
-    //   before (3b)— a paused POST must raise no declination toast. F9 announces a
-    //                routing rule that went UNAPPLIED; under a pause nothing went
-    //                unapplied, the user turned routing off.
-    //   after (1b) — the reopenedNav guard still runs, so arming one hop after a reopen
-    //                cannot orphan its state.
+    //   after (3)   — the record's value is the COUNTERFACTUAL. "would have been reopened
+    //                 into a new temporary container" says the rule was needed; "no action"
+    //                 says it was not. resolve() is pure and cheap.
+    //   before (3b) — a paused POST must raise no declination toast. F9 announces a rule
+    //                 that went UNAPPLIED; under a pause the user turned routing off.
+    //   after (1b)  — the reopenedNav guard still runs, so arming one hop after a reopen
+    //                 cannot orphan its state.
     //
-    // Adds nothing to `handled` and never cancels, so like (3b) it is fail-open by
-    // construction: it accumulates no state a later navigation could inherit.
+    // Adds nothing to `handled` and never cancels: no state a later navigation inherits.
     if (pause.isPaused(tab.cookieStoreId)) {
       pause.record(tab.cookieStoreId, d.url, decision);
       return;
     }
 
-    // (3b) F9 — tabs.create can only issue a GET, so reopening a navigation that
-    // carries a body would drop it silently. Leave it where it is and say so. Placed
-    // before macOwns (no reason to ask MAC about a navigation we will not act on) and
-    // before handled.add (this path adds no state, so it is fail-open by construction).
-    // The reopenedNav guard has already returned for navigations that are ours.
+    // (3b) F9 — tabs.create can only issue a GET, so reopening a navigation with a body
+    // drops it silently. Leave it where it is and say so. Before macOwns (no reason to ask
+    // about a navigation we will not act on) and before handled.add (adds no state, so it
+    // fails open). reopenedNav has already returned for navigations that are ours.
     if ((decision.kind === "reopen" || decision.kind === "choice") && d.method !== "GET") {
-      // The decline is unconditional; only the toast is selective. Keeping the two
-      // apart is the point — a silent decline is still the right EFFECT, and tying the
-      // notification to it would make "say less" mean "route differently".
+      // The decline is unconditional; only the toast is selective. Tying the two together
+      // would make "say less" mean "route differently".
       if (namesAConfiguredContainer(decision)) {
-        // Floated, never awaited: a navigation must not wait on a toast, and a
-        // notification that cannot be raised must not break routing.
+        // Floated, never awaited: a navigation must not wait on a toast, and a toast that
+        // cannot be raised must not break routing.
         void announceDeclined(d, tab, decision).catch((e) => console.warn("[engine] notify failed", e));
       }
       return; // no cancel — the POST proceeds in the tab's current container

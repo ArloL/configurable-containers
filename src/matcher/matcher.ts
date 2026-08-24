@@ -10,11 +10,10 @@ import type { Rule, Group } from "../resolver/types";
 // `www.bandcamp.com`). `host` is the CANONICAL form.
 export type HostMatcher = { kind: "host"; host: string };
 
-// A WebExtension match pattern, split at construction into the three parts it matches
-// on. `pattern` is the canonical re-serialization rather than the string the user
-// wrote, because it is also what the script-injector hands Firefox (matcherToPatterns)
-// — registering `*://*.BandCamp.COM/*` while matching `bandcamp.com` here is exactly the
-// drift this type exists to prevent.
+// A WebExtension match pattern, split at construction into the three parts it matches on.
+// `pattern` is the canonical re-serialization, not what the user wrote, because it is also
+// what the script-injector hands Firefox (matcherToPatterns): registering
+// `*://*.BandCamp.COM/*` while matching `bandcamp.com` here is the drift this prevents.
 export type PatternMatcher = {
   kind: "pattern";
   pattern: string;
@@ -25,42 +24,37 @@ export type PatternMatcher = {
 };
 
 // The escape hatch, matched against the whole URL. `source` is kept for the config
-// round-trip; `re` is compiled once, at parse time, so a broken regex is a config error
-// and not a per-navigation throw.
+// round-trip; `re` is compiled once at parse time, so a broken regex is a config error
+// rather than a per-navigation throw.
 export type RegexMatcher = { kind: "regex"; source: string; re: RegExp };
 
 export type Matcher = HostMatcher | PatternMatcher | RegexMatcher;
 
-// Canonicalize a hostname string: lowercase + punycode + drop a trailing dot, via
-// the URL parser. Throws if the input is not a bare hostname (has a scheme, path,
-// port, whitespace, or is empty).
+// Canonicalize a hostname: lowercase + punycode + no trailing dot, via the URL parser.
+// Throws if the input is not a bare hostname (scheme, path, port, whitespace, or empty).
 function canonicalHost(hostish: string): string {
-  // Reject the characters that would let the parser read the input as something other
-  // than a bare hostname (scheme, path, port, userinfo, whitespace) before it gets the
-  // chance. The empty string is left to the parser rather than checked here: "http:///"
-  // does not parse, so it lands on the same throw one line later, and a check that only
-  // ever repeats an answer the next line gives is one no test can tell from its absence.
+  // Reject the characters that would let the parser read this as something other than a
+  // bare hostname before it gets the chance. The empty string is left to the parser:
+  // "http:///" does not parse, so it throws one line later anyway, and a check that only
+  // repeats the next line's answer is one no test can tell from its absence.
   if (/[\s/\\?#@:]/.test(hostish)) {
     throw new Error(`not a bare hostname: ${JSON.stringify(hostish)}`);
   }
   let u: URL;
   try {
     // Stryker disable next-line StringLiteral: the trailing "/" spells out the empty path
-    // this is asking the parser about; with no "/" the input is a bare authority and every
-    // hostname parses to the same thing, because the class above rejected every character
-    // that could have started a path.
+    // being asked about; without it the input is a bare authority and every hostname parses
+    // the same, since the class above rejected anything that could start a path.
     u = new URL("http://" + hostish + "/");
   } catch {
     throw new Error(`not a bare hostname: ${JSON.stringify(hostish)}`);
   }
-  // Reject anything the parser reinterpreted (userinfo, port, non-empty path is
-  // impossible here since we appended "/"; hostname must equal the whole input).
+  // Reject anything the parser reinterpreted.
   // Stryker disable all: unreachable from any input that gets this far — a port needs ":"
-  // and userinfo needs "@", both rejected above, and an http url with no host does not
-  // parse at all. It is the second line of defence for the character class above, and it
-  // earns its place there: drop ":" from that class and this is what still throws.
-  /* v8 ignore next 3 -- unreachable, as the note above says; named for the coverage
-     gate the same way the Stryker note names it for the mutation one. */
+  // and userinfo "@", both rejected above, and an http url with no host does not parse. It
+  // is the second line of defence: drop ":" from that class and this is what still throws.
+  /* v8 ignore next 3 -- unreachable, as above; named for the coverage gate the way the
+     Stryker note names it for the mutation one. */
   if (u.hostname === "" || u.port !== "") {
     throw new Error(`not a bare hostname: ${JSON.stringify(hostish)}`);
   }
@@ -72,10 +66,9 @@ function stripTrailingDot(h: string): string {
   return h.endsWith(".") ? h.slice(0, -1) : h;
 }
 
-// The parsed form of an http(s) URL, or null if it is not one (never throws). Every
-// grammar below answers `false` for anything this rejects: a matcher's whole job is to
-// route a top-level http(s) navigation, and `about:`/`file:`/`moz-extension:` are the
-// engine's business, not a rule's.
+// The parsed form of an http(s) URL, or null if it is not one (never throws). Every grammar
+// below answers `false` for what this rejects: a matcher routes top-level http(s)
+// navigations, and `about:`/`file:`/`moz-extension:` are the engine's business.
 function httpUrl(url: string): URL | null {
   let u: URL;
   try {
@@ -84,9 +77,9 @@ function httpUrl(url: string): URL | null {
     return null;
   }
   if (u.protocol !== "http:" && u.protocol !== "https:") return null;
-  // Stryker disable next-line all: unreachable — an http(s) url with no host does not
-  // parse ("http:///" throws), so this cannot fire for anything the line above let past.
-  // Kept because the null-return contract is this function's, not the URL parser's.
+  // Stryker disable next-line all: unreachable — an http(s) url with no host does not parse
+  // ("http:///" throws). Kept because the null-return contract is this function's, not the
+  // URL parser's.
   /* v8 ignore next -- unreachable, as the note above says. */
   if (u.hostname === "") return null;
   return u;
@@ -100,18 +93,15 @@ function badPattern(pattern: string, why: string): Error {
   return new Error(`not a valid match pattern (${why}): ${JSON.stringify(pattern)}`);
 }
 
-// Parse `<scheme>://<host><path>`, the WebExtension match-pattern grammar, keeping only
-// the parts of it this extension can act on. Two deliberate narrowings, both loud rather
-// than silently inert:
+// Parse `<scheme>://<host><path>`, the WebExtension match-pattern grammar, keeping only the
+// parts this extension can act on. Two narrowings, both loud rather than silently inert:
 //
-//   - **Schemes are http, https or `*`.** Firefox's grammar also has `ws`, `wss`,
-//     `file`, `ftp` and `data`; a rule naming one could never fire, because routing only
-//     ever sees a top-level http(s) navigation. `*` therefore means http+https here,
-//     which is what it means in Firefox for a content script too.
-//   - **The host wildcard is a leading `*.` or a bare `*`, nothing else.** `*.foo.*` and
-//     `*foo.com` are not patterns Firefox accepts either, and reading them leniently is
-//     how `*.google.*` would look like it covers every Google ccTLD while quietly
-//     matching nothing. That case is what the regex form is for.
+//   - Schemes are http, https or `*`. Firefox also has `ws`, `wss`, `file`, `ftp`, `data`,
+//     but a rule naming one could never fire — routing only sees http(s) navigations. So
+//     `*` means http+https, as it does for a Firefox content script.
+//   - The host wildcard is a leading `*.` or a bare `*`, nothing else. Firefox rejects
+//     `*.foo.*` and `*foo.com` too, and reading them leniently is how `*.google.*` would
+//     look like it covers every Google ccTLD while matching nothing. Use a regex for that.
 export function patternMatcher(pattern: string): PatternMatcher {
   const sep = pattern.indexOf("://");
   if (sep === -1) {
@@ -129,9 +119,7 @@ export function patternMatcher(pattern: string): PatternMatcher {
   const hostish = rest.slice(0, slash);
   const glob = rest.slice(slash);
 
-  // The bare "*" is the any-host wildcard; "*.foo.com" is foo.com and everything under
-  // it. Both are computed for either shape, so neither carries a value that is only
-  // meaningful in the other's branch.
+  // The bare "*" is the any-host wildcard; "*.foo.com" is foo.com and everything under it.
   const subdomains = hostish.startsWith("*.");
   let host: string | null;
   if (hostish === "*") {
@@ -159,10 +147,9 @@ export function patternMatcher(pattern: string): PatternMatcher {
   };
 }
 
-// A match pattern's path is a glob whose only metacharacter is `*` — any run of any
-// characters, `/` included. Everything else is literal, hence the escape before the
-// wildcards go back in: without it `/a.b` would also match `/axb`, and a rule meant for
-// one path would route a whole family of them.
+// A match pattern's path is a glob whose only metacharacter is `*` (any run of any
+// characters, `/` included). Everything else is literal, hence the escape before the
+// wildcards go back in: without it `/a.b` would match `/axb` too.
 function globToRegExp(glob: string): RegExp {
   const body = glob.split("*").map(escapeRegExp).join("[\\s\\S]*");
   return new RegExp(`^${body}$`);
@@ -172,11 +159,10 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-// The regex escape hatch. Compiled here so an unparseable regex is rejected while the
-// config is being read — inside the blocking request handler there is nobody left to
-// tell. No flags: the URL it is tested against is already canonical (lowercase scheme
-// and host), and a case-insensitive PATH is a different question the user can ask for
-// themselves with `[Aa]`.
+// The regex escape hatch. Compiled here so a broken regex is rejected while the config is
+// read — inside the blocking handler there is nobody left to tell. No flags: the URL is
+// already canonical (lowercase scheme and host), and a case-insensitive PATH is a different
+// question, which the user can ask for with `[Aa]`.
 export function regexMatcher(source: string): RegexMatcher {
   if (source === "") throw new Error("not a valid regular expression: empty");
   let re: RegExp;
@@ -199,23 +185,21 @@ export function matches(m: Matcher, url: string): boolean {
       return (
         (m.scheme === "*" || u.protocol === m.scheme + ":") &&
         (m.host === null || h === m.host || (m.subdomains && h.endsWith("." + m.host))) &&
-        // Path and query, never the fragment: a fragment is not sent to the server and
-        // is not what a navigation is routed on. `search` is included because the config
-        // promises query matching, and it costs nothing for the ordinary trailing-`*`
-        // pattern, which covers a query either way.
+        // Path and query, never the fragment: a fragment never reaches the server. Query
+        // is included because the config promises query matching, and it costs nothing for
+        // the ordinary trailing-`*` pattern, which covers one either way.
         m.path.test(u.pathname + u.search)
       );
     case "regex":
-      // The canonical href, not the string handed in: `https://x.com` and
-      // `https://X.com/` are one URL, and an anchored `^https://x\.com/` has to hold for
-      // both. Firefox normalizes before webRequest sees it; a hand-built L1 config or a
-      // test does not.
+      // The canonical href, not the string handed in: `https://x.com` and `https://X.com/`
+      // are one URL, and an anchored `^https://x\.com/` must hold for both. Firefox
+      // normalizes before webRequest sees it; a hand-built L1 config does not.
       return m.re.test(u.href);
   }
 }
 
-// A rule/group matches if ANY of its matcher entries hits. The resolver stores
-// matchers as an opaque `unknown[]`; here they are concrete `Matcher`s.
+// A rule/group matches if ANY of its entries hits. The resolver stores matchers as an
+// opaque `unknown[]`; here they are concrete `Matcher`s.
 function anyMatch(entries: unknown[], url: string): boolean {
   return entries.some((e) => matches(e as Matcher, url));
 }
@@ -229,15 +213,14 @@ export function matchGroup(url: string, groups: Group[]): number | null {
   return i === -1 ? null : i;
 }
 
-// The WebExtension match patterns that cover a matcher's matches() semantics for
-// http(s). A HostMatcher { host } matches the bare host OR any subdomain, so it expands
-// to two patterns; a PatternMatcher is already one. Used by the script-injector to
-// register content scripts against URL patterns (not per-URL).
+// The match patterns covering a matcher's matches() semantics for http(s), for the
+// script-injector, which registers against patterns rather than urls. A HostMatcher covers
+// the bare host OR any subdomain, so it expands to two; a PatternMatcher is already one.
 //
-// A RegexMatcher has no pattern form — no finite set of match patterns describes an
-// arbitrary regex — so this throws rather than inventing a wider one: `*://*/*` would
-// inject the user's snippet into every page they open. `config/parse` is what keeps it
-// unreachable, by refusing `scripts` on a rule whose match list contains a regex.
+// A RegexMatcher has no pattern form — no finite set of patterns describes an arbitrary
+// regex — so this throws rather than inventing a wider one: `*://*/*` would inject the
+// user's snippet into every page they open. `config/parse` keeps it unreachable by refusing
+// `scripts` on a rule whose match list contains a regex.
 export function matcherToPatterns(m: Matcher): string[] {
   switch (m.kind) {
     case "host":

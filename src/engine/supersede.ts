@@ -1,32 +1,31 @@
 import type { BrowserPort, Tab } from "./port";
 
 export interface SupersedeProps {
-  // Omit to open the browser's own new-tab page (Firefox rejects an explicit
-  // "about:newtab" — see CreateTabProps.url).
+  // Omit for the browser's own new-tab page (Firefox rejects an explicit "about:newtab" —
+  // see CreateTabProps.url).
   url?: string;
   cookieStoreId: string;
 }
 
 // Open a tab that takes over from `source`, in the window `source` is actually in.
 //
-// Does the source tab hold something worth keeping? Session history does not span
-// containers, so replacing a tab that is ON a page destroys what the user was reading
-// with no way back — clicking a link out of an article would close the article. So that
-// tab is kept (its navigation is cancelled by the caller) and the new tab opens right
-// after it, as MAC does (assignManager.js:275, `removeTab`).
+// A source tab that is ON a page is KEPT (the caller cancels its navigation) and the new
+// tab opens right after it, as MAC does (assignManager.js, `removeTab`): session history
+// does not span containers, so replacing it would destroy what the user was reading with no
+// way back.
 //
-// A tab with nothing to lose is still replaced: a new-tab page, the choice page, or a
-// tab still pre-commit on about:blank — which is what a middle-clicked or target=_blank
-// link is. Replacing those is required, not just harmless: keeping them would strand an
-// empty tab next to every link opened in a new tab.
+// A tab with nothing to lose — a new-tab page, the choice page, a tab pre-commit on
+// about:blank, which is what a middle-clicked or target=_blank link is — is replaced. That
+// is required, not merely harmless: keeping them strands an empty tab beside every link
+// opened in a new tab.
 //
-// `windowId` is passed for the same reason `index` is: a window.open popup is pre-commit,
-// so it takes the replace branch, and without its window the replacement lands in the
-// last focused normal window — closing the popup. It also stops any reopen in an
-// unfocused window from teleporting to the focused one.
+// `windowId` matters for the same reason `index` does: a window.open popup is pre-commit,
+// so it takes the replace branch, and without its window the replacement lands in the last
+// focused normal window and the popup closes. It also stops a reopen in an unfocused window
+// from teleporting to the focused one.
 //
-// `onCreated` runs between the create and the removal so a caller can register guard
-// state (the engine's `reopenedNav`) before the old tab goes away.
+// `onCreated` runs between the create and the removal, so a caller can register guard state
+// (the engine's `reopenedNav`) before the old tab goes away.
 export async function supersede(
   port: BrowserPort,
   source: Tab,

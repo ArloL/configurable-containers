@@ -1,9 +1,9 @@
 import type { Config, ContainerRef, Decision, Deps, NavContext } from "./types";
 import { TEMPORARY } from "./types";
 
-// Do two container references denote the same container? Temporary throwaways carry
-// no identity in L1, so any two temporaries compare equal — the common inherit case
-// is a same-tab hop where `current` already IS the initiator's throwaway.
+// Do two references denote the same container? Throwaways carry no identity in L1, so any
+// two temporaries compare equal — the common inherit case is a same-tab hop where `current`
+// already IS the initiator's throwaway.
 function alreadyThere(current: ContainerRef | null, desired: ContainerRef): boolean {
   if (desired.kind === "permanent") {
     return current?.kind === "permanent" && current.name === desired.name;
@@ -16,25 +16,23 @@ function toward(current: ContainerRef | null, desired: ContainerRef): Decision {
   return alreadyThere(current, desired) ? { kind: "stay" } : { kind: "reopen", into: desired };
 }
 
-// Disposable path (spec §4 step 7): keep the current throwaway iff it exists and the
-// nav stays within the same registrable domain or the same group; else fresh temp.
+// Disposable path (spec §4 step 7): keep the current throwaway if the navigation stays
+// within the same registrable domain or group; otherwise a fresh one.
 function disposablePath(nav: NavContext, config: Config, deps: Deps): Decision {
-  // Which throwaway session, if any, does this navigation belong to? The page the tab is
-  // on — or, for a tab the browser opened FOR a link and put in the clicked page's
-  // container, that page. Both name a container the tab is ALREADY in, which is what
-  // makes "stay" a decision the engine performs by doing nothing.
+  // Which throwaway session does this navigation belong to? The page the tab is on — or,
+  // for a tab the browser opened FOR a link, the page that link was on. Both name a
+  // container the tab is ALREADY in, which is what makes "stay" a decision performed by
+  // doing nothing.
   //
-  // Without the second half, "open link in a new tab" answered differently from clicking
-  // the same link in place: the new tab has no page of its own, so every one of them —
-  // including a link to the site the click came from — bought a throwaway of its own and
-  // opened logged out. Reported for a YouTube search result opening a video.
+  // Without the second half, "open link in a new tab" answered differently from clicking in
+  // place: a new tab has no page of its own, so every one of them, even a link back to the
+  // site it came from, bought a throwaway and opened logged out.
   const current = nav.current ?? nav.inheritedFrom;
   if (current && current.container.kind === "temporary") {
-    // A throwaway the user has not browsed in yet — auto-temp puts every new tab in
-    // one, sitting on about:newtab / about:home. Its first navigation belongs here:
-    // there is no earlier site to isolate it from, and the comparisons below have
-    // nothing meaningful to compare against (no registrable domain, no group), so
-    // they would strand the tab in a second, pointless temporary.
+    // A throwaway nobody has browsed in yet — auto-temp puts every new tab in one, on
+    // about:newtab / about:home. Its first navigation belongs here: there is no earlier
+    // site to isolate it from, and the comparisons below have nothing to compare against,
+    // so they would strand the tab in a second, pointless throwaway.
     if (!/^https?:/.test(current.url)) return { kind: "stay" };
 
     const sameSite = deps.sameSite(current.url, nav.targetUrl);

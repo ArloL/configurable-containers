@@ -4,8 +4,8 @@ import type { ContainerRow, PauseStatusResponse, PauseToggleMessage, PauseToggle
 import type { BrowserPort, Clock } from "./port";
 
 // storage.local key holding the armed set and the recordings. The background is its ONLY
-// writer: the options page reads through a message instead, because a host row landing
-// mid-render would otherwise race a toggle and one of the two writes would be lost.
+// writer; the options page reads through a message instead, since a host row landing
+// mid-render would race a toggle and lose one of the two writes.
 export const PAUSE_STORAGE_KEY = "pauseState";
 
 // Hosts only, so the storage cost is bytes; the cap exists to keep the list readable.
@@ -20,10 +20,9 @@ export interface RecordedHost {
 export interface Recording {
   id: string;
   cookieStoreId: string;
-  // The container's display name AT ARM TIME. The dominant case is a throwaway, which
-  // the disposer deletes minutes after the flow ends — by the time the user reads the
-  // recording getIdentity() returns null, and a recording that cannot say which
-  // container it came from is much harder to interpret.
+  // The display name AT ARM TIME. Usually a throwaway, which the disposer deletes minutes
+  // after the flow ends, so by the time the user reads the recording getIdentity() returns
+  // null — and a recording that cannot name its container is hard to read.
   container: string;
   startedAt: number;
   endedAt: number | null; // null while running
@@ -38,30 +37,27 @@ export interface PauseState {
 export type ArmResult = { ok: true; container: string } | { ok: false; reason: string };
 
 export interface Pause {
-  // Consulted inside the blocking onBeforeRequest handler, so it is synchronous and
-  // reads no storage: an await here would sit in the latency of every navigation in the
-  // browser, armed or not.
+  // Called inside the blocking onBeforeRequest handler, so synchronous and storage-free:
+  // an await here is latency on every navigation in the browser, armed or not.
   isPaused(cookieStoreId: string): boolean;
-  // Returns void, and the engine never awaits it: a navigation must not wait on
-  // bookkeeping, and a write that fails must not break routing.
+  // Returns void and is never awaited: a navigation must not wait on bookkeeping, and a
+  // failed write must not break routing.
   record(cookieStoreId: string, url: string, decision: Decision): void;
   arm(cookieStoreId: string): Promise<ArmResult>;
   disarm(cookieStoreId: string): Promise<ArmResult>;
   hydrate(): Promise<void>;
   snapshot(): PauseState;
-  // Dispatched to by the wiring's single runtime.onMessage registration. Returns
-  // undefined SYNCHRONOUSLY for a message that is not ours, so the reply channel stays
-  // free for the sibling it was addressed to.
+  // Dispatched to by the wiring's single runtime.onMessage registration. Returns undefined
+  // SYNCHRONOUSLY for a message that is not ours, leaving the reply channel to its owner.
   handleMessage(msg: unknown): Promise<PauseStatusResponse | PauseToggleResponse> | undefined;
 }
 
 const DEFAULT_STORE_ID = "firefox-default";
 const NOTIFY_TITLE = "Configurable Containers";
 
-// The F9 toast's own words for an action CC declined, extended with the one case F9
-// never sees: a decision that would not have moved the tab at all. Recording those too is
-// what makes "was this rule even needed?" answerable — without them the record only
-// proves CC saw the host.
+// The F9 toast's own words for a declined action, plus the case F9 never sees: a decision
+// that would not have moved the tab. Recording those is what answers "was this rule even
+// needed?" — without them the record only proves CC saw the host.
 function wouldHaveLabel(decision: Decision): string {
   return decision.kind === "reopen" || decision.kind === "choice"
     ? targetLabel(decision as Declinable)
@@ -83,14 +79,12 @@ function isRecording(v: unknown): v is Recording {
 }
 
 // Suspends routing inside chosen containers and records what routing would have done, so
-// the hosts in an unconfigured payment or SSO chain can be read off afterwards and turned
-// into rules by hand. A sibling of the engine, disposer, cookie-seeder, script-injector,
-// redirector-closer and picker — wired at wiring.ts, not nested.
+// the hosts of an unconfigured payment or SSO chain can be read off afterwards and turned
+// into rules. A sibling of the engine, wired in wiring.ts, not nested.
 //
-// The whole feature hangs off one property: `isPaused` is called from the blocking
-// webRequest handler. That is why the armed set lives in memory and is hydrated once at
-// startup rather than read on demand, and why nothing here can be made async "just to be
-// safe" without putting a storage round-trip in front of every navigation.
+// One property carries the feature: `isPaused` is called from the blocking webRequest
+// handler. Hence an in-memory armed set hydrated once at startup, and hence nothing here can
+// be made async "to be safe" without a storage round-trip before every navigation.
 export function createPause(opts: { port: BrowserPort; clock: Clock }): Pause {
   const { port, clock } = opts;
 
@@ -111,9 +105,8 @@ export function createPause(opts: { port: BrowserPort; clock: Clock }): Pause {
   }
 
   async function arm(cookieStoreId: string): Promise<ArmResult> {
-    // Refused as a SCOPE decision, not a technical limit: pausing the default container
-    // is close enough to pausing globally that it should be its own deliberate feature
-    // if it is ever wanted.
+    // A scope decision, not a technical limit: pausing the default container is close
+    // enough to pausing globally that it should be its own feature if ever wanted.
     if (cookieStoreId === DEFAULT_STORE_ID) {
       return { ok: false, reason: "The default container cannot be paused." };
     }
@@ -133,8 +126,8 @@ export function createPause(opts: { port: BrowserPort; clock: Clock }): Pause {
 
   async function disarm(cookieStoreId: string): Promise<ArmResult> {
     const open = running(cookieStoreId);
-    // The name comes off the recording, not getIdentity: disarming a throwaway the
-    // disposer has just removed must still be able to say which container it was.
+    // From the recording, not getIdentity: disarming a throwaway the disposer just removed
+    // must still name it.
     const container = open?.container ?? "that container";
     if (!armed.delete(cookieStoreId)) return { ok: false, reason: "It was not paused." };
     if (open) open.endedAt = clock.now();
@@ -142,8 +135,8 @@ export function createPause(opts: { port: BrowserPort; clock: Clock }): Pause {
     return { ok: true, container };
   }
 
-  // What the options page renders: the containers that currently hold tabs, each with
-  // enough about those tabs to be recognisable, plus the recordings.
+  // What the options page renders: containers that currently hold tabs, enough about those
+  // tabs to recognise them, and the recordings.
   async function status(): Promise<PauseStatusResponse> {
     const identities = await port.queryIdentities();
     const tabs = await port.queryTabs({});
@@ -156,15 +149,15 @@ export function createPause(opts: { port: BrowserPort; clock: Clock }): Pause {
       try {
         host = new URL(tab.url).host;
       } catch {
-        // about:blank, about:newtab and the extension's own pages have no host. The row
-        // still counts the tab — it is occupied either way.
+        // about:blank, about:newtab and extension pages have no host. The row still counts
+        // the tab: the container is occupied either way.
       }
       if (host && !hosts.includes(host)) hosts.push(host);
       hostsByStore.set(tab.cookieStoreId, hosts);
     }
 
-    // Containers with no tabs are omitted: you cannot arm a flow you are not in, and a
-    // list of every throwaway that ever existed would bury the one that matters.
+    // Containers with no tabs are omitted: you cannot arm a flow you are not in, and every
+    // throwaway that ever existed would bury the one that matters.
     const containers: ContainerRow[] = [...hostsByStore.keys()]
       .filter((csid) => csid === DEFAULT_STORE_ID || named.has(csid))
       .map((csid) => ({
@@ -181,10 +174,9 @@ export function createPause(opts: { port: BrowserPort; clock: Clock }): Pause {
   }
 
   async function toggle(cookieStoreId: unknown): Promise<PauseToggleResponse> {
-    // The sender here is the options tab, which is not the tab under discussion — so
-    // unlike the choice page there is nothing to derive the container from, and the
-    // payload is validated instead. arm() does the real checking (a real identity, never
-    // the default container); this only rejects a value of the wrong type.
+    // The sender is the options tab, not the tab under discussion, so unlike the choice
+    // page there is nothing to derive the container from and the payload is validated
+    // instead. arm() does the real checking; this only rejects the wrong type.
     if (typeof cookieStoreId !== "string") return { ok: false, message: "No container named." };
     const wasPaused = armed.has(cookieStoreId);
     const result = wasPaused ? await disarm(cookieStoreId) : await arm(cookieStoreId);
@@ -196,21 +188,19 @@ export function createPause(opts: { port: BrowserPort; clock: Clock }): Pause {
   }
 
   async function clearAll(): Promise<PauseToggleResponse> {
-    // Disarm first: a cleared list must not leave a container silently unrouted with no
-    // recording left to show for it.
+    // Disarm first: a cleared list must not leave a container unrouted with no recording
+    // left to show for it.
     for (const cookieStoreId of [...armed]) await disarm(cookieStoreId);
     recordings = [];
     await persist();
     return { ok: true, message: "Cleared." };
   }
 
-  // The toolbar button. It holds NO logic of its own, and must not acquire any: WebDriver
-  // cannot click a browser_action, so anything living only here would ship with no
-  // end-to-end coverage at all. The options-page route (which an e2e does drive) reaches
-  // the same arm()/disarm(), so what goes uncovered is the argument access below.
-  //
-  // Firefox supplies `tab`, so there is no payload to validate and nothing craftable can
-  // reach this — unlike the options page, which names a container and is checked.
+  // The toolbar button. It holds NO logic of its own and must not acquire any: WebDriver
+  // cannot click a browser_action, so anything living only here ships uncovered. The
+  // options-page route an e2e does drive reaches the same arm()/disarm(), leaving only the
+  // argument access below uncovered. Firefox supplies `tab`, so there is no payload to
+  // validate and nothing craftable reaches this.
   port.onActionClicked((tab) => {
     void (async () => {
       const wasPaused = armed.has(tab.cookieStoreId);
@@ -227,10 +217,9 @@ export function createPause(opts: { port: BrowserPort; clock: Clock }): Pause {
   });
 
   // A tab closing is the only way a container becomes empty, so it is the only trigger
-  // needed. WHICH tab closed does not matter — the browser is asked — and that is what
-  // lets this survive a restart with no per-tab bookkeeping to rebuild. mock-port fires
-  // onTabRemoved for a tab CC itself closed, so a reopen that consumed the container's
-  // last tab is seen here too.
+  // needed. WHICH tab closed does not matter — the browser is asked — so this survives a
+  // restart with no per-tab bookkeeping to rebuild. mock-port fires onTabRemoved for a tab
+  // CC itself closed, so a reopen consuming the last tab is seen here too.
   port.onTabRemoved(() => {
     void (async () => {
       if (armed.size === 0) return;
@@ -257,10 +246,9 @@ export function createPause(opts: { port: BrowserPort; clock: Clock }): Pause {
       const seen = open.hosts.find((h) => h.host === host);
       if (seen) {
         seen.hits++;
-        // Deliberately no write: a seven-hop bounce would otherwise be seven storage
-        // writes issued from the blocking path. `disarm` flushes, so a FINISHED
-        // recording's counts are accurate; a background killed mid-flow loses the hops
-        // since the last new host, which is the same class of loss as an unflushed row.
+        // Deliberately no write: a seven-hop bounce would be seven storage writes from the
+        // blocking path. `disarm` flushes, so a finished recording's counts are accurate; a
+        // background killed mid-flow loses the hops since the last new host.
         return;
       }
       open.hosts.push({ host, hits: 1, wouldHave: wouldHaveLabel(decision) });
@@ -270,8 +258,8 @@ export function createPause(opts: { port: BrowserPort; clock: Clock }): Pause {
     arm,
     disarm,
 
-    // Not `async`: the "not ours" answer has to be a synchronous undefined, and an async
-    // function cannot give one.
+    // Not `async`: "not ours" must be a synchronous undefined, which an async function
+    // cannot give.
     handleMessage(msg) {
       const type = (msg as { type?: unknown } | null | undefined)?.type;
       if (type === "cc-pause-status") return status();
@@ -282,8 +270,8 @@ export function createPause(opts: { port: BrowserPort; clock: Clock }): Pause {
 
     async hydrate() {
       const raw = await port.readStored(PAUSE_STORAGE_KEY);
-      // Anything that is not the shape we wrote is treated as absent rather than
-      // trusted: a corrupt value must not be able to leave a container unrouted.
+      // Anything that is not the shape we wrote counts as absent: a corrupt value must not
+      // leave a container unrouted.
       const state = raw as Partial<PauseState> | null;
       if (typeof state !== "object" || state === null) return;
       if (Array.isArray(state.armed)) {
