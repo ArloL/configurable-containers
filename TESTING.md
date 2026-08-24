@@ -360,6 +360,16 @@ mutant no other case catches.
   - **The suite itself** (`suite.test.ts`) — no committed `.only` (which shrinks CI to one
     case and still reports success), skips limited to the one documented undriveable case,
     and every `// Stryker disable` carrying its justification.
+  - **What the background page keeps** (`retained-state.test.ts`) — every `Set` and `Map`
+    in `src/`, each with a written bound. No other gate asks this: the L3 cases drive tens
+    of navigations, `npm test` restarts the world between files, and a config save empties
+    everything, so a structure that gains an entry per navigation and loses none is
+    invisible to all of them — F10's shape, silent and only visible over time. An
+    inventory rather than a measurement, because counting retained bytes means either
+    exporting a closure's privates to be counted or timing a heap. Four structures are
+    recorded as growing with nothing emptying them, and all four are fine: each holds one
+    short string or number, fed by something rarer than browsing. The list is there for
+    the fifth.
   - **The round-trip budget** (`decision-cost.test.ts`) — the only one that measures
     rather than inspects, and the answer to "nothing tests latency". `onBeforeRequest` is
     blocking, so every awaited call before it answers is latency in front of a page load.
