@@ -1,4 +1,3 @@
-// Parse + normalize + validate the user's YAML config into the resolver's Config.
 // See docs/superpowers/specs/2026-07-10-config-parser-design.md, and
 // docs/superpowers/specs/2026-08-19-match-patterns-and-regex-design.md §3 for the three
 // match forms and the two rules that fall out of them (auto-naming, scripts-on-regex).

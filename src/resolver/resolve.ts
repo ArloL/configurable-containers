@@ -8,16 +8,15 @@ function alreadyThere(current: ContainerRef | null, desired: ContainerRef): bool
   if (desired.kind === "permanent") {
     return current?.kind === "permanent" && current.name === desired.name;
   }
-  return current?.kind === desired.kind; // default==default, temporary==temporary
+  return current?.kind === desired.kind;
 }
 
-// Reopen into `desired` unless already there. ContainerRef is structurally a Target.
+// ContainerRef is structurally a Target, which is why `desired` needs no conversion.
 function toward(current: ContainerRef | null, desired: ContainerRef): Decision {
   return alreadyThere(current, desired) ? { kind: "stay" } : { kind: "reopen", into: desired };
 }
 
-// Disposable path (spec §4 step 7): keep the current throwaway if the navigation stays
-// within the same registrable domain or group; otherwise a fresh one.
+// The disposable path — spec §4 step 7.
 function disposablePath(nav: NavContext, config: Config, deps: Deps): Decision {
   // Which throwaway session does this navigation belong to? The page the tab is on — or,
   // for a tab the browser opened FOR a link, the page that link was on. Both name a
@@ -65,22 +64,19 @@ export function resolve(nav: NavContext, config: Config, deps: Deps): Decision {
       case "open": {
         const { containers, default: def } = action;
 
-        // Single container.
         if (containers.length === 1) {
           if (containers[0] === TEMPORARY) return disposablePath(nav, config, deps);
           return toward(current, { kind: "permanent", name: containers[0] });
         }
 
-        // Multi-open: already in an eligible (permanent) container -> stay.
+        // Multi-open: an eligible container the tab is already in wins over `default`.
         if (current?.kind === "permanent" && containers.includes(current.name)) {
           return { kind: "stay" };
         }
-        // A configured default decides automatically.
         if (def !== undefined) {
           if (def === TEMPORARY) return disposablePath(nav, config, deps);
           return toward(current, { kind: "permanent", name: def });
         }
-        // No default -> choice screen over the configured containers.
         return { kind: "choice", options: containers };
       }
     }

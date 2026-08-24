@@ -43,7 +43,7 @@ void (async () => {
       "[cc] config failed to parse — routing everything to a temporary container",
       loaded.error,
     );
-    // The editor opens with the broken text and the parse error already showing.
+    // Opened so the user sees the broken text with its parse error.
     await openConfigEditor();
   }
 

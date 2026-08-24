@@ -1,21 +1,18 @@
-// Pure overlay core: which scripts apply to a URL, and the registration shape the
-// injector hands to browser.contentScripts.register. No browser, no I/O. Consumed by
-// the script-injector (src/engine/script-injector.ts).
+// Pure: no browser, no I/O. Consumed by src/engine/script-injector.ts.
 import type { Config, ScriptSpec } from "../resolver/types";
 import { matcherToPatterns, type Matcher } from "../matcher/matcher";
 
-// The register-arg shape, one entry per (rule, script) pair: `matches` is the union of the
-// rule's matchers' patterns, `code` the inline JS, `runAt` document_start by default.
+// `matches` is the union of the rule's matchers' patterns; `runAt` defaults to
+// document_start, which ScriptSpec leaves optional.
 export interface ScriptRegistration {
   matches: string[];
   code: string;
   runAt: "document_start" | "document_end" | "document_idle";
 }
 
-// The scripts to inject for `url`: the first matching rule's overlay, or [] when nothing
-// matches or the match is `ignore`. Through the SAME injected matchRule as the router, so
-// overlay precedence cannot drift from routing. (For testability; the injector registers
-// patterns, not per-URL.)
+// [] when nothing matches or the match is `ignore`. Goes through the SAME injected
+// matchRule as the router, so overlay precedence cannot drift from routing. Exists for
+// testability: the injector itself registers patterns, not per-URL.
 export function scriptsFor(
   url: string,
   config: Config,
@@ -26,9 +23,8 @@ export function scriptsFor(
   return rule.scripts ?? [];
 }
 
-// Flatten every rule's scripts into the register-arg shape, one per (rule, script) pair.
-// Skips rules without scripts and `ignore` rules — the parser already rejects
-// scripts-on-ignore, so that arm is only for a hand-built Config.
+// One entry per (rule, script) pair. The `ignore` arm is only for a hand-built Config: the
+// parser already rejects scripts-on-ignore.
 export function scriptRegistrations(config: Config): ScriptRegistration[] {
   const out: ScriptRegistration[] = [];
   for (const rule of config.rules) {

@@ -32,14 +32,12 @@ export function highestTmpSuffix(names: string[]): number {
 }
 
 export interface ContainerRegistry {
-  // cookieStoreId -> ContainerRef (for reading a tab's current/initiator container).
   toRef(cookieStoreId: string | undefined): Promise<ContainerRef>;
-  // Target -> cookieStoreId (for executing a reopen; find-or-create as needed).
+  // Finds or creates, so calling it commits to the container existing.
   toStoreId(target: Target): Promise<string>;
 }
 
 export function createRegistry(port: BrowserPort, tmpSuffix: () => string): ContainerRegistry {
-  // name -> cookieStoreId cache for permanent find-or-create.
   const permanentByName = new Map<string, string>();
 
   return {

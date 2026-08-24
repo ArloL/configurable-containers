@@ -8,13 +8,13 @@ import type { BrowserPort, Clock } from "./port";
 // mid-render would race a toggle and lose one of the two writes.
 export const PAUSE_STORAGE_KEY = "pauseState";
 
-// Hosts only, so the storage cost is bytes; the cap exists to keep the list readable.
+// A cap on how many recordings are kept, so the list stays readable.
 export const MAX_RECORDINGS = 10;
 
 export interface RecordedHost {
   host: string;
   hits: number; // main_frame hops that resolved to this host
-  wouldHave: string; // the routing action CC declined to take, in the F9 toast's words
+  wouldHave: string; // the declined action, in the F9 toast's words
 }
 
 export interface Recording {
@@ -80,7 +80,7 @@ function isRecording(v: unknown): v is Recording {
 
 // Suspends routing inside chosen containers and records what routing would have done, so
 // the hosts of an unconfigured payment or SSO chain can be read off afterwards and turned
-// into rules. A sibling of the engine, wired in wiring.ts, not nested.
+// into rules.
 //
 // One property carries the feature: `isPaused` is called from the blocking webRequest
 // handler. Hence an in-memory armed set hydrated once at startup, and hence nothing here can
@@ -135,8 +135,6 @@ export function createPause(opts: { port: BrowserPort; clock: Clock }): Pause {
     return { ok: true, container };
   }
 
-  // What the options page renders: containers that currently hold tabs, enough about those
-  // tabs to recognise them, and the recordings.
   async function status(): Promise<PauseStatusResponse> {
     const identities = await port.queryIdentities();
     const tabs = await port.queryTabs({});
@@ -240,7 +238,7 @@ export function createPause(opts: { port: BrowserPort; clock: Clock }): Pause {
       try {
         host = new URL(url).host;
       } catch {
-        return; // nothing nameable; the engine has already filtered to http(s) anyway
+        return; // nothing nameable — the engine already filtered to http(s)
       }
 
       const seen = open.hosts.find((h) => h.host === host);

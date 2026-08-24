@@ -1,9 +1,8 @@
-// The config editor. Reads storage into a textarea, re-parses on every keystroke
-// (parseConfig is pure and sub-millisecond at this size, so no debounce), and refuses to
-// save anything that does not parse. Saving writes storage and reloads the extension so
-// every sibling re-reads the config — see the 2026-07-28 design spec §5.
+// The config editor. Re-parses on every keystroke with no debounce, because parseConfig is
+// pure and sub-millisecond at this size, and refuses to save anything that does not parse.
+// Saving reloads the extension so every sibling re-reads the config — 2026-07-28 spec §5.
 //
-// It also REPORTS on Firefox Sync (2026-07-30 spec §6) without writing to it: the background
+// It REPORTS on Firefox Sync (2026-07-30 spec §6) without ever writing to it: the background
 // is the only publisher, so this page says what the sync area holds and offers back a config
 // an incoming sync replaced.
 
@@ -41,7 +40,7 @@ function describe(e: unknown): string {
   return String(e);
 }
 
-// Returns true iff the current text parses; drives the error region and Save.
+// Also drives the error region and the Save button's disabled state.
 function validate(): boolean {
   try {
     parseConfig(textarea.value);

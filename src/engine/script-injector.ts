@@ -7,11 +7,11 @@ export interface ScriptInjectorOptions {
   config: Config;
 }
 
-// A sibling of the engine, wired in wiring.ts, not nested. Unlike the seeder's per-request
-// listener this is registration-based: at startup it registers each script via
-// browser.contentScripts.register and Firefox injects it at runAt for matching pages (F12 —
-// document_start runs before the page's own scripts). No cookieStoreId (F11): the script
-// runs wherever the URL loads, so in the tab's own container after routing.
+// Unlike the seeder's per-request listener this is registration-based: at startup it
+// registers each script via browser.contentScripts.register and Firefox injects it at runAt
+// for matching pages (F12 — document_start runs before the page's own scripts). No
+// cookieStoreId (F11): the script runs wherever the URL loads, so in the tab's own container
+// after routing.
 export async function createScriptInjector(opts: ScriptInjectorOptions): Promise<void> {
   const { port, config } = opts;
   for (const reg of scriptRegistrations(config)) {
