@@ -58,6 +58,16 @@ rules:
     expect(config.rules[0]!.cookies).toBeUndefined();
   });
 
+  // Each of the three is a value browser.cookies.set takes, and until now only "lax" was
+  // ever parsed successfully — so emptying either of the other two in the set changed
+  // nothing any test looked at.
+  it.each([["no_restriction"], ["lax"], ["strict"]])("accepts sameSite: %s", (value) => {
+    const c = parse(
+      `rules:\n  - match: x.com\n    cookies:\n      - { name: a, url: "https://x.com/", sameSite: ${value} }\n`,
+    );
+    expect(c.rules[0]!.cookies![0]!.sameSite).toBe(value);
+  });
+
   it("rejects cookies on an ignore rule", () => {
     expect(() => parse(`
 rules:

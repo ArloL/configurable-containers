@@ -92,6 +92,8 @@ function parseMatch(raw: unknown, path: string): { matchers: Matcher[]; firstHos
   }
   const matchers = list.map((e, j) => toMatcher(e, `${path}.match[${j}]`));
   const first = matchers[0];
+  // Stryker disable next-line OptionalChaining: the emptiness check above is what makes
+  // `matchers[0]` present; the chain is what says so to the compiler.
   return { matchers, firstHost: first?.kind === "host" ? first.host : null };
 }
 
@@ -172,6 +174,9 @@ function parseCookie(raw: unknown, path: string): CookieSpec {
 
   if ("sameSite" in raw) {
     const v = raw.sameSite;
+    // Stryker disable next-line ConditionalExpression: the set membership test already
+    // answers false for every non-string; the typeof is what narrows `v` for the
+    // assignment below.
     if (typeof v !== "string" || !SAME_SITE.has(v)) {
       throw new ConfigError(`${path}.sameSite must be one of no_restriction, lax, strict`, { path: `${path}.sameSite` });
     }
@@ -217,6 +222,8 @@ function parseScript(raw: unknown, path: string): ScriptSpec {
 
   if ("at" in raw) {
     const v = raw.at;
+    // Stryker disable next-line ConditionalExpression: as sameSite above — the set
+    // rejects every non-string, the typeof narrows for the assignment.
     if (typeof v !== "string" || !RUN_AT.has(v)) {
       throw new ConfigError(`${path}.at must be one of document_start, document_end, document_idle`, { path: `${path}.at` });
     }
@@ -329,12 +336,24 @@ export function parseConfig(yamlText: string): Config {
     doc = parse(yamlText);
   } catch (e) {
     if (e instanceof YAMLParseError) {
+      // Stryker disable next-line OptionalChaining: `linePos` is optional in the yaml
+      // library's types and set on every parse error it raises; the chain is for the
+      // type, not for a case.
       const pos = e.linePos?.[0];
+      // Stryker disable next-line OptionalChaining: as above.
       throw new ConfigError(`YAML syntax error: ${e.message}`, { line: pos?.line, col: pos?.col });
     }
-    throw e;
+    // Not every failure in `parse` is a YAMLParseError: an unresolved alias (`*a`) raises
+    // a plain ReferenceError and a circular one a TypeError, neither carrying a position.
+    // Rethrown as they are, they leave parseConfig as something that is not a ConfigError,
+    // and the options page — which reports `e.message` and underlines `path` — has nothing
+    // to say beyond the raw stringified error.
+    throw new ConfigError(`YAML error: ${(e as Error).message}`);
   }
 
+  // Stryker disable next-line ConditionalExpression: `parse` answers null for an empty
+  // document, a comment-only one and an explicit `null`, and never undefined for a string
+  // input. The second half is the contract of the value, not a case that reaches here.
   if (doc === null || doc === undefined) return { rules: [], groups: [] };
   if (!isMapping(doc)) throw new ConfigError("config must be a mapping with `rules` and/or `groups`");
 

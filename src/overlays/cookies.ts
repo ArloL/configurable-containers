@@ -12,6 +12,11 @@ export interface HttpHeader {
 // matchRule as the router, so overlay precedence cannot drift from routing.
 export function cookiesFor(url: string, config: Config, matchRule: Deps["matchRule"]): CookieSpec[] {
   const rule = matchRule(url, config.rules);
+  // Stryker disable next-line all: the `ignore` half is unreachable from a parsed config
+  // — `config/parse` refuses `cookies:` on an `ignore` rule outright, so a matched ignore
+  // rule has no cookies to return either way. Kept as the second line of defence, since
+  // "ignore means CC does not touch this site" is this function's contract and not the
+  // parser's.
   if (!rule || rule.action.kind === "ignore") return [];
   return rule.cookies ?? [];
 }

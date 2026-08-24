@@ -281,18 +281,34 @@ mutant no other case catches.
 ## Cross-cutting gates
 
 - **Mutation testing (Stryker)** — the direct answer to "are there subtle bugs the tests
-  miss". `npm run test:mutation` mutates `src/resolver`, `src/matcher` and `src/psl` and
-  fails if a mutant survives. A survivor in precedence or group code is a subtle-bug hole
-  by definition. **Gated at 100%**, which the scope earns: three modules, no I/O, no
-  clock, ~190 mutants in twenty seconds. Nightly all the same, and not for the cost — a
+  miss". `npm run test:mutation` mutates every **pure** module — `src/resolver`,
+  `src/matcher`, `src/psl`, `src/config` and `src/overlays` — and fails if a mutant
+  survives. A survivor in precedence or group code is a subtle-bug hole by definition.
+  **Gated at 100%**, which the scope earns: no I/O, no clock, ~1070 mutants in about two
+  minutes. Nightly all the same, and not for the cost — a
   refactor can introduce an *equivalent* mutant honestly, which should file an issue for
   someone to name in a comment, not block a merge.
 
   Two narrowings give the number meaning. Only the **pure** modules are mutated: the
   stateful ones fail under mutation as "the mock does not model that" as often as "nothing
-  tests this". And only **L1/L2** may kill the mutants (`vitest.mutation.config.ts`) — a
+  tests this". And only the levels that **own** each module may kill its mutants
+  (`vitest.mutation.config.ts` runs `test/{resolver,matcher,psl,config,overlays}`) — a
   mutant in `resolve()` that an L3 engine case notices and no resolver case does is a hole
   in the level that owns that logic.
+
+  The scope was widened from three modules to five on 2026-08-24. What that found, in a
+  parser and a sync record that were both green under coverage: a third of the config
+  parser's rejection branches reached by no test at all, and most of the rest reached by a
+  test that never looked at what came back — emptying every error message in the file
+  changed no result. Hence `test/config/parse.rejections.test.ts`, one row per way a
+  config can be refused, asserting the exact message and `path`. The diagnostics are the
+  product: a config is hand-written YAML, and a rejected one leaves every site opening in
+  a throwaway until the user can see what is wrong.
+
+  It also found a real one. `yaml` raises a plain `ReferenceError` for an unresolved alias
+  and a `TypeError` for a circular one — neither a `YAMLParseError`, so both left
+  `parseConfig` as something that was not a `ConfigError`, and the options page had
+  nothing to underline. Now wrapped.
 
   A survivor has two honest exits, and every survivor so far took one: write the missing
   L1/L2 case, or — when the change provably cannot alter an answer — mark it
@@ -307,10 +323,10 @@ mutant no other case catches.
   different question: not "is there logic no test would notice changing" over three
   modules, but "is any of `src/` reached by no deterministic test at all".
 
-  Thresholds sit a point or two under what the suite measures (~92% statements, ~89%
-  branches), **except** `src/resolver`, `src/matcher` and `src/psl`, held at 100 — the
-  mutation gate owns those three, and this catches a new uncovered branch on the push that
-  adds it rather than that night. Three files are excluded for platform facts rather than
+  Thresholds sit a point or two under what the suite measures (~94% statements, ~92%
+  branches), **except** the five modules the mutation gate owns — `src/resolver`,
+  `src/matcher`, `src/psl`, `src/config` and `src/overlays` — held at 100, so a new
+  uncovered branch in them is caught on the push that adds it rather than that night. Three files are excluded for platform facts rather than
   gaps: `background.ts` (the MV2 entry point, whose listeners must register as the file
   evaluates — L3 drives the `wireBackground` it delegates to) and `choice.ts` /
   `options.ts` (DOM, and there is no jsdom here; what could be decided without a document

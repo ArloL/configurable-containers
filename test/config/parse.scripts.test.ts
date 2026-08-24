@@ -65,6 +65,11 @@ rules:
     ]);
   });
 
+  it.each([["document_start"], ["document_end"], ["document_idle"]])("accepts at: %s", (value) => {
+    const c = parse(`rules:\n  - match: x.com\n    scripts:\n      - { run: "x();", at: ${value} }\n`);
+    expect(c.rules[0]!.scripts![0]!.at).toBe(value);
+  });
+
   it("rejects scripts on an ignore rule", () => {
     expect(() => parse(`
 rules:
