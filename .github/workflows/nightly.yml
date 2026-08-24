@@ -118,12 +118,41 @@ jobs:
           FIREFOX_BIN: ${{ steps.firefox.outputs.firefox-path }}
         run: npm run test:flake
 
+  reproducible-build:
+    name: Reproducible release build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # Every release body says "Reproduce this build:" and gives two commands. This runs
+      # them: it rebuilds the last LISTED release from its own published source archive
+      # with its own published BUILD_TIMESTAMP, and compares the sha256 with the xpi
+      # attached beside it. Nothing else ever checks that promise — AMO repacks uploads,
+      # so its copy is not byte-comparable, and the GitHub asset is the only one that is.
+      - name: Rebuild the last listed release and compare hashes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run verify:reproducible
+
   report-regression:
     name: Report a regression
     needs:
     - disposal-realtime
     - mutation
     - flake
+    - reproducible-build
     # Nobody watches a scheduled run, so a red night has to come and find us. Only on
     # failure — a cancelled or skipped run is not a regression.
     if: failure()
@@ -140,6 +169,7 @@ jobs:
         DISPOSAL_RESULT: ${{ needs.disposal-realtime.result }}
         MUTATION_RESULT: ${{ needs.mutation.result }}
         FLAKE_RESULT: ${{ needs.flake.result }}
+        REPRO_RESULT: ${{ needs.reproducible-build.result }}
       run: |
         set -euo pipefail
         # One issue per failing guard rail — they fail for unrelated reasons and are
@@ -168,6 +198,28 @@ jobs:
         - **never removed** — a long background-page timer was throttled, coalesced or
           dropped. Every other disposal test uses a fake clock or a 500ms grace and
           would stay green through it (TESTING.md, F10).
+        EOF
+        )"
+        fi
+
+        if [ "$REPRO_RESULT" = failure ]; then
+          report "Nightly reproducible-build check is failing" "$(cat <<EOF
+        \`npm run verify:reproducible\` failed: $RUN_URL
+
+        The xpi rebuilt from a release's own source archive no longer matches the one
+        published beside it, or the release cannot be rebuilt at all. The log says which.
+
+        - **different sha256** — something in the build stopped being a function of its
+          inputs. The usual suspects are a dependency that is not pinned by the lockfile,
+          a timestamp read from the clock rather than from BUILD_TIMESTAMP, and entries
+          going into the zip in filesystem order (scripts/package.ts sorts them and fixes
+          the mtime at 1980 for exactly this reason).
+        - **no BUILD_TIMESTAMP / no source archive** — the release went out without what
+          its own notes tell a reader to use. That is a release.yaml problem, not a build
+          one.
+
+        Note this can only ever be checked against the GitHub asset. AMO REPACKS uploads,
+        so its copy is never byte-comparable with a local rebuild.
         EOF
         )"
         fi

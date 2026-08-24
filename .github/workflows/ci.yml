@@ -47,6 +47,12 @@ jobs:
       # gate that reads promises rather than types (.oxlintrc.json says what for).
       - run: npm run lint
 
+      # `--omit=dev` is the one that means anything here: the xpi is an esbuild bundle of
+      # src/, so no node_modules package ships and every current advisory is dev tooling
+      # the user never runs. Gated because the production tree is two packages wide
+      # (tldts, yaml) and an advisory in either is a real one.
+      - run: npm run audit
+
       - run: npm run lint:ext
 
       # The deterministic levels with a coverage floor (TESTING.md, "Cross-cutting
