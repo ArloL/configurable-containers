@@ -25,8 +25,7 @@ const MAC_ID = "@testpilot-containers";
 // The window a tab belongs to unless a test says otherwise — Firefox's "current window".
 export const DEFAULT_WINDOW_ID = 1;
 
-// What a test says to conjure a tab. windowId is opt-in: only the cases about windows
-// mention one.
+// What a test says to conjure a tab. windowId is opt-in: only window cases mention one.
 export interface TabProps {
   url?: string;
   cookieStoreId: string;
@@ -45,9 +44,9 @@ export interface MockPort {
   /** Fires webRequest.onBeforeRequest and returns the blocking response. */
   navigates(d: WebRequestDetails): Promise<BlockingResponse | void>;
   /**
-   * Fires webNavigation.onBeforeNavigate — what Firefox announces before the request a
-   * navigation issues, and the only event that names a `view-source:` url. Defaults to
-   * the top-level frame, which is the only one the engine looks at.
+   * Fires webNavigation.onBeforeNavigate — announced before the request a navigation issues,
+   * and the only event that names a `view-source:` url. Defaults to the top-level frame, the
+   * only one the engine looks at.
    */
   startsNavigating(d: { tabId: number; url: string; frameId?: number }): void;
   /** Fires webRequest.onBeforeSendHeaders and returns the header edits. */
@@ -67,8 +66,8 @@ export interface MockPort {
   /** Current browser_action badge text; "" when cleared. */
   badgeText: string;
 
-  // The engine floats its notification rather than awaiting it (a navigation must not
-  // wait on a toast), so a test asserting on notifications must settle first.
+  // The engine floats its notification rather than awaiting it, so a test asserting on
+  // notifications must settle first.
   settle(): Promise<void>;
 
   /** A tab that is already open. Fires nothing. */
@@ -115,17 +114,15 @@ export function aFakeBrowser(): MockPort {
   let containerId = 0;
   let macThrows = false;
   let createTabThrows = false;
-  // Listeners are LISTS, one per event, because `browser.*.addListener` is additive:
-  // Firefox calls every listener an extension registered, in registration order. The mock
-  // held a single slot per event until 2026-08-24, and the cost was exactly what you would
-  // expect of a mock that models "the last registration wins" — `wireBackground` registers
-  // onTabRemoved twice (pause, then the disposer) and onTabUpdated twice (auto-temp, then
-  // the redirector-closer), so at L3 the first of each pair was never called and two
-  // behaviours the composed background relies on were silently not wired.
+  // Listeners are LISTS, one per event, because `browser.*.addListener` is additive: Firefox
+  // calls every listener, in registration order. The mock held one slot per event until
+  // 2026-08-24, and it cost what a "last registration wins" mock would be expected to cost —
+  // `wireBackground` registers onTabRemoved twice (pause, then the disposer) and onTabUpdated
+  // twice (auto-temp, then the redirector-closer), so at L3 the first of each pair was never
+  // called and two behaviours of the composed background were silently unwired.
   //
-  // What the single slot was ALSO doing — retiring a dead session's listeners on restart —
-  // is now `aSessionPort` in restart.ts, beside the clock facade that already did the same
-  // job for timers. One mechanism per job; this one answers only "what does Firefox do".
+  // Retiring a dead session's listeners on restart, the other job the single slot did, is now
+  // `aSessionPort` in restart.ts, beside the clock facade that already did it for timers.
   const beforeRequestHs: ((d: WebRequestDetails) => Promise<BlockingResponse | void>)[] = [];
   const beforeNavigateHs: ((d: NavigationDetails) => void)[] = [];
   const onTabCreatedHs: ((tab: Tab) => void)[] = [];
@@ -139,25 +136,24 @@ export function aFakeBrowser(): MockPort {
   let badgeText = "";
   const cookieStore = new Map<string, Map<string, Cookie>>(); // storeId -> name -> cookie
   const registeredScripts: RegisterContentScriptDetails[] = [];
-  // storage.local. Lives on the BROWSER, not the background session, which is the whole
-  // point: it is what a restart is allowed to still find. Values are held as JSON text
-  // for the same reason the real one does.
+  // storage.local. Lives on the BROWSER, not the background session — it is what a restart
+  // is allowed to still find. Held as JSON text, as the real one is.
   const stored = new Map<string, string>();
 
   function makeTab(props: TabProps): Tab {
     const id = ++tabId;
     const tab: Tab = {
       id,
-      // No url means "the browser's new-tab page" — that is how the real
-      // tabs.create behaves, and the only legal way to land on about:newtab.
+      // No url means "the browser's new-tab page", as the real tabs.create does, and the
+      // only legal way to land on about:newtab.
       url: props.url ?? "about:newtab",
       cookieStoreId: props.cookieStoreId,
       index: props.index ?? id,
       active: props.active ?? true,
       openerTabId: props.openerTabId,
-      // Firefox always reports a window; a test that doesn't care gets the one window.
-      // A tab created WITHOUT a windowId lands in the current window — which is what
-      // the popup bug was: the reopen omitted it and the replacement left the popup.
+      // Firefox always reports a window; a test that does not care gets the one window. A
+      // tab created WITHOUT a windowId lands in the current window, which was the popup bug:
+      // the reopen omitted it and the replacement left the popup.
       windowId: props.windowId ?? DEFAULT_WINDOW_ID,
     };
     openTabs.set(id, tab);
@@ -184,10 +180,9 @@ export function aFakeBrowser(): MockPort {
     async createTab(props) {
       openedTabs.push(props);
       if (createTabThrows) throw new Error("createTab failed");
-      // Fidelity guard: Firefox refuses privileged about: URLs from an extension
-      // ("Illegal URL: about:newtab"). about:blank is the one exception. A mock that
-      // accepted them let auto-temp ship a containerize() that always threw in real
-      // Firefox while L3 stayed green — never relax this.
+      // Fidelity guard: Firefox refuses privileged about: URLs from an extension ("Illegal
+      // URL: about:newtab"), about:blank excepted. A mock that accepted them let auto-temp
+      // ship a containerize() that always threw in Firefox while L3 stayed green.
       if (props.url?.startsWith("about:") && props.url !== "about:blank") {
         throw new Error(`Illegal URL: ${props.url}`);
       }
@@ -199,11 +194,10 @@ export function aFakeBrowser(): MockPort {
     async removeTab(id) {
       closedTabIds.push(id);
       const wasOpen = openTabs.delete(id);
-      // Firefox fires tabs.onRemoved for a tab closed through tabs.remove, exactly as it
-      // does for one the user closed — the same reason createTab fires onTabCreated here.
-      // Without this a tab CC itself closed (a reopen superseding its source, a stranded
-      // redirector) was invisible to every onTabRemoved listener, so the disposer never
-      // learned that the container it emptied had gone empty.
+      // Firefox fires tabs.onRemoved for a tab closed through tabs.remove just as for one
+      // the user closed. Without this a tab CC itself closed — a reopen superseding its
+      // source, a stranded redirector — was invisible to every onTabRemoved listener, so the
+      // disposer never learned the container it emptied had gone empty.
       if (wasOpen) for (const h of onTabRemovedHs) h(id);
     },
     async queryIdentities() {
@@ -279,8 +273,8 @@ export function aFakeBrowser(): MockPort {
       badgeText = text;
     },
     async readStored(key) {
-      // Round-trips through JSON like the real storage does, so a test cannot pass by
-      // handing back the very object the caller still holds a reference to.
+      // Round-trips through JSON like the real storage, so a test cannot pass by handing
+      // back the object the caller still holds.
       const raw = stored.get(key);
       return raw === undefined ? undefined : JSON.parse(raw);
     },
@@ -293,11 +287,11 @@ export function aFakeBrowser(): MockPort {
     port,
     async navigates(d) {
       if (beforeRequestHs.length === 0) throw new Error("no onBeforeRequest handler registered");
-      // Firefox calls every blocking listener and merges what they return, with a cancel
-      // from any one of them winning. CC registers exactly one effective handler (the
-      // engine's, through wiring's gate) — `test/fitness/listeners.test.ts` pins that — so
-      // "first listener with something to say answers" is a faithful enough merge, and it
-      // is what lets a retired session's gated handler return undefined and stand aside.
+      // Firefox calls every blocking listener and merges the results, a cancel from any one
+      // winning. CC registers exactly one effective handler — the engine's, through wiring's
+      // gate, pinned by `test/fitness/listeners.test.ts` — so "first listener with something
+      // to say answers" is a faithful enough merge, and it lets a retired session's gated
+      // handler return undefined and stand aside.
       let response: BlockingResponse | void = undefined;
       for (const h of beforeRequestHs) {
         const r = await h(d);
@@ -327,8 +321,8 @@ export function aFakeBrowser(): MockPort {
     seededCookies,
     notifications,
     registeredScripts,
-    // A getter: `badgeText` is reassigned on every set, so exposing the binding's value
-    // here would freeze a test's view at construction time.
+    // A getter: `badgeText` is reassigned on every set, so exposing its value here would
+    // freeze a test's view at construction time.
     get badgeText() {
       return badgeText;
     },
@@ -357,11 +351,10 @@ export function aFakeBrowser(): MockPort {
     cookieIn: (storeId, name) => cookieStore.get(storeId)?.get(name) ?? null,
     async receivesMessage(msg, from) {
       if (messageHs.length === 0) throw new Error("no onMessage handler registered");
-      // The one event where a second listener is a bug in Firefox too, not just an
-      // inconvenience here: an async handler returns a Promise for EVERY message it sees
-      // and claims the reply channel from the sibling the message was addressed to. Hence
-      // `wireBackground`'s single registration and its synchronous `undefined` for a type
-      // it does not own — modelled here as "the first listener with an answer replies".
+      // The one event where a second listener is a bug in Firefox too: an async handler
+      // returns a Promise for EVERY message it sees and claims the reply channel from the
+      // sibling that was addressed. Hence `wireBackground`'s single registration and its
+      // synchronous `undefined`, modelled here as "the first listener with an answer replies".
       for (const h of messageHs) {
         const reply = await h(msg, { tabId: from?.id });
         if (reply !== undefined) return reply;
@@ -391,8 +384,8 @@ export function aFakeClock(): { clock: Clock; advance(ms: number): Promise<void>
     setTimeout(fn, ms) {
       timers.set(++seq, { dueAt: now + ms, fn });
     },
-    // The same `now` the timers are scheduled against, so a stored deadline and a fired
-    // timer can never disagree about what time it is.
+    // The same `now` the timers are scheduled against, so a stored deadline and a fired timer
+    // cannot disagree about the time.
     now: () => now,
   };
   return {
