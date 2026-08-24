@@ -3,6 +3,42 @@
 Things deliberately left needing a re-check, and where to look. Delete an entry
 once it is resolved.
 
+## Two browser events are registered twice, and L3 can only see one (2026-08-24)
+
+`test/fitness/listeners.test.ts` found this on its first run. `wireBackground` registers
+**`onTabRemoved`** twice (`createPause`, then `createDisposer`) and **`onTabUpdated`**
+twice (`createAutoTemp`, then `createRedirectorCloser`). `test/engine/mock-port.ts` holds
+a single handler slot per event — an assignment, not a push — so at L3 the *second*
+registration silently displaces the first:
+
+- **pause's disarm-on-empty never runs** in any case that drives the composed background.
+  Verified directly: arm a container through `wireBackground`, close its last tab, and
+  `isPaused` still answers true. `test/engine/pause.test.ts` passes because it builds a
+  `createPause` on a port of its own.
+- **auto-temp is driven by `onTabCreated` alone**, which is exactly the configuration
+  CLAUDE.md records as having passed L3 and failed in real Firefox: bug 1586612 makes
+  `onCreated` fire with `about:blank` before the real url, which is *why* auto-temp
+  listens on both.
+
+Neither is a shipped bug. Firefox's `tabs.onRemoved` and `tabs.onUpdated` are additive, so
+both listeners run in the browser, and the e2e level covers both behaviours end to end.
+What is lost is L3's ability to see them — in a project whose stated worry is "L3 green,
+Firefox broken", a blind spot in the composed level is worth closing deliberately.
+
+Two ways to close it, and they are not equivalent:
+
+- **Fan out in `wireBackground`**, as it already does for `runtime.onMessage`: one
+  registration per event, dispatching to the siblings. Small, local, precedented — and it
+  changes `src/` to satisfy a property of a test double, which for `onMessage` was also a
+  real Firefox requirement and here is not.
+- **Make `mock-port` additive** and move session retirement into `test/engine/restart.ts`,
+  beside the clock facade it already keeps. This is the more honest fix — Firefox *is*
+  additive, and the single slot is currently doing two unrelated jobs — but it invalidates
+  three CLAUDE.md notes that lean on one-slot-per-event (the `viewSourceNav` cleanup
+  rationale among them) and needs the restart harness to model a dead context's listeners.
+
+The fitness check pins the current inventory exactly, so this cannot spread while it waits.
+
 ## `reopenedNav` does not survive a background restart (2026-07-28)
 
 The F1 reopen guard (`src/engine/engine.ts`) is the one piece of guard state nothing can
