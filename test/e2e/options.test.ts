@@ -86,7 +86,26 @@ describe("options page (real Firefox, CC + probe)", () => {
       expect(await firefox.driver.findElement(By.id("cc-save")).isEnabled()).toBe(true);
     });
 
-    it("routes by the saved config after the reload", async () => {
+    it("routes by the saved config after the reload", async (ctx) => {
+      // `runtime.reload()` does not bring a TEMPORARILY installed extension back on
+      // 140.14.0esr. Measured 2026-08-24, against 154.0 for comparison: after Save, the
+      // OLD background is still running the OLD config (work.example, which the edit
+      // stops matching, still lands in Work) and CC's own pages stop resolving at their
+      // moz-extension uuid. On 154.0 the same steps apply the new config.
+      //
+      // Nothing in this case is observable where that is true, and the harness cannot
+      // install permanently to find out whether it is a temporary-install artefact: an
+      // unsigned xpi loads on release Firefox only temporarily, which is also what grants
+      // webRequestBlocking. A signed, permanently installed CC takes a different path
+      // through the add-on manager, so this says nothing about what ESR users get.
+      // Everything else in the suite runs on both channels, which is what keeps the ESR
+      // leg worth blocking on: this is the only case it cannot observe.
+      //
+      // The bound is where it was measured, not where it changes: 141-153 were not tried.
+      // Self-healing, since an ESR that reaches 154 runs the case again.
+      const version = String((await firefox.driver.getCapabilities()).get("browserVersion"));
+      if (Number.parseInt(version, 10) < 154) ctx.skip();
+
       await openEditor("save");
       await typeConfig(EDITED_CONFIG);
       await firefox.driver.findElement(By.id("cc-save")).click();
@@ -98,17 +117,32 @@ describe("options page (real Firefox, CC + probe)", () => {
       await firefox.driver.switchTo().window(handles[0]!);
 
       // nomatch.example matched no rule before this edit; it must now land in Editor.
-      // Drive it from a FRESH tab: CC keeps a tab that is already on a page and only
+      //
+      // Polled rather than attempted once, because runtime.reload() is asynchronous and
+      // nothing observable from here says when the new background has hydrated its
+      // config: the probe has its own storage namespace, and startup creates nothing to
+      // watch for. A fixed wait was enough on the channel this was written against and is
+      // not on 140 ESR, where the navigation met the OLD background — still live, still
+      // correctly applying the old config — and bought a throwaway.
+      //
+      // Each attempt is a FRESH tab: CC keeps a tab that is already on a page and only
       // cancels its navigation, and a cancelled navigation never returns to the driver.
-      const url = `http://nomatch.example:${serverPort}/?cb=edited-${Date.now()}`;
-      await firefox.driver.switchTo().newWindow("tab");
-      try {
-        await firefox.driver.get(url);
-      } catch {
-        // CC reopens the blank tab into Editor, tearing this one down — expected.
+      const deadline = Date.now() + 20_000;
+      let container = "";
+      while (Date.now() < deadline) {
+        const url = `http://nomatch.example:${serverPort}/?cb=edited-${Date.now()}`;
+        await firefox.driver.switchTo().newWindow("tab");
+        try {
+          await firefox.driver.get(url);
+        } catch {
+          // CC reopens the blank tab into Editor, tearing this one down — expected.
+        }
+        await awaitContainerTab(firefox.driver, url);
+        container = await readContainerName(firefox.driver);
+        if (container === "Editor") break;
+        await firefox.driver.sleep(500);
       }
-      await awaitContainerTab(firefox.driver, url);
-      expect(await readContainerName(firefox.driver)).toBe("Editor");
+      expect(container, "the saved config never took effect").toBe("Editor");
     });
   });
 

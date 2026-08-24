@@ -574,6 +574,16 @@ issue on regression rather than blocking a PR — guard rails, not gatekeepers. 
   minutes. Residual risk on F8/F10; mitigated by the L3 restart harness and dogfooding.
 - **Real IdP quirks** — the mock IdP covers code and SAML-POST shapes, not every vendor's
   nonstandard flow. F9 in the wild needs the author's real logins.
+- **What ESR does that `latest` does not, beyond what the suite asserts.** The matrix's
+  first run found three cases whose green depended on `latest`'s timing, and all three
+  were the suite's assumptions rather than CC's behaviour: `tabs.create({})` answering
+  with a pre-commit `about:blank` snapshot on ESR (which is why auto-temp watches
+  `onTabUpdated` too, so ESR is the only channel exercising that path), Marionette raising
+  `NoSuchWindowError` when Esc closes the tab the keystroke went to, and a fixed wait for a
+  `runtime.reload()`. A fourth is a real platform difference and the one case ESR cannot
+  run: `runtime.reload()` does not bring a temporarily installed extension back on 140 ESR,
+  so nothing about a config save is observable there. Whether that reaches real ESR users
+  is unknown here — the harness cannot install permanently without signing.
 - **Firefox API drift** — narrowed rather than closed. The `latest`/`latest-esr` matrix
   blocks every push and the nightly **Nightly** tripwire gives months of notice, but all
   three run the same suite: a behaviour no case asserts can still change under us. The

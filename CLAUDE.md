@@ -382,6 +382,12 @@ reasonable-looking change wrong**.
   serves the builds, and GitHub release assets come from `objects.githubusercontent.com`.
   Probe those before concluding L4/L5 cannot be run here — that conclusion has been drawn
   wrongly more than once, and it silently drops the only levels that see a real browser.
+- **`runtime.reload()` does not bring a TEMPORARILY installed extension back on 140 ESR.**
+  Measured 2026-08-24 against 154.0: after a config save the OLD background is still
+  running the OLD config, and CC's own pages stop resolving at their `moz-extension` uuid.
+  Nothing about a config save is observable there, so `options.test.ts` skips that one case
+  below 154 — the only case the ESR leg cannot run. The harness cannot tell whether real
+  ESR users are affected, because it cannot install permanently without signing.
 - **Unsigned CC loads on *release* Firefox by TEMPORARY install** (`installAddon(xpi,
   true)`), which grants `webRequestBlocking`. Don't reach for Developer Edition, Nightly
   or signing to fix a load failure — `xpinstall.signatures.required=false` is ignored on
