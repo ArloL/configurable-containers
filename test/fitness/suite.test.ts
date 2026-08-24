@@ -36,7 +36,7 @@ describe("fitness — the run that says green ran everything", () => {
     // The exclusion is what makes the rule above enforceable: a `*.realtime.test.ts` file
     // is excluded by `vitest.config.ts` and run by `vitest.realtime.config.ts`, so the
     // nightly run executes it in full rather than reporting a skip nobody reads.
-    const realtime = tests.filter((f) => /\.realtime\.test\.ts$/.test(f.path));
+    const realtime = tests.filter((f) => f.path.endsWith(".realtime.test.ts"));
     expect(realtime.length).toBeGreaterThan(0);
     expect(filesMatching(realtime, /\b(it|test|describe)\.skip\s*\(/)).toEqual([]);
   });

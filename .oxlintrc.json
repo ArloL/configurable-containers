@@ -1,0 +1,69 @@
+// Source linting (`npm run lint`, every push in CI).
+//
+// The gate `tsc` cannot be: TypeScript proves the types line up, this proves the
+// PROMISES do. Almost everything this extension does is an async effect behind a
+// synchronously-registered listener, and the two ways that goes wrong are both invisible
+// to the compiler — a promise nobody awaits or catches, and an async function passed
+// where a void-returning listener was expected (in Firefox that second one claims
+// `runtime.onMessage`'s reply channel from the sibling the message was addressed to,
+// which CLAUDE.md documents and `test/fitness/listeners.test.ts` can only pin the
+// registration COUNT of). Both are conventions this repo kept by hand until now.
+//
+// Why oxlint and not typescript-eslint: `typescript@7` is the Go port, and its package
+// exports `lib/version.cjs` plus `unstable/*` — the JS compiler API that typescript-eslint
+// builds every type-aware rule on is simply not there. Making it work means resolving a
+// second TypeScript 5 for the linter alone, so lint and `npm run typecheck` would then
+// disagree about the language. oxlint reads types through `oxlint-tsgolint`, which is
+// tsgo — the same compiler `npm run typecheck` runs. One language, one answer.
+//
+// Type-aware rules only run with `--type-aware`; the npm script passes it.
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  // `correctness` (the default category) plus the type-aware rules below, and nothing
+  // else. `pedantic` is 1193 findings here and `style` is 5632, none of them a bug —
+  // and a check that cries wolf gets deleted and takes its invariant with it.
+  "categories": { "correctness": "error" },
+  "rules": {
+    // The four that pay for the linter.
+    "typescript/no-floating-promises": "error",
+    "typescript/no-misused-promises": "error",
+    "typescript/await-thenable": "error",
+    // A condition the types say can never fire is a dead defence. This suite already
+    // hunts those with Stryker and v8 coverage (TESTING.md names two in `matcher.ts`);
+    // this finds them on the push that writes them. It reports the honest ones too —
+    // `tabs[0]` is `Tab | undefined` at runtime whatever the compiler says, which is
+    // what `noUncheckedIndexedAccess` is in tsconfig.json for.
+    "typescript/no-unnecessary-condition": "error",
+    // The `Decision` union is exhaustively switched with no `default` so a new variant
+    // fails to compile until it is handled (TESTING.md, "Cross-cutting gates"). This
+    // holds every other union to the same rule; a `default` that quietly absorbs a new
+    // case is how that guarantee is lost.
+    "typescript/switch-exhaustiveness-check": "error",
+    "typescript/no-unnecessary-type-assertion": "error",
+
+    // Off, each because every hit here is a false alarm rather than a finding:
+    //
+    // There is one class in `src/` (ConfigError) and no method is ever passed as a
+    // value; what this rule flags is closures read off object literals — `engine.reopen`
+    // handed to `createPicker`, a mock's `port.createTab` handed to `expect`. `this` is
+    // not involved in any of them.
+    "typescript/unbound-method": "off",
+    //
+    // Every spread it flags here is a SNAPSHOT of a collection the loop body mutates:
+    // `pause`'s two `[...armed]` loops call `disarm`, which does `armed.delete`, and the
+    // reaper's `[...live]` calls `reapProfile`, which does `live.delete`. Taking the
+    // rule's advice would iterate a set while deleting from it — it is not a false
+    // alarm about style, it is wrong about the code.
+    "unicorn/no-useless-spread": "off"
+  },
+  "overrides": [
+    {
+      // The mock browser and the L3 suite construct states the types say are impossible
+      // on purpose — that is what modelling a platform whose events lie to you means.
+      // In `src/` the same rule is a dead-defence detector; here it would only ever
+      // flag a test for being thorough.
+      "files": ["test/**"],
+      "rules": { "typescript/no-unnecessary-condition": "off" }
+    }
+  ]
+}

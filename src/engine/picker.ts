@@ -4,6 +4,10 @@ import type { BrowserPort, MessageSender, Tab } from "./port";
 import { supersede } from "./supersede";
 import { encodePayload, type PickMessage, type PickResponse } from "../extension/picker-protocol";
 
+function isPickMessage(msg: unknown): msg is PickMessage {
+  return typeof msg === "object" && msg !== null && (msg as { type?: unknown }).type === "cc-pick";
+}
+
 export interface PickerOptions {
   port: BrowserPort;
   config: Config;
@@ -50,8 +54,8 @@ export function createPicker(opts: PickerOptions): Picker {
   // Not `async`: "not ours" must be a synchronous undefined, and an async function returns
   // a Promise before its first line runs.
   function handleMessage(msg: unknown, sender: MessageSender): Promise<PickResponse> | undefined {
-    const m = msg as PickMessage;
-    if (m?.type !== "cc-pick") return undefined;
+    if (!isPickMessage(msg)) return undefined;
+    const m = msg;
     return (async () => {
       // The tab to consume is the one that spoke, never one the message names: the hash
       // payload the page renders from is attacker-reachable (a crafted

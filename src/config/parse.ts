@@ -187,7 +187,7 @@ function parseCookie(raw: unknown, path: string): CookieSpec {
   if ("partitionKey" in raw) {
     const v = raw.partitionKey;
     if (!isMapping(v)) throw new ConfigError(`${path}.partitionKey must be an object`, { path: `${path}.partitionKey` });
-    spec.partitionKey = v as NonNullable<CookieSpec["partitionKey"]>;
+    spec.partitionKey = v;
   }
 
   return spec;

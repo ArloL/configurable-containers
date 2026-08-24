@@ -15,7 +15,7 @@
 // The output is stable across machines: containers keep contextualIdentities
 // order, assignments are sorted by domain — so two dumps diff cleanly.
 
-(async () => {
+void (async () => {
   // MAC stores site assignments under storage.local with this key prefix.
   const PREFIX = "siteContainerMap@@_";
 

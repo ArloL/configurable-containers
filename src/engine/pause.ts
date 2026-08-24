@@ -1,4 +1,4 @@
-import { targetLabel, type Declinable } from "./engine";
+import { targetLabel } from "./engine";
 import type { Decision } from "../resolver/types";
 import type { ContainerRow, PauseStatusResponse, PauseToggleMessage, PauseToggleResponse } from "../extension/pause-protocol";
 import type { BrowserPort, Clock } from "./port";
@@ -60,15 +60,17 @@ const NOTIFY_TITLE = "Configurable Containers";
 // needed?" — without them the record only proves CC saw the host.
 function wouldHaveLabel(decision: Decision): string {
   return decision.kind === "reopen" || decision.kind === "choice"
-    ? targetLabel(decision as Declinable)
+    ? targetLabel(decision)
     : "no action";
 }
 
 function isRecording(v: unknown): v is Recording {
-  const r = v as Recording;
+  if (typeof v !== "object" || v === null) return false;
+  // `Partial`, not `Recording`: cast to the whole shape and every check below reads as
+  // comparing a `string` to "string", which is to say as dead code — the assertion turns
+  // off the checking this function exists to do.
+  const r = v as Partial<Recording>;
   return (
-    typeof r === "object" &&
-    r !== null &&
     typeof r.id === "string" &&
     typeof r.cookieStoreId === "string" &&
     typeof r.container === "string" &&

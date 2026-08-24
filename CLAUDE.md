@@ -247,6 +247,38 @@ reasonable-looking change wrong**.
   navigation, back navigation and the revert into one case. Full notes:
   `docs/superpowers/specs/2026-07-31-youtube-original-audio-design.md` §2.
 
+## Static analysis: two gates, and why the obvious linter is not one
+
+- **`typescript@7` is the Go port, and it exports no JS compiler API** — the package's
+  `exports` are `lib/version.cjs` plus `unstable/*`. typescript-eslint builds every
+  type-aware rule on the API that is gone, so making it work means resolving a **second**
+  TypeScript 5 for the linter alone and letting lint and `npm run typecheck` disagree
+  about the language. `oxlint` + `oxlint-tsgolint` reads types through tsgo — the same
+  compiler `npm run typecheck` runs. Type-aware rules only fire with `--type-aware`; the
+  `lint` script passes it, and `--deny-warnings`, because a rule that only warns is a rule
+  nobody fixes.
+- **Three rules are off and one of them is off because it is WRONG about this code.**
+  `unicorn/no-useless-spread` flags `[...armed]` in `pause` and `[...live]` in the reaper;
+  both loop bodies (`disarm`, `reapProfile`) delete from the collection being iterated, so
+  taking its advice introduces the bug. `typescript/unbound-method` has no true positive
+  here — there is one class in `src/` and no method is ever passed as a value.
+  `no-unnecessary-condition` is off for `test/**` only: the mock builds states the types
+  call impossible on purpose, while in `src/` the same rule is a dead-defence detector.
+- **A suppression comment disables the line after the DIRECTIVE, not after the reason.**
+  `// oxlint-disable-next-line <rule> -- because…` spanning three lines suppresses the
+  second comment line and nothing else, silently. Put the prose above and the directive
+  immediately over the code.
+- **`?? ""` on a `spawnSync().stdout` is not a dead defence**, whatever the types say:
+  `@types/node` declares `string` once an encoding is set, and a spawn that never started
+  reports null — which is the case `harness/reaper.ts` exists for. Both sites carry a
+  suppression rather than a "fix".
+- **`exactOptionalPropertyTypes` draws a real line at the port seam.** A property mapped
+  *out* of a browser object carries `| undefined` because Firefox sets it that way;
+  `CreateTabProps.url` does not, because absent and `undefined` are different requests
+  and only one of them lands on the new-tab page. Keep the two call sites spreading the
+  key in conditionally rather than passing `url: undefined` and trusting Firefox's
+  tolerance.
+
 ## What a green test run can still hide
 
 - **`test/fitness/` pins the properties that make every other gate mean something.** Its

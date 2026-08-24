@@ -12,7 +12,6 @@ import {
   reconcile,
   splitParts,
   staleKeys,
-  type RemoteConfig,
 } from "../../src/config/sync-record";
 
 const anEdit = (text: string, updatedAt: number) => ({ text, updatedAt });
@@ -140,7 +139,7 @@ describe("reconciling the local config against the published one", () => {
   it.each([["incomplete"], ["unreadable"]] as const)(
     "waits on a %s record instead of publishing over it",
     (state) => {
-      expect(reconcile(local, { state } as RemoteConfig)).toEqual({ action: "none" });
+      expect(reconcile(local, { state })).toEqual({ action: "none" });
     },
   );
 

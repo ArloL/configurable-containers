@@ -315,8 +315,39 @@ mutant no other case catches.
   invariant with it); and **the reason lives beside the exception**. Thirteen mutations
   were revert-verified against this batch. Design notes:
   [`docs/superpowers/specs/2026-08-24-fitness-functions-design.md`](docs/superpowers/specs/2026-08-24-fitness-functions-design.md).
-- **Type checking** — `tsc --noEmit` plus a lint pass; the `Decision` union is exhaustively
-  `switch`ed with no default, so a new variant fails to compile until handled.
+- **Type checking** — `tsc --noEmit` at `strict` plus six of the checks `strict` leaves
+  out. Four are free here; the two that are not both earn it. `noUncheckedIndexedAccess`
+  is why `Action.containers` is `[string, ...string[]]` rather than a comment promising
+  the same thing, and it un-deadened two guards the compiler had been treating as
+  unreachable. `exactOptionalPropertyTypes` draws the line this codebase actually needs:
+  a property mapped *out* of a browser object is `?: T | undefined`, because Firefox
+  really does hand over `openerTabId: undefined` — but `CreateTabProps.url` stays strict,
+  since there absent and undefined are different requests and only one of them opens the
+  new-tab page. Unions are exhaustively `switch`ed with no `default`, so a new variant
+  fails to compile until it is handled.
+- **Source lint** — `npm run lint` (oxlint, type-aware via `oxlint-tsgolint`), every push,
+  seconds. The gate `tsc` is not: TypeScript proves the types line up, this proves the
+  *promises* do. Nearly everything here is an async effect behind a synchronously
+  registered listener, and the two ways that goes wrong are both invisible to the
+  compiler — a promise nobody awaits or catches, and an async function passed where a
+  void-returning listener was expected, which in Firefox claims `runtime.onMessage`'s
+  reply channel from the sibling that was addressed. Both were conventions kept by hand
+  until now; `no-floating-promises` and `no-misused-promises` are the mechanical version.
+
+  Scope is `correctness` plus six type-aware rules and nothing else: `pedantic` is 1193
+  findings here and `style` is 5632, none of them a bug, and a check that cries wolf gets
+  deleted and takes its invariant with it. Three rules are **off**, each with its reason
+  in `.oxlintrc.json` beside it, and one of those reasons is that the rule is wrong about
+  this code — every spread `unicorn/no-useless-spread` flags is a snapshot of a collection
+  the loop body deletes from.
+
+  What the first run found, beyond style: an `async` callback handed to `clock.setTimeout`
+  in the redirector-closer, where a rejection had nobody to reject to; two runtime
+  validators (`isPickMessage`, `isRecording`) whose `as` cast had switched off the type
+  checking of the very shape they exist to check, so a renamed field would have silently
+  stopped being validated; and a `.sort()` over numeric tab ids in an e2e case, which
+  orders 10 before 2 — passing only because both sides of the comparison were sorted the
+  same wrong way.
 - **Determinism** — L1–L3 use a fake clock and seeded fast-check; a failing property prints
   its seed for exact replay. No `sleep`, no wall clock. The mutation run additionally
   **pins** fast-check's seed (`test/fast-check-seed.ts`, loaded by that config alone):

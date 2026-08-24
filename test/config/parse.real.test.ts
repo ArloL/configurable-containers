@@ -74,6 +74,9 @@ describe("parseConfig — real configurable-containers.config.yaml", () => {
       s.run.includes("getAvailableAudioTracks"),
     )!.run;
     expect(run.split("\n").length).toBeGreaterThan(1);
+    // Parsing IS the assertion: a `scripts:` snippet ships as a string inside YAML, so
+    // this is the only thing in the toolchain that ever compiles it. Nothing runs it.
+    // oxlint-disable-next-line typescript/no-implied-eval
     expect(() => new Function(run)).not.toThrow();
   });
 

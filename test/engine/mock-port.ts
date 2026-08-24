@@ -128,7 +128,7 @@ export function aFakeBrowser(): MockPort {
   const onTabRemovedHs: ((tabId: number) => void)[] = [];
   const onTabUpdatedHs: ((tab: Tab, info: TabUpdateInfo) => void)[] = [];
   const headersHs: ((d: HeadersDetails) => Promise<BlockingHeadersResponse | void>)[] = [];
-  const messageHs: ((msg: unknown, sender: MessageSender) => unknown | Promise<unknown>)[] = [];
+  const messageHs: ((msg: unknown, sender: MessageSender) => unknown)[] = [];
   const commandHs: ((name: string) => void)[] = [];
   const actionClickedHs: ((tab: Tab) => void)[] = [];
   let activeTab: Tab | null = null;

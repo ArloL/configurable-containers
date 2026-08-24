@@ -96,7 +96,7 @@ describe("inherit — a tab whose opener is in another container (real Firefox, 
     // still pointing at a tab in Chat. Everything below is only a test while this holds.
     expect(portalTab.openerTabId).toBe(chatTab.id);
 
-    const tabIdsBefore = (await listTabs(firefox.driver)).map((t) => t.id).sort();
+    const tabIdsBefore = (await listTabs(firefox.driver)).map((t) => t.id).sort((a, b) => a - b);
 
     // The SSO hop, from the portal page the way a login redirect does — by tab id,
     // since the driver must stay on the chat tab to keep relaying.
@@ -109,6 +109,6 @@ describe("inherit — a tab whose opener is in another container (real Firefox, 
     expect(landed.container).toBe("Portal");
     // And the session it belongs to is the only one open: no tab was bought for it, in
     // Chat or anywhere else.
-    expect((await listTabs(firefox.driver)).map((t) => t.id).sort()).toEqual(tabIdsBefore);
+    expect((await listTabs(firefox.driver)).map((t) => t.id).sort((a, b) => a - b)).toEqual(tabIdsBefore);
   }, 60_000);
 });
