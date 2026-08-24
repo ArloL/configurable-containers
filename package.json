@@ -8,6 +8,7 @@
     "test:realtime": "vitest run --config vitest.realtime.config.ts",
     "test:coverage": "vitest run --config vitest.coverage.config.ts",
     "test:mutation": "stryker run",
+    "test:flake": "tsx scripts/flake-check.ts",
     "typecheck": "tsc --noEmit",
     "lint": "oxlint --type-aware --deny-warnings src test harness scripts extensions",
     "manual": "tsx harness/manual.ts",

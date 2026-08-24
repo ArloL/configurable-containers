@@ -336,6 +336,24 @@ mutant no other case catches.
   This gate finds dead defences too, and takes the same exit: the two in `matcher.ts`
   Stryker reports unreachable carry a `/* v8 ignore */` beside their `// Stryker disable`.
   Excluding a file, or lowering a floor, is not an exit.
+- **Determinism of the browser tier** — `npm run test:flake`, nightly. Every other gate
+  asks whether the suite is green. This asks whether green means anything: L4/L5 drive a
+  real Firefox through a real network stack and real timers, and one run cannot tell a
+  1-in-20 case from a solid one. It runs `test/e2e` three times and fails **only on
+  disagreement** — a case that fails all three is the suite being red, which `ci.yml`
+  already reports.
+
+  Deliberately not `--retry`, which turns a race into a pass and throws away the evidence
+  that there was one. Every "flake" this harness has actually had was a race in the case:
+  a probe reply landing after the navigation that destroyed the document it was written
+  into, an assertion made before `reportTab` finished its two cookie reads. A run that
+  never reached a case counts as a disagreement too — a file that throws on import answers
+  for none of its cases, and reading that absence as "unchanged" is how a suite that
+  stopped running half of itself stays quiet.
+
+  The comparison has tests of its own (`test/harness/flake-check.test.ts`) for the reason
+  the reaper does: it runs where nobody is watching, and a comparison that always answered
+  "consistent" would look exactly like a healthy suite.
 - **Fitness functions** — `test/fitness/`, in `npm test`, milliseconds. Every gate above
   asks whether the code is *right*; these ask whether the properties that make those gates
   **mean** anything are still true. Each exists because the property it pins is stated in

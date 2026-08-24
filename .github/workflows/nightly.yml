@@ -76,11 +76,54 @@ jobs:
       - name: Mutate the resolver, the matcher and the same-site check
         run: npm run test:mutation
 
+  flake:
+    name: e2e determinism
+    runs-on: ubuntu-latest
+    # Three passes over the browser tier. Generous, because a run killed at the cap looks
+    # exactly like the thing this job exists to report.
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # test/e2e/mac-interop.test.ts FAILS rather than skips without it, and a case that
+      # fails every run would be reported here as red rather than as flaky — true, but not
+      # what anyone wants this job to say.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: mozilla/multi-account-containers
+          path: mac
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: browser-actions/setup-firefox@0bc507ddf224827e3b1af68e014d5e42ab93e795 # v1.7.2
+        id: firefox
+        with:
+          firefox-version: latest
+
+      - run: npm ci
+
+      # Fails only on DISAGREEMENT between the runs. A case that fails all three is the
+      # suite being red, which ci.yml already reports; a case that answers differently is
+      # a race, and `npm test` deliberately has no --retry to paper over it.
+      - name: Run the browser tier three times and compare
+        env:
+          FIREFOX_BIN: ${{ steps.firefox.outputs.firefox-path }}
+        run: npm run test:flake
+
   report-regression:
     name: Report a regression
     needs:
     - disposal-realtime
     - mutation
+    - flake
     # Nobody watches a scheduled run, so a red night has to come and find us. Only on
     # failure — a cancelled or skipped run is not a regression.
     if: failure()
@@ -96,6 +139,7 @@ jobs:
         RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         DISPOSAL_RESULT: ${{ needs.disposal-realtime.result }}
         MUTATION_RESULT: ${{ needs.mutation.result }}
+        FLAKE_RESULT: ${{ needs.flake.result }}
       run: |
         set -euo pipefail
         # One issue per failing guard rail — they fail for unrelated reasons and are
@@ -124,6 +168,27 @@ jobs:
         - **never removed** — a long background-page timer was throttled, coalesced or
           dropped. Every other disposal test uses a fake clock or a 500ms grace and
           would stay green through it (TESTING.md, F10).
+        EOF
+        )"
+        fi
+
+        if [ "$FLAKE_RESULT" = failure ]; then
+          report "Nightly e2e determinism is failing" "$(cat <<EOF
+        \`npm run test:flake\` failed: $RUN_URL
+
+        The browser tier was run three times and did not give the same answer every time.
+        The log names each case with its run-by-run story. Two shapes, and the story says
+        which:
+
+        - **passed → failed → passed** — a race in the case. The ones this harness has
+          already had are in TESTING.md's e2e section: a probe reply landing after the
+          navigation that destroyed the document it was written into, an assertion made
+          before \`reportTab\` finished its two cookie reads. The fix is the case.
+        - **passed → never ran** — the file did not get as far as that case, so something
+          threw on import or the run died. Look at the run's own output, not at the case.
+
+        Not a way it goes green: \`--retry\`. It turns a race into a pass and throws away
+        the evidence that there was one (TESTING.md, "Cross-cutting gates").
         EOF
         )"
         fi
