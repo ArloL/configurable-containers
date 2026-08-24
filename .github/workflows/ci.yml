@@ -12,6 +12,23 @@ permissions: {}
 jobs:
   test:
     runs-on: ubuntu-latest
+    # Firefox API drift is the one failure class this suite is otherwise blind to: every
+    # level below L4 runs against a mock, and the facts the engine is built on ("Firefox
+    # fires onBeforeNavigate before that navigation's request", "tabs.create rejects
+    # about:newtab") were measured on one build. ESR ships a different set of extension
+    # APIs and is what enterprise and Debian users run, so a break there is a break for
+    # real users that `latest` alone would never show.
+    #
+    # fail-fast: false so one channel's failure does not hide the other's result, which is
+    # the first thing anyone needs to know when this goes red.
+    #
+    # The non-browser steps run twice per push. That is a few seconds against the job
+    # split TESTING.md's sketch had and this repo declined; the Firefox suite is the
+    # minutes, and it genuinely differs between the two.
+    strategy:
+      fail-fast: false
+      matrix:
+        firefox: [latest, latest-esr]
     permissions:
       contents: read
     steps:
@@ -34,8 +51,11 @@ jobs:
       - uses: browser-actions/setup-firefox@0bc507ddf224827e3b1af68e014d5e42ab93e795 # v1.7.2
         id: firefox
         with:
-          firefox-version: latest
+          firefox-version: ${{ matrix.firefox }}
 
+      # Printed on purpose: when a case fails on one channel only, the first question is
+      # which build it was, and the answer should be in the log rather than inferred from
+      # the job name.
       - env:
           FIREFOX_BIN: ${{ steps.firefox.outputs.firefox-path }}
         run: '"$FIREFOX_BIN" --version'

@@ -551,15 +551,19 @@ issue on regression rather than blocking a PR — guard rails, not gatekeepers. 
 
 **Built so far**, against that sketch:
 
-- `.github/workflows/ci.yml` — one `test` job on every push: `typecheck`, `lint:ext`
-  (addons-linter, what AMO runs server-side), then `npm test` end to end. The
-  static/unit/build/integration split is not worth its overhead at this size, and the
-  Firefox `latest`/`esr` matrix is not built.
-- `.github/workflows/nightly.yml` — `disposal-realtime` and `mutation`, plus a
-  `report-regression` job that opens **one** issue per failing guard rail for a failing
-  streak and comments on it thereafter. Scheduled runs go unwatched, so a red night has to
-  come and find us; the two rails fail for unrelated reasons and are fixed by different
-  work, so they get an issue each.
+- `.github/workflows/ci.yml` — one `test` job on every push, across a
+  `latest`/`latest-esr` Firefox matrix: `typecheck`, `lint`, `audit`, `lint:ext`
+  (addons-linter, what AMO runs server-side), `test:coverage`, then `npm test` end to end.
+  The static/unit/build/integration split is still not worth its overhead at this size —
+  the matrix runs the non-browser steps twice, which is seconds against the minutes the
+  browser suite costs and which genuinely differ between channels. `fail-fast: false`, so
+  one channel going red never hides the other's answer.
+- `.github/workflows/nightly.yml` — five guard rails: `disposal-realtime`, `mutation`,
+  `flake`, `firefox-nightly` and `reproducible-build`, plus a `report-regression` job that
+  opens **one** issue per failing rail for a failing streak and comments on it thereafter.
+  Scheduled runs go unwatched, so a red night has to come and find us; the rails fail for
+  unrelated reasons and are fixed by different work, so they get an issue each, and each
+  issue body says what the two or three shapes of that failure mean.
 
 ## What CI still can't catch
 
@@ -568,6 +572,12 @@ issue on regression rather than blocking a PR — guard rails, not gatekeepers. 
   minutes. Residual risk on F8/F10; mitigated by the L3 restart harness and dogfooding.
 - **Real IdP quirks** — the mock IdP covers code and SAML-POST shapes, not every vendor's
   nonstandard flow. F9 in the wild needs the author's real logins.
-- **Firefox API drift** — new versions change `webRequest` and container behaviour. The
-  `latest`/`esr` matrix narrows this; a scheduled run against Firefox **Nightly**, allowed
-  to fail, is the early-warning tripwire worth adding.
+- **Firefox API drift** — narrowed rather than closed. The `latest`/`latest-esr` matrix
+  blocks every push and the nightly **Nightly** tripwire gives months of notice, but all
+  three run the same suite: a behaviour no case asserts can still change under us. The
+  measured facts are the exposed ones, and CLAUDE.md names them — `onBeforeNavigate`
+  firing before that navigation's `webRequest`, `tabs.create` refusing `about:newtab`,
+  `windowId` being honoured for popup windows, `onCreated` firing with `about:blank` first.
+- **Whether a green channel means a green browser** — the matrix proves the suite passes
+  on two builds, not that CC behaves identically on them. A difference neither channel's
+  run asserts is invisible to both.

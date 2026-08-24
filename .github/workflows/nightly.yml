@@ -118,6 +118,47 @@ jobs:
           FIREFOX_BIN: ${{ steps.firefox.outputs.firefox-path }}
         run: npm run test:flake
 
+  firefox-nightly:
+    name: Firefox Nightly tripwire
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: mozilla/multi-account-containers
+          path: mac
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+
+      # The early warning ci.yml's latest/latest-esr matrix cannot give: what Firefox is
+      # about to do, rather than what it does. A break here is months of notice on a
+      # webRequest or containers change; a break on `latest` is a break for users today.
+      - uses: browser-actions/setup-firefox@0bc507ddf224827e3b1af68e014d5e42ab93e795 # v1.7.2
+        id: firefox
+        with:
+          firefox-version: latest-nightly
+
+      - env:
+          FIREFOX_BIN: ${{ steps.firefox.outputs.firefox-path }}
+        run: '"$FIREFOX_BIN" --version'
+
+      - run: npm ci
+
+      - name: Run tests against Firefox Nightly
+        env:
+          FIREFOX_BIN: ${{ steps.firefox.outputs.firefox-path }}
+        run: npm test
+
   reproducible-build:
     name: Reproducible release build
     runs-on: ubuntu-latest
@@ -153,6 +194,7 @@ jobs:
     - mutation
     - flake
     - reproducible-build
+    - firefox-nightly
     # Nobody watches a scheduled run, so a red night has to come and find us. Only on
     # failure — a cancelled or skipped run is not a regression.
     if: failure()
@@ -170,6 +212,7 @@ jobs:
         MUTATION_RESULT: ${{ needs.mutation.result }}
         FLAKE_RESULT: ${{ needs.flake.result }}
         REPRO_RESULT: ${{ needs.reproducible-build.result }}
+        NIGHTLY_FF_RESULT: ${{ needs.firefox-nightly.result }}
       run: |
         set -euo pipefail
         # One issue per failing guard rail — they fail for unrelated reasons and are
@@ -198,6 +241,27 @@ jobs:
         - **never removed** — a long background-page timer was throttled, coalesced or
           dropped. Every other disposal test uses a fake clock or a 500ms grace and
           would stay green through it (TESTING.md, F10).
+        EOF
+        )"
+        fi
+
+        if [ "$NIGHTLY_FF_RESULT" = failure ]; then
+          report "Firefox Nightly tripwire is failing" "$(cat <<EOF
+        \`npm test\` failed against Firefox Nightly: $RUN_URL
+
+        This is the early warning, not a break for users: ci.yml runs the same suite
+        against \`latest\` and \`latest-esr\` on every push, and both were green when this
+        was written. What it means is that something Firefox is ABOUT to ship changes an
+        answer CC depends on.
+
+        The facts most likely to move are the measured ones, and CLAUDE.md names them:
+        webNavigation.onBeforeNavigate firing before that navigation's webRequest (the F13
+        view-source guard), tabs.create refusing about:newtab, tabs.create honouring
+        windowId for popup windows, and onCreated firing with about:blank before the real
+        url (bug 1586612).
+
+        A failure here is worth a bug filed upstream while there is still time, which is
+        the whole reason for running it.
         EOF
         )"
         fi
