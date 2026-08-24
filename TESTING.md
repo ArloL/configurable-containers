@@ -117,6 +117,49 @@ grammars, plus fuzz:
   arbitrary string, in all three grammars, because it runs inside the blocking handler
   where a throw is a navigation that never completes.
 
+## L1b — The other pure modules: the config parser and the sync record
+
+Two more modules are as pure as the resolver and never appear in the pyramid above,
+because neither routes anything. Both are still owned by the fast deterministic levels,
+and one of them is the only subsystem here whose failure mode is losing the user's work
+rather than mis-routing a tab.
+
+`src/config/sync-record.ts` decides what a machine does when its config and the published
+one disagree. It has **no L4 owner and cannot have one** — a test profile has no Firefox
+Account, adoption ends in `runtime.reload()`, and the probe has its own sync namespace —
+so the deterministic levels are the whole defence. What they defend against is a config
+silently replaced by an older one on every machine the user owns.
+
+Its two hardest properties are not statements about a single decision. They are about a
+*conversation*, and both fail as a **loop** rather than as a wrong answer, which is why
+no single-decision example finds them:
+
+- *Convergence* — from any interleaving of edits and syncs on two machines, sync
+  terminates: one config, both machines quiet. Equal text must never return `adopt`
+  (adoption reloads, so two machines would restart each other forever), and the
+  equal-stamp tie-break must give the two machines **opposite** answers, so exactly one
+  publishes. The tie is the *normal* first startup — every pre-sync config backfills to
+  the same stamp.
+- *No rollback* — the published stamp only ever moves forward. The way it would move
+  backwards is a read that caught the record mid-arrival: the parts and the meta land as
+  ordinary storage changes with nothing making them land together, so `decodeRecord` has
+  to answer `incomplete` and not `absent` — `absent` means *push*, and this machine would
+  publish its older config over the update still in flight, whose sender then adopts the
+  rollback.
+
+`test/config/sync-record.props.test.ts` drives both against a two-machine model with an
+arbitrary script of edits, whole syncs and **torn** syncs, checking the stamp after every
+step and quiescing at the end. Four mutations were revert-verified against it: reading a
+missing part as `absent`, letting equal text adopt, making the tie-break always push, and
+checking the record's integrity by length alone.
+
+One consequence worth stating separately: `hashText`'s digest and the `ccConfigMeta` /
+`ccConfigPart` key names are a **wire format**, not implementation details. One machine
+writes them and another reads them, and the two may be on different builds — change the
+algorithm and every record reads as `incomplete` on whichever machine disagrees, so sync
+stops permanently with nothing failing anywhere. They are pinned by known answers rather
+than by properties of the answers.
+
 ## L3 — Model-based interception & lifecycle
 
 Everything stateful runs here against a mock `browser.*` (fake `tabs`,
