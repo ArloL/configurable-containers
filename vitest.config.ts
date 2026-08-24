@@ -1,5 +1,5 @@
 import { defineConfig, configDefaults } from "vitest/config";
-import { ccDefines } from "./vitest.shared";
+import { ccDefines } from "./vitest.shared.ts";
 
 export default defineConfig({
   define: ccDefines,

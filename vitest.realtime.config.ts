@@ -1,5 +1,5 @@
 import { defineConfig } from "vitest/config";
-import { ccDefines } from "./vitest.shared";
+import { ccDefines } from "./vitest.shared.ts";
 
 // The nightly real-delay run: only *.realtime.test.ts, the cases that wait out
 // production timers instead of a wound-down one. Kept out of vitest.config.ts rather
