@@ -26,9 +26,9 @@ function workConfig(): Config {
 
 const ignoreChoices = () => {};
 
-// Every case that is not about pausing passes this. `pause` is a REQUIRED option rather
-// than an optional one precisely so it shows up here: an optional field is one a mock
-// forgets to set, and the coverage quietly stops.
+// Every case that is not about pausing passes this. `pause` is REQUIRED rather than
+// optional so it shows up here: an optional field is one a mock forgets to set, and
+// coverage quietly stops.
 const noPause: PauseRecorder = { isPaused: () => false, record: () => {} };
 
 // An armed container, plus a log of what the engine handed the recorder.
@@ -57,15 +57,15 @@ describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
     // index+1 = right after the source, whose id becomes the new tab's opener.
     expect(created).toMatchObject({ url: "https://example.com/", index: 4, active: true, openerTabId: sourceTab.id });
     // Reading start.test survives the click: history does not span containers, so
-    // replacing this tab would lose the page with no way back.
+    // replacing this tab loses the page with no way back.
     expect(browser.closedTabIds).toEqual([]);
     expect(browser.openTabs.get(sourceTab.id)?.url).toBe("https://start.test/");
   });
 
   it("replaces a source tab with nothing to lose, preserving its placement", async () => {
     const browser = aFakeBrowser();
-    // about:blank = a tab still pre-commit, which is what a middle-clicked or
-    // target=_blank link is. Keeping it would strand an empty tab beside every one.
+    // about:blank is a pre-commit tab, which is what a middle-clicked or target=_blank
+    // link is. Keeping it strands an empty tab beside every one.
     const sourceTab = browser.existingTab({ url: "about:blank", cookieStoreId: "firefox-default", index: 3, active: true, openerTabId: 7 });
     createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
 
@@ -89,10 +89,9 @@ describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
 
   it("keeps a window.open popup alive: its replacement opens in the popup's own window", async () => {
     const browser = aFakeBrowser();
-    // A share-button popup — window.open(url, "…", "width=640,height=480"). Its tab is
-    // pre-commit, so it takes the replace branch; without a window the replacement
-    // landed in the last focused normal window and removing the original closed the
-    // popup, taking the navigation with it.
+    // A share-button popup: window.open(url, "…", "width=640,height=480"). Its tab is
+    // pre-commit, so it takes the replace branch. Without a window the replacement landed
+    // in the last focused normal window, and removing the original closed the popup.
     const popup = browser.existingTab({ url: "about:blank", cookieStoreId: "firefox-default", windowId: 42, openerTabId: 7 });
     createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
 
@@ -145,8 +144,8 @@ describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
 
     await browser.navigates(aNavigationTo({ requestId: "1", tabId: sourceTab.id }));
     const newTab = [...browser.openTabs.values()].find((t) => t.id !== sourceTab.id)!;
-    // Real Firefox fires the reopened tab's onBeforeRequest BEFORE its url commits,
-    // so the tab still reads as about:blank even though it is already in Work.
+    // Firefox fires the reopened tab's onBeforeRequest BEFORE its url commits, so the tab
+    // still reads about:blank even though it is already in Work.
     newTab.url = "about:blank";
     await browser.navigates(aNavigationTo({ requestId: "2", tabId: newTab.id }));
 
@@ -166,8 +165,8 @@ describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
     const newTab = [...browser.openTabs.values()].find((t) => t.id !== tab.id)!;
     newTab.url = "about:blank"; // pre-commit for the whole redirect chain, as in real Firefox
 
-    // Its own request (reopenedNav absorbs this one) and then a 301 hop, which
-    // arrives on the same requestId with a different url and no guard left.
+    // Its own request, absorbed by reopenedNav, then a 301 hop arriving on the same
+    // requestId with a different url and no guard left.
     await browser.navigates(aNavigationTo({ requestId: "11", tabId: newTab.id, url: "https://linked.test/a" }));
     const hop = await browser.navigates(aNavigationTo({ requestId: "11", tabId: newTab.id, url: "https://www.linked.test/a" }));
 
@@ -180,25 +179,24 @@ describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
     const browser = aFakeBrowser();
     const tmp1 = browser.addContainerNamed({ name: "tmp1" });
     const readingTab = browser.existingTab({ url: "https://daringfireball.net/", cookieStoreId: tmp1.cookieStoreId, index: 3 });
-    // "Open Link in New Tab": Firefox makes a tab that inherits the opener's container
-    // and reads about:blank for its whole pre-commit life.
+    // "Open Link in New Tab": Firefox makes a tab that inherits the opener's container and
+    // reads about:blank until it commits.
     const linkTab = browser.existingTab({ url: "about:blank", cookieStoreId: tmp1.cookieStoreId, index: 4, openerTabId: readingTab.id });
     const suffix = sequentialTmpSuffixes();
     suffix(); // tmp1 above was issued by this counter
     createEngine({ port: browser.port, config: { rules: [], groups: [] }, deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: suffix });
 
-    // One click, but the tab's top-level load reaches webRequest twice — a second
-    // request for the same url, on its own requestId, while the first is still inside
-    // createIdentity/createTab. Read concurrently, both see the same pre-commit tab and
-    // both mint a throwaway: one click, two tabs.
+    // One click, but the load reaches webRequest twice: a second request for the same url,
+    // on its own requestId, while the first is still inside createIdentity/createTab. Read
+    // concurrently, both see the same pre-commit tab and both mint a throwaway.
     const [first, second] = await Promise.all([
       browser.navigates(aNavigationTo({ requestId: "1", tabId: linkTab.id, url: "https://linked.test/a" })),
       browser.navigates(aNavigationTo({ requestId: "2", tabId: linkTab.id, url: "https://linked.test/a" })),
     ]);
 
     expect(first).toEqual({ cancel: true });
-    // By the time the second is looked at, the tab it belonged to has been superseded
-    // and is gone — there is nothing left to route, and nothing to cancel.
+    // By the time the second is looked at, the tab it belonged to has been superseded, so
+    // there is nothing left to route and nothing to cancel.
     expect(second).toBeUndefined();
     expect(browser.createdContainers.map((c) => c.name)).toEqual(["tmp2"]);
     expect(browser.openedTabs).toHaveLength(1);
@@ -211,12 +209,12 @@ describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
 
     await browser.navigates(aNavigationTo({ requestId: "1", tabId: sourceTab.id, url: "https://example.com/" }));
     const newTab = [...browser.openTabs.values()].find((t) => t.id !== sourceTab.id)!;
-    // The reopened tab's own request never arrives — load aborted, or the user typed
-    // somewhere else first — so it never committed and still reads about:blank.
+    // The reopened tab's own request never arrives (load aborted, or the user typed
+    // elsewhere first), so it never committed and still reads about:blank.
     newTab.url = "about:blank";
 
-    // That later navigation is a real one, to a site no rule matches: it must get its
-    // own throwaway, not ride along in Work on the strength of a stale guard.
+    // That later navigation is real, to a site no rule matches: it needs its own
+    // throwaway, not a ride in Work on a stale guard.
     const blockingResponse = await browser.navigates(aNavigationTo({ requestId: "9", tabId: newTab.id, url: "https://other.test/" }));
 
     expect(blockingResponse).toEqual({ cancel: true });
@@ -237,9 +235,9 @@ describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
     const newTab = [...browser.openTabs.values()].find((t) => t.id !== tab.id)!;
     newTab.url = "about:blank";
 
-    // ...but HSTS upgrades the scheme BEFORE onBeforeRequest, so the tab's own first
-    // request arrives on a url we never asked for. It is still the navigation we
-    // reopened the tab to perform; treating it as a new one buys a second throwaway.
+    // ...but HSTS upgrades the scheme BEFORE onBeforeRequest, so the tab's first request
+    // arrives on a url we never asked for. It is still the navigation we reopened the tab
+    // to perform; treating it as new buys a second throwaway.
     const own = await browser.navigates(aNavigationTo({ requestId: "31", tabId: newTab.id, url: "https://linked.test/a" }));
 
     expect(own).toBeUndefined();
@@ -255,8 +253,8 @@ describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
     suffix(); // tmp1 above was issued by this counter
     createEngine({ port: browser.port, config: { rules: [], groups: [] }, deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: suffix });
 
-    // Middle-click / ctrl-click / target=_blank: Firefox opens a tab that INHERITS the
-    // opener's container and reads about:blank until the click's navigation commits.
+    // Middle-click, ctrl-click or target=_blank: Firefox opens a tab that INHERITS the
+    // opener's container and reads about:blank until the navigation commits.
     const opened = browser.existingTab({ url: "about:blank", cookieStoreId: tmp1.cookieStoreId, openerTabId: opener.id });
     const blockingResponse = await browser.navigates(aNavigationTo({ requestId: "20", tabId: opened.id, url: "https://dannykatch.substack.com/p/x" }));
 
@@ -291,10 +289,10 @@ describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
 
   it("two independent blank tabs to the same unmatched site are isolated from each other", async () => {
     const browser = aFakeBrowser();
-    // Two new tabs, neither opened from the other: no page of their own, no opener, and
-    // nothing in common but the address typed into both. Every other isolation case
-    // drives one tab, or a link from an opener — so nothing else says that the same site
-    // in two unrelated tabs is two sessions, which is the whole promise of a throwaway.
+    // Two new tabs, neither opened from the other: no page of their own, no opener, nothing
+    // in common but the address typed into both. Every other isolation case drives one tab
+    // or a link from an opener, so nothing else says the same site in two unrelated tabs is
+    // two sessions — the whole promise of a throwaway.
     const first = browser.existingTab({ url: "about:blank", cookieStoreId: "firefox-default" });
     const second = browser.existingTab({ url: "about:blank", cookieStoreId: "firefox-default" });
     createEngine({ port: browser.port, config: { rules: [], groups: [] }, deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
@@ -364,13 +362,13 @@ function choiceConfig(): Config {
 
 // A tab the browser opened FOR a link has no page of its own, so `current` cannot answer
 // "may this navigation keep the throwaway it is in" — but the tab starts in the container
-// of the page the click came from, and that page can. Reported: reading YouTube in a
-// throwaway, opening a video from the search results in a new tab put it in a SECOND
-// throwaway, logged out, where clicking the same link in place stays put.
+// of the page the click came from, and that page can. Reported: opening a video from a
+// YouTube search result in a new tab put it in a SECOND throwaway, logged out, where
+// clicking the same link in place stays put.
 describe("engine — a link opened in a new tab", () => {
   const noRules = () => ({ rules: [], groups: [] });
 
-  // The state Firefox leaves behind for "Open Link in New Tab": a tab pre-commit on
+  // What Firefox leaves behind for "Open Link in New Tab": a tab pre-commit on
   // about:blank, in its opener's container, pointing back at the page clicked.
   function aLinkTabFrom(browser: ReturnType<typeof aFakeBrowser>, opener: Tab): Tab {
     return browser.existingTab({ url: "about:blank", cookieStoreId: opener.cookieStoreId, openerTabId: opener.id, index: opener.index + 1 });
@@ -408,16 +406,16 @@ describe("engine — a link opened in a new tab", () => {
     expect(browser.createdContainers.map((c) => c.name)).toEqual(["tmp2"]);
   });
 
-  // `tabs.create` can name an opener in any container, and CC's own reopens do exactly
-  // that — a reopen exists BECAUSE the two containers differ. Reading the opener's page
-  // as this tab's own would then answer for a container the tab is not in.
+  // `tabs.create` can name an opener in any container, and CC's reopens do exactly that —
+  // a reopen exists BECAUSE the containers differ. Reading the opener's page as this tab's
+  // own would answer for a container the tab is not in.
   it("ignores the opener's page for a tab that is not in the opener's container", async () => {
     const browser = aFakeBrowser();
     const tmp1 = browser.addContainerNamed({ name: "tmp1" });
     const tmp2 = browser.addContainerNamed({ name: "tmp2" });
     const article = browser.existingTab({ url: "https://linked.test/a", cookieStoreId: tmp1.cookieStoreId });
-    // A tab CC reopened out of `article`: same site, pre-commit, opener carried along by
-    // `supersede` — but in a throwaway of its own, and its first request never arrived.
+    // A tab CC reopened out of `article`: same site, pre-commit, opener carried by
+    // `supersede`, but in a throwaway of its own whose first request never arrived.
     const reopened = browser.existingTab({ url: "about:blank", cookieStoreId: tmp2.cookieStoreId, openerTabId: article.id });
     const suffix = sequentialTmpSuffixes();
     suffix();
@@ -431,9 +429,8 @@ describe("engine — a link opened in a new tab", () => {
   });
 
   // The disposable path reads a non-http url as "a throwaway nobody has browsed in yet"
-  // and keeps the tab in it. Handing it an opener that is on one would park the link tab
-  // in its opener's throwaway whatever site it was headed for — the isolation this whole
-  // path exists to provide.
+  // and keeps the tab in it, so handing it such an opener would park the link tab in its
+  // opener's throwaway whatever site it was headed for.
   it("ignores an opener that is not on a page of its own", async () => {
     const browser = aFakeBrowser();
     const tmp1 = browser.addContainerNamed({ name: "tmp1" });
@@ -449,7 +446,7 @@ describe("engine — a link opened in a new tab", () => {
     expect(browser.createdContainers.map((c) => c.name)).toEqual(["tmp2"]);
   });
 
-  // Rules still decide for a tab that has no page of its own: `inheritedFrom` feeds the
+  // Rules still decide for a tab with no page of its own: `inheritedFrom` feeds the
   // disposable path only. F14's chain opens exactly this way — a Slack link in a new tab,
   // in Slack's container, to a host with a multi-open rule — and must still ask.
   it("does not let the opener's page answer for a rule that would ask", async () => {
@@ -536,8 +533,8 @@ describe("engine — F7 MAC defer + choice", () => {
 describe("engine.reopen — extracted F1-guarded effect", () => {
   it("reopens a tab into the target container, preserving placement, and guards the reopened tab's first nav", async () => {
     const browser = aFakeBrowser();
-    // The picker reaches here with the tab sitting on the choice page (a moz-extension
-    // url), which is a tab with nothing to lose — so this is the replacing path.
+    // The picker arrives with the tab on the choice page, a moz-extension url and so a tab
+    // with nothing to lose: the replacing path.
     const sourceTab = browser.existingTab({ url: "moz-extension://test/choice.html#x", cookieStoreId: "firefox-default", index: 3, active: true, openerTabId: 7 });
     const engine = createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
 
@@ -620,8 +617,8 @@ describe("engine — a paused container", () => {
     await browser.navigates(aNavigationTo({ tabId: tab.id, method: "POST" }));
     await browser.settle();
 
-    // F9's toast announces a routing rule that went UNAPPLIED. Under a pause nothing
-    // went unapplied — the user turned routing off. This pins the step ahead of F9's.
+    // F9's toast announces a rule that went UNAPPLIED. Under a pause nothing did — the
+    // user turned routing off. This pins the step ahead of F9's.
     expect(browser.notifications).toEqual([]);
   });
 
@@ -645,21 +642,19 @@ describe("engine — a paused container", () => {
 });
 
 // Ctrl+U. Firefox loads `view-source:https://example.com/` into a tab of its own and
-// fetches the document to print, so webRequest is handed an ordinary main_frame GET for
-// the INNER url with the tab still pre-commit on about:blank — nothing there says the
-// user asked for source rather than for the page. Routing it cancels the fetch and
-// reopens the plain url elsewhere, which loses the `view-source:` wrapper and (the tab
-// having nothing to lose yet) takes the source tab down with it.
-//
-// webNavigation.onBeforeNavigate is the one event that names the wrapped url, and
-// Firefox fires it before the request that navigation issues.
+// fetches the document to print, so webRequest is handed an ordinary main_frame GET for the
+// INNER url with the tab pre-commit on about:blank — nothing says the user asked for source
+// rather than the page. Routing it cancels the fetch, reopens the plain url elsewhere,
+// loses the `view-source:` wrapper and, the tab having nothing to lose, takes the source tab
+// down with it. webNavigation.onBeforeNavigate is the one event that names the wrapped url,
+// and Firefox fires it before the request that navigation issues.
 describe("engine — a view-source load", () => {
   const viewSourceOf = (url: string) => `view-source:${url}`;
 
   it("is left alone: the fetch behind Ctrl+U is not a navigation to route", async () => {
     const browser = aFakeBrowser();
-    // A brand new tab, pre-commit — indistinguishable, from the request alone, from a
-    // middle-clicked link, which is exactly why the mark has to come from elsewhere.
+    // A brand new pre-commit tab: from the request alone, indistinguishable from a
+    // middle-clicked link, which is why the mark has to come from elsewhere.
     const sourceTab = browser.existingTab({ url: "about:blank", cookieStoreId: "firefox-default" });
     createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
 
@@ -676,8 +671,8 @@ describe("engine — a view-source load", () => {
     const sourceTab = browser.existingTab({ url: "about:blank", cookieStoreId: "firefox-default" });
     createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
 
-    // One navigation, one onBeforeNavigate, several requests: a redirect chain reuses
-    // the requestId and announces no second navigation, so the mark must outlive hop 1.
+    // One navigation, one onBeforeNavigate, several requests: a redirect chain reuses the
+    // requestId and announces no second navigation, so the mark must outlive hop 1.
     browser.startsNavigating({ tabId: sourceTab.id, url: viewSourceOf("https://example.com/hop") });
     await browser.navigates(aNavigationTo({ tabId: sourceTab.id, url: "https://example.com/hop" }));
     const lastHop = await browser.navigates(aNavigationTo({ tabId: sourceTab.id, url: "https://example.com/" }));
@@ -688,8 +683,8 @@ describe("engine — a view-source load", () => {
 
   it("does not stop the tab being routed once it navigates somewhere for real", async () => {
     const browser = aFakeBrowser();
-    // A tab that is ON a page: `view_source.tab=false` puts the source in the current
-    // tab instead of a new one, and that tab is the one still to be routed afterwards.
+    // A tab that is ON a page: `view_source.tab=false` puts the source in the current tab,
+    // and that tab is the one still to be routed afterwards.
     const sourceTab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
     createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
 
@@ -697,8 +692,8 @@ describe("engine — a view-source load", () => {
     await browser.navigates(aNavigationTo({ tabId: sourceTab.id }));
     expect(browser.openedTabs).toEqual([]);
 
-    // Typing a url into that same tab. Nothing expires the mark on a timer — the next
-    // top-level navigation announcing itself is what clears it.
+    // Typing a url into that same tab. Nothing expires the mark on a timer: the next
+    // top-level navigation announcing itself clears it.
     browser.startsNavigating({ tabId: sourceTab.id, url: "https://example.com/" });
     const blockingResponse = await browser.navigates(aNavigationTo({ requestId: "2", tabId: sourceTab.id }));
 
@@ -733,20 +728,20 @@ describe("engine — a view-source load", () => {
 });
 
 // `initiator` answers "which container did this navigation come FROM". A tab's opener
-// answers that only while the tab has no page of its own: the moment it commits, the
-// page it is on is where the navigation comes from, and the opener is a tab the user
-// left behind — Firefox keeps `openerTabId` for the life of the tab, and `supersede`
-// carries it across every reopen.
+// answers that only while the tab has no page of its own: once it commits, the page it is
+// on is where the navigation comes from, and the opener is a tab the user left behind —
+// Firefox keeps `openerTabId` for the life of the tab, and `supersede` carries it across
+// every reopen.
 //
-// Reported (F14): on slack.com in "Haeger", clicking a link to portal.azure.com asked
-// which container, and picking "HSP" then opened login.microsoftonline.com tab after
-// tab, alternating Haeger and HSP. Opening portal.azure.com directly — or pasting the
-// same link into the location bar — worked, because those tabs have no opener.
+// Reported (F14): on slack.com in "Haeger", a link to portal.azure.com asked which
+// container, and picking "HSP" then opened login.microsoftonline.com tab after tab,
+// alternating Haeger and HSP. Opening portal.azure.com directly worked, because such tabs
+// have no opener.
 //
-// The loop needs no second bug to sustain it: reading the initiator off a stale opener
-// sends the HSP tab to Haeger, and `supersede` makes the tab it came from the new tab's
-// opener, so the next hop reads HSP and goes back. Each hop keeps the tab it left (both
-// are on a page), which is the tab-after-tab part.
+// The loop needs no second bug: reading the initiator off a stale opener sends the HSP tab
+// to Haeger, and `supersede` makes the tab it came from the new one's opener, so the next
+// hop reads HSP and goes back. Each hop keeps the tab it left, which is the tab-after-tab
+// part.
 describe("engine — an inherit host in a tab that has an opener", () => {
   const ssoConfig = () =>
     parseConfig(`
@@ -761,7 +756,7 @@ rules:
     const browser = aFakeBrowser();
     const haeger = browser.addContainerNamed({ name: "Haeger" });
     const hsp = browser.addContainerNamed({ name: "HSP" });
-    // The tab the user is actually in, still pointing back at the Slack tab it came from.
+    // The tab the user is in, still pointing back at the Slack tab it came from.
     const slackTab = browser.existingTab({ url: "https://slack.example/", cookieStoreId: haeger.cookieStoreId });
     const azureTab = browser.existingTab({
       url: "https://portal.azure.example/",
@@ -783,7 +778,7 @@ rules:
     const browser = aFakeBrowser();
     const haeger = browser.addContainerNamed({ name: "Haeger" });
     const opener = browser.existingTab({ url: "https://slack.example/", cookieStoreId: haeger.cookieStoreId });
-    // target=_blank / middle-click: pre-commit on about:blank, so the opener is the only
+    // target=_blank or middle-click: pre-commit on about:blank, so the opener is the only
     // thing that says where this navigation came from.
     const blank = browser.existingTab({ url: "about:blank", cookieStoreId: "firefox-default", openerTabId: opener.id });
     createEngine({ port: browser.port, config: ssoConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
@@ -799,8 +794,8 @@ rules:
     const haeger = browser.addContainerNamed({ name: "Haeger" });
     const hsp = browser.addContainerNamed({ name: "HSP" });
     const config = ssoConfig();
-    // Wired as `wireBackground` does: the picker reopens through the engine's own
-    // F1-guarded `reopen`, which is what carries the opener along.
+    // Wired as `wireBackground` does: the picker reopens through the engine's F1-guarded
+    // `reopen`, which carries the opener along.
     let picker: ReturnType<typeof createPicker>;
     const engine = createEngine({
       port: browser.port,
@@ -814,7 +809,7 @@ rules:
     browser.port.onMessage((msg, sender) => picker.handleMessage(msg, sender));
 
     const slackTab = browser.existingTab({ url: "https://slack.example/", cookieStoreId: haeger.cookieStoreId });
-    // Slack opens the link in a tab of its own: inherits Haeger, pre-commit, opener set.
+    // Slack opens the link in a tab of its own: Haeger, pre-commit, opener set.
     const linkTab = browser.existingTab({ url: "about:blank", cookieStoreId: haeger.cookieStoreId, openerTabId: slackTab.id });
 
     const portal = "https://portal.azure.example/";
@@ -826,14 +821,14 @@ rules:
 
     const azureTab = [...browser.openTabs.values()].find((t) => t.url === portal)!;
     expect(azureTab.cookieStoreId).toBe(hsp.cookieStoreId);
-    // The opener has ridden along through both supersedes — this is the stale pointer.
+    // The opener rode along through both supersedes: this is the stale pointer.
     expect(azureTab.openerTabId).toBe(slackTab.id);
 
     // Its own navigation, which reopenedNav owns from its first request.
     expect(await browser.navigates(aNavigationTo({ requestId: "2", tabId: azureTab.id, url: portal }))).toBeUndefined();
 
-    // The portal then sends the user to the identity provider: a fresh navigation, no
-    // longer ours. Before the fix this reopened into Haeger and the ping-pong started.
+    // The portal then sends the user to the identity provider: a fresh navigation, no longer
+    // ours. Before the fix this reopened into Haeger and the ping-pong started.
     const openedSoFar = browser.openedTabs.length;
     const blockingResponse = await browser.navigates(
       aNavigationTo({ requestId: "3", tabId: azureTab.id, url: "https://login.sso.example/common/oauth2/authorize" })
