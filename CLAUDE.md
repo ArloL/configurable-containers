@@ -3,7 +3,7 @@
 A Firefox WebExtension that routes each site into the right container from one user config.
 
 Covered elsewhere: `README.md` (goals, build, release), `CONFIG.md` (config format),
-`TESTING.md` (the L1–L5 pyramid, the F1–F12 bug matrix), `test/` (the behaviour spec),
+`TESTING.md` (the L1–L5 pyramid, the F1–F14 bug matrix), `test/` (the behaviour spec),
 `docs/superpowers/`, `FOLLOWUPS.md`. Why a function is shaped the way it is lives in its
 own comment. This file carries only **platform and tooling facts that make a
 reasonable-looking change wrong**.
@@ -21,8 +21,8 @@ reasonable-looking change wrong**.
   `config/parse` keeps it unreachable by refusing `scripts` on a rule whose match list
   holds a regex (`cookies` are seeded per navigation and need no pattern).
 
-  Two more things an edit gets wrong. In a **pattern** a bare host is only that host —
-  `https://example.com/*` is not `www.example.com`, `*.` asks for the subtree, and
+  Two more things an edit gets wrong. In a **pattern** a bare host is only that host, so
+  `https://example.com/*` is not `www.example.com`; `*.` asks for the subtree, and
   widening it widens every path-scoped rule. And a path glob is escaped and anchored at
   both ends, so `/work` does not answer `/workshop`, nor `/a.b` answer `/axb`. A regex is
   compiled at parse time (a throw inside the blocking handler is a navigation that never
@@ -51,13 +51,12 @@ reasonable-looking change wrong**.
 - **The blocking handler takes one navigation at a time PER TAB (`inTurn`, `engine.ts`).**
   A decision is a read-then-act across four awaits (`getTab`, MAC, `createIdentity`,
   `createTab`), and Firefox can deliver a **second `main_frame` request for the same tab
-  inside that window** — one "Open Link in New Tab" reaching webRequest twice (seen on
-  YouTube and on links out of daringfireball.net to x.com). Read concurrently, both see
-  the same pre-commit `about:blank` tab and both mint a throwaway: one click, two
-  containers. `handled` cannot catch it — two requestIds, one navigation. Serialised, the
-  second is decided after `supersede` replaced its tab, so `getTab` returns null and it
-  falls open. Keep the queue **per tab**: a global one would put an unrelated tab's
-  navigation behind this one's MAC roundtrip.
+  inside that window** — one "Open Link in New Tab" reaching webRequest twice. Read
+  concurrently, both see the same pre-commit `about:blank` tab and both mint a throwaway:
+  one click, two containers (F1). `handled` cannot catch it — two requestIds, one
+  navigation. Serialised, the second is decided after `supersede` replaced its tab, so
+  `getTab` returns null and it falls open. Keep the queue **per tab**: a global one would
+  put an unrelated tab's navigation behind this one's MAC roundtrip.
 - **`src/engine/pause.ts` owns arming, recording and the badge; the engine consults it at
   one point.** The seam is **synchronous by contract**: `isPaused` runs inside the blocking
   `onBeforeRequest`, where an `await` is latency on every navigation, and `record` returns
@@ -79,7 +78,7 @@ reasonable-looking change wrong**.
   `Promise<undefined>` to `undefined`.
 - **The choice page's keyboard grammar is PURE and lives in `picker-protocol.ts`**
   (`choiceHints`/`choiceBindings`/`choiceIntent`); `choice.ts` only performs DOM effects.
-  There is **no jsdom here**, so anything decided inside `choice.ts` has no test below L4 —
+  There is **no jsdom here**, so anything decided inside `choice.ts` has no test below L4,
   and the keyboard is this screen's non-negotiable surface. The page also **focuses its
   first option as it renders**: a `tabs.create`d extension page renders with focus
   nowhere, so arrows and Enter did nothing and the printed hotkeys were the only way in.
@@ -98,13 +97,12 @@ reasonable-looking change wrong**.
   (F13).
 - **A `view-source:` load reaches `onBeforeRequest` wearing the INNER url.** Ctrl+U
   fetches the document it prints, so webRequest reports a `main_frame` GET for plain
-  `https://site/` in a tab still pre-commit on `about:blank`, and nothing says the user
-  asked for source. Routing it loses the wrapper (a reopen can only issue a plain GET) and
-  takes the source tab down with it, rendering the page in a throwaway.
-  **`webNavigation.onBeforeNavigate` is the only event that names the wrapped url**, and
-  Firefox fires it before that navigation's request (measured, FF153). Hence
-  `viewSourceNav`: written there, read without an await inside the blocking handler. MAC
-  has the same bug open (`mozilla/multi-account-containers#2582`).
+  `https://site/` in a tab still pre-commit on `about:blank`. Routing it loses the wrapper
+  (a reopen can only issue a plain GET) and takes the source tab down with it, rendering
+  the page in a throwaway. **`webNavigation.onBeforeNavigate` is the only event that names
+  the wrapped url**, and Firefox fires it before that navigation's request (measured,
+  FF153). Hence `viewSourceNav`: written there, read without an await inside the blocking
+  handler. MAC has the same bug open (`mozilla/multi-account-containers#2582`).
 - **`tabs.create` rejects `about:newtab`/`about:home`** ("Illegal URL") — land there by
   passing **no url at all**, hence optional `CreateTabProps.url`. Auto-temp shipped once
   with `url: tab.url`: every containerize threw *after* creating the identity, leaving
@@ -116,8 +114,8 @@ reasonable-looking change wrong**.
   `newtabpage.enabled=false` users go uncontainerized, as in TCP); `buildNavContext`
   reports `current: null` there, since a tab with no page of its own is not "already
   correctly contained" and treating an inherited container as its own would silence the
-  choice screen on a tab's first navigation (how F14's chain opens); and `reopenedNav`'s
-  requestId is the only thing separating our tab from theirs.
+  choice screen on a tab's first navigation; and `reopenedNav`'s requestId is the only
+  thing separating our tab from theirs.
 - **A link opened in a new tab must still answer the continuity question, and `current`
   cannot** — hence `NavContext.inheritedFrom`, the *page* the tab's container came from,
   read by the **disposable path only**. Without it every new-tab link failed every
@@ -129,13 +127,12 @@ reasonable-looking change wrong**.
   every middle-clicked link in its opener's throwaway.
 - **`openerTabId` outlives the click that set it** for the life of the tab, and
   `supersede` carries it across every reopen, so a routed tab still points at one in a
-  *different* container — that difference is why it was reopened. So `buildNavContext`
-  reads `initiator` off the **page the tab is on** and consults the opener only when there
-  is none (pre-commit, the `target=_blank` case). Asking the opener first made `inherit`
-  bounce a tab back to the container it was reopened out of, and since each reopen makes
-  the source tab the new one's opener, the next hop bounced it back again: login tabs
-  alternating between two containers forever (F14, reported for a Slack link to
-  `portal.azure.com`). A typed url has no opener, so it always looked fine.
+  *different* container. So `buildNavContext` reads `initiator` off the **page the tab is
+  on** and consults the opener only when there is none (pre-commit, the `target=_blank`
+  case). Asking the opener first made `inherit` bounce a tab back to the container it was
+  reopened out of, and since each reopen makes the source tab the new one's opener, the
+  next hop bounced it back again: login tabs alternating between two containers forever
+  (F14). A typed url has no opener, so it always looked fine.
 - **`tabs.onCreated` sometimes fires with `about:blank` before the real url** (bug
   1586612), so auto-temp listens on **both** `onTabCreated` and `onTabUpdated`, deduped by
   a `processed` set. An `onCreated`-only draft passed L3 and failed in real Firefox.
@@ -146,10 +143,10 @@ reasonable-looking change wrong**.
   just reopened into** (F11 via F1); and HSTS rewrites the url before `onBeforeRequest`,
   so exact matching bought a throwaway per upgrade. All three have revert-verified L3
   tests.
-- **Firefox honours `windowId` on `tabs.create` even for popup windows** (verified,
-  FF153). Omit it and a `window.open` share popup is replaced in the last focused *normal*
-  window, then closed with its navigation. `Tab.windowId` is required, not optional — an
-  optional field is one the mock forgets to set, and coverage quietly stops.
+- **Firefox honours `windowId` on `tabs.create` even for popup windows** (FF153). Omit it
+  and a `window.open` share popup is replaced in the last focused *normal* window, then
+  closed with its navigation. `Tab.windowId` is required, not optional — an optional field
+  is one the mock forgets to set, and coverage quietly stops.
 - **A reopen KEEPS a source tab that is on a page**, cancelling only its navigation and
   opening beside it: session history doesn't span containers, so replacing it destroys
   what the user was reading. A tab with **nothing to lose** (new-tab, choice page,
@@ -166,11 +163,11 @@ reasonable-looking change wrong**.
   act on, and that is the **common** case — a card payment at an unmatched site where the
   3DS host posts back cross-site and staying put is what makes checkout work. Keep the two
   separate; wiring the notification into the guard makes "say less" mean "route
-  differently". Frequency was never the argument: this fires a handful of times a month.
-- **A POST that resolves to `choice` may be unreachable outside L3** — don't burn a day
-  reproducing it in a browser. The choice screen appears only when the tab is in **none**
-  of the eligible containers, and picking one puts it in an eligible container, which is
-  when multi-open returns `stay`. Every auth POST arrives after that pick.
+  differently".
+- **A POST that resolves to `choice` may be unreachable outside L3** — don't try to
+  reproduce it in a browser. The choice screen appears only when the tab is in **none** of
+  the eligible containers, and picking one puts it in an eligible container, which is when
+  multi-open returns `stay`. Every auth POST arrives after that pick.
   `post-binding.test.ts` owns the path.
 - **Firefox awaits a blocking listener's returned promise** — the only reason `gatedPort`
   can delay an early navigation, and the only reason the engine can `cancel` after an
@@ -187,11 +184,11 @@ reasonable-looking change wrong**.
   *empty* config plus the error, so everything opens in a throwaway — loud, where stale
   rules are a silent wrong answer. `parseConfig("")` is legal and means "nothing matches".
 - **Every `browser.*` listener registers SYNCHRONOUSLY as `background.ts` evaluates.**
-  Wiring inside an async IIFE loses the session's *first* navigation — Firefox dispatches
-  it before `onBeforeRequest` exists (four `auto-temp` e2e cases went red
-  deterministically, not flake). Two devices keep it working: `config` is one object
-  filled in place by `Object.assign` (hand the siblings a fresh object and they keep the
-  empty one), and `useConfig` folds that fill and the gate release into one call.
+  Wiring inside an async IIFE loses the session's *first* navigation: Firefox dispatches it
+  before `onBeforeRequest` exists (four `auto-temp` e2e cases went red deterministically).
+  Two devices keep it working — `config` is one object filled in place by `Object.assign`
+  (hand the siblings a fresh object and they keep the empty one), and `useConfig` folds
+  that fill and the gate release into one call.
 - **The gate covers the engine only** — `gatedPort` goes to `createEngine`, every other
   sibling gets the raw port, so the cookie-seeder can fire against the empty config. The
   script-injector reads config eagerly and is deferred to `injectScripts()`.
@@ -223,14 +220,13 @@ reasonable-looking change wrong**.
   `reopenedNav`, warned hosts, the `tmpSuffix` counter (hence `highestTmpSuffix`, or every
   save reissues `tmp1` beside a live `tmp1`). Don't add a cache expecting it to survive.
 - **A throwaway is `tmp` PLUS A NUMBER, and the digits are load-bearing**
-  (`isThrowawayName`, `src/engine/registry.ts` — the one predicate the disposer and
-  `toRef` both ask). Identity derives from the name because the name is all that survives
-  a restart, so the shape must separate ours from the user's exactly: on the prefix alone,
-  `open: tmpwork` — or an action-less rule for `tmpfiles.org`, where nobody typed a
-  container name at all — was **deleted by the disposer once empty**, with the logins in
-  it, and read by `toRef` as a throwaway until then. Two silent losses, hence a *shape*.
-  The other half is `config/parse` refusing a container named `tmp<N>`; keep the two in
-  step, and mint only through `TMP_PREFIX + <counter>`.
+  (`isThrowawayName`, `src/engine/registry.ts`). Identity derives from the name because
+  the name is all that survives a restart, so the shape must separate ours from the user's
+  exactly: on the prefix alone, `open: tmpwork` — or an action-less rule for
+  `tmpfiles.org`, where nobody typed a container name at all — was **deleted by the
+  disposer once empty**, with the logins in it, and read by `toRef` as a throwaway until
+  then. The other half is `config/parse` refusing a container named `tmp<N>`; keep the two
+  in step, and mint only through `TMP_PREFIX + <counter>`.
 - **The disposer's grace is a STORED FACT** (`cookieStoreId -> emptySince`, remaining
   grace re-derived per sweep), because a pending `setTimeout` dies with the background
   context and every save reloads. The timer version lost each pending grace on Save and
@@ -243,11 +239,10 @@ reasonable-looking change wrong**.
   tests** (it ships as a string inside YAML), and the shipped YouTube original-audio
   snippet carries two measured facts that make the obvious rewrites wrong. **Patching
   `ytInitialPlayerResponse` does nothing**: the player re-derives from its own
-  `/youtubei/v1/player` fetch — the retarget landed before the player read it (`de-DE.10
-  -> en-US.4` at t=790) and German played anyway. And **the player applies an audio-track
-  switch, then reverts it** as playback commits (set t=874, applied t=1055, back on the
-  dub t=5750), announcing it through none of the 48 event types the page fires — so no
-  one-shot design is reliable, and `video.audioTracks` reads length 0 because YouTube
+  `/youtubei/v1/player` fetch, so the retarget landed before the player read it and German
+  played anyway. And **the player applies an audio-track switch, then reverts it** as
+  playback commits, announcing it through none of the 48 event types the page fires — so
+  no one-shot design is reliable, and `video.audioTracks` reads length 0 because YouTube
   feeds audio through MSE. Hence a held invariant on a poll, which also collapses SPA
   navigation, back navigation and the revert into one case. Full notes:
   `docs/superpowers/specs/2026-07-31-youtube-original-audio-design.md` §2.
@@ -258,13 +253,12 @@ reasonable-looking change wrong**.
   rules are not a normal test's. An **exact inventory, never a bound** (`toEqual([...])`,
   not "at most two"): a bound absorbs the next violation in silence, an inventory makes
   whoever adds one write down why. Match on **stripped comments** and identify by **file,
-  not line** — this codebase names the very APIs it avoids calling (`src/resolver/types.ts`
-  explains itself in terms of `browser.cookies.set`), and pinned lines fail on every edit
-  above them; a check that cries wolf is deleted within months and takes its invariant
-  with it. The subject is `src/` **as text**: importing the modules would answer a question
-  about what the bundler resolves. `decision-cost.test.ts` measures rather than inspects,
-  and counts **port round trips, never milliseconds** — wall clock in CI is a flake
-  generator, and the count is what the design arguments are about.
+  not line** — this codebase names the very APIs it avoids calling, and pinned lines fail
+  on every edit above them; a check that cries wolf is deleted and takes its invariant
+  with it. The subject is `src/` **as text**: importing the modules would answer a
+  question about what the bundler resolves. `decision-cost.test.ts` measures rather than
+  inspects, and counts **port round trips, never milliseconds** — wall clock in CI is a
+  flake generator.
 - **Revert-verify every regression test — back the fix out, watch it go red, restore it**
   (editor undo, **not** `git checkout`, which discards uncommitted work). This suite
   shipped false greens twice: three e2e tests passed with auto-temp entirely broken, and
@@ -292,24 +286,21 @@ reasonable-looking change wrong**.
 - **The pause's toolbar button and badge have no L4 coverage and cannot.** WebDriver
   cannot click a `browser_action` or read chrome UI. `test/e2e/pause.test.ts` drives the
   **options-page** route instead, and since both call one `arm()` the uncovered surface is
-  the click itself (`browser-port.test.ts` covers the tab mapping). **Do not add a
-  build-time seed to arm a container**: `__CC_NOTIFY_ECHO_TO__` already shows the cost (no
-  test build is byte-equivalent to a packaged one), and arming by name would make the
-  shipped extension capable of starting up with routing disabled.
+  the click itself. **Do not add a build-time seed to arm a container**:
+  `__CC_NOTIFY_ECHO_TO__` already shows the cost (no test build is byte-equivalent to a
+  packaged one), and arming by name would make the shipped extension capable of starting
+  up with routing disabled.
 - **An options-page e2e must read tab ids BEFORE parking on the options page.** The
-  probe's command relay is a DOM event injected into http(s) pages only, so from
+  probe's relay is a DOM event injected into http(s) pages only, so from
   `moz-extension://` every probe command goes unanswered and reads as a timeout.
-  `pause.test.ts` collects the tab id on the http page, arms, then switches back before
-  navigating.
 - **A probe reply is written into the DOM of the page that RELAYED the command, so a `nav`
   must never move the tab the driver is parked on** — the navigation destroys the document
   the answer lands in, and whether the reply beats the commit is a race the driver's 100ms
-  poll loses now and then. It reads as `probe command "nav" timed out`, and it took
-  `pause.test.ts` red on CI. The probe now **refuses** a `nav` targeting `sender.tab.id`,
-  so the mistake names itself instead of flaking; the fix is a second http tab to relay
-  from (`openTab` + `awaitContainerTab`, a matched host so CC parks it once). **Open that
-  tab through the probe, not `driver.get`** — from a committed page the reopen cancels the
-  navigation and `driver.get` never returns.
+  poll loses now and then. It reads as `probe command "nav" timed out`. The probe now
+  **refuses** a `nav` targeting `sender.tab.id`, so the mistake names itself instead of
+  flaking; the fix is a second http tab to relay from (`openTab` + `awaitContainerTab`, a
+  matched host so CC parks it once). **Open that tab through the probe, not `driver.get`**
+  — from a committed page the reopen cancels the navigation and `driver.get` never returns.
 - **`test/engine/mock-port.ts` fidelity is where "L3 green, Firefox broken" comes from.**
   It fires `onTabCreated` from `createTab`, fires `onTabRemoved` from `removeTab` (Firefox
   doesn't care who closed the tab — while it didn't, a tab CC itself closed was invisible
@@ -333,8 +324,8 @@ reasonable-looking change wrong**.
   blocks — **a bare timeout is that regression's signature, not flake.**
 - **A reaper case must kill its holder with a SIGNAL.** Selenium's own exit hook cleans up
   after a clean exit and an uncaught throw, so an abandonment case that merely
-  `process.exit()`s passes with `harness/reaper.ts` removed entirely (verified). Only
-  SIGTERM isolates what the reaper adds.
+  `process.exit()`s passes with `harness/reaper.ts` removed entirely. Only SIGTERM
+  isolates what the reaper adds.
 - **Config-sync adoption has no L4 test and cannot have one** (no Firefox Account in a
   test profile, no `moz-extension:` navigation, the probe has its own sync namespace). The
   e2e cases observe the **startup push and save nothing** — a Save means observing after
@@ -345,8 +336,7 @@ reasonable-looking change wrong**.
 - **Unsigned CC loads on *release* Firefox by TEMPORARY install** (`installAddon(xpi,
   true)`), which grants `webRequestBlocking`. Don't reach for Developer Edition, Nightly
   or signing to fix a load failure — `xpinstall.signatures.required=false` is ignored on
-  release and only *permanent* install needs signing. (A long detour blamed signing; it
-  was the missing `cookies` permission plus the F1 loop.)
+  release and only *permanent* install needs signing.
 - **Observation is the probe**, a separate MV2 extension: `CSID:<store>` in
   `document.title`, container name and list in `data-cc-*`. It also **provisions a `probe`
   container and its own tab**, so every list and tab-count assertion sees one extra.
@@ -371,23 +361,20 @@ reasonable-looking change wrong**.
   container inheritance.
 - **`__CC_NOTIFY_ECHO_TO__` echoes notifications to the probe, and must be sent AFTER
   `notifications.create` resolves** — echo first and a missing permission still yields a
-  green e2e with the feature broken (verified; only the 5ms ordering case in
-  `browser-port.test.ts` caught it). `launch()` sets it unconditionally, so even `npm run
+  green e2e with the feature broken. `launch()` sets it unconditionally, so even `npm run
   manual` isn't byte-equivalent to a packaged build.
 - **`driver.quit()` is not what keeps a browser from leaking — `harness/reaper.ts` is.**
-  Selenium unrefs its geckodriver and kills it from its own `process.once("exit")` hook
-  (`io/exec.js`, `onProcessExit`), which covers a clean exit and an uncaught throw and
-  nothing else: node emits no `exit` for a **signalled** process; a browser leaked
-  *mid-run* (a `beforeAll` past `hookTimeout`, an `installAddon` that throws) runs
-  alongside every later test; and session creation can throw with Firefox **already up** —
-  on macOS it re-execs, geckodriver loses the pid it was watching, and the survivor
-  re-parents to init with no capability left to find it by. So `launch` passes a
-  `-profile` directory it made itself, stamping the argv of the browser *and every content
-  process* with a token that exists before Firefox does. Keep that argument; keep
-  `reapProfile`'s guard refusing a path that isn't `cc-e2e-profile-…` (it becomes a
-  `pgrep -f` pattern, and a short one matches half the process table); and leave `npm run
-  manual` **without** a SIGINT handler — the reaper's is registered first and would
-  pre-empt it.
+  Selenium unrefs its geckodriver and kills it from its own `process.once("exit")` hook,
+  which covers a clean exit and an uncaught throw and nothing else: node emits no `exit`
+  for a **signalled** process; a browser leaked *mid-run* runs alongside every later test;
+  and session creation can throw with Firefox **already up** — on macOS it re-execs,
+  geckodriver loses the pid it was watching, and the survivor re-parents to init. So
+  `launch` passes a `-profile` directory it made itself, stamping the argv of the browser
+  *and every content process* with a token that exists before Firefox does. Keep that
+  argument; keep `reapProfile`'s guard refusing a path that isn't `cc-e2e-profile-…` (it
+  becomes a `pgrep -f` pattern, and a short one matches half the process table); and leave
+  `npm run manual` **without** a SIGINT handler — the reaper's is registered first and
+  would pre-empt it.
 - **Debug real Firefox** with geckodriver `--log trace` + Selenium `usingServer` +
   `devtools.console.stdout.content=true`; `console.error` then reaches the log. `MOZ_LOG`
   surfaced nothing.
@@ -402,7 +389,7 @@ reasonable-looking change wrong**.
   MAC's **own** `storageArea.set` — with **`neverAsk: true`**, or MAC parks on its confirm
   interstitial and no container tab appears, and only **after the container RESOLVES**,
   since MAC deletes an assignment whose container it can't `get` and Firefox provisions
-  even built-in ones lazily (this flaked CI once, green on re-run).
+  even built-in ones lazily.
 - **Nothing may navigate until the assignment is READABLE; `launch` blocks on a beacon.**
   MAC reads it in `onBeforeRequest`, CC a `getAssignment` roundtrip later, so a write
   landing mid-flight is seen by one and missed by the other. A background page's storage
@@ -418,13 +405,13 @@ reasonable-looking change wrong**.
 - **`npm run sign:dev` and `npm run submit` UPLOAD.** The credential guard is not a
   dry-run switch, and `npm` under mise carries AMO credentials even when a plain shell
   shows them unset. `sign:dev` takes its version from `VERSION`; to exercise only the
-  build half, call `packageExtension` with the dev id (both CLI tails are argv-guarded).
+  build half, call `packageExtension` with the dev id.
 - **Never derive a dev version from the clock** — `YYMM.DD.HHMM` outranks every
   `YYMM.0.<micro>` for the rest of the month, so one local build would own the update
   channel. Nothing enforces this; it is a rule for whoever sets `VERSION`.
 - **AMO REPACKS uploads**, so its copy is never byte-comparable with a local rebuild
-  (sorted entries + fixed 1980 mtime here, filesystem order + real mtimes there, measured
-  twice). Verify reproducibility against the **GitHub release** asset and that release's
+  (sorted entries + fixed 1980 mtime here, filesystem order + real mtimes there). Verify
+  reproducibility against the **GitHub release** asset and that release's
   `BUILD_TIMESTAMP`.
 - **A listed version is signed at APPROVAL, not upload** — in the queue it downloads back
   without `META-INF/`, so nothing is permanently installable. Unlisted signs in minutes:
@@ -442,14 +429,11 @@ reasonable-looking change wrong**.
   xpi is an esbuild bundle of `src/`, so no `node_modules` package ships and every current
   advisory is transitive dev tooling with no upstream fix (`image-size` under
   `addons-linter`, `brace-expansion` under two `minimatch` lines, `nanoid`, `qs`). `npm
-  audit fix` advertises a fix and changes nothing — check its `--dry-run` first; both
-  `brace-expansion` lines are newest-of-line already, and npm's `image-size` fix is web-ext
-  5.x, four majors back. **Don't silence any of it with `overrides`**: forcing a
-  transitive dev dependency past what its dependent declares is a standing compatibility
-  risk taken for a warning no user sees, and the last pair (`adm-zip`, `shell-quote`, for
-  two Dependabot alerts) needed a web-ext release before it could be retired. After any
-  change here `npm run lint:ext` is the check that matters — web-ext is the only thing
-  that consumes these packages.
+  audit fix` advertises a fix and changes nothing — check its `--dry-run` first. **Don't
+  silence any of it with `overrides`**: forcing a transitive dev dependency past what its
+  dependent declares is a standing compatibility risk taken for a warning no user sees.
+  After any change here `npm run lint:ext` is the check that matters — web-ext is the only
+  thing that consumes these packages.
 
 ## `tcp/` and `mac/`
 
@@ -459,5 +443,4 @@ from a fresh clone, and `mac/` is a test prerequisite** — `harness/firefox.ts`
 MAC's xpi from `mac/src` unbuilt, and `mac-interop.test.ts` **fails rather than skips**
 without it (a bare ENOENT), so a first `npm test` on a new machine reports a broken case
 that is only a missing checkout. Clone `mozilla/multi-account-containers` into `mac/` as
-CI does. Cite both by **file and symbol, never line number** — they track upstream, so a
-`:NNN` drifts.
+CI does. Cite both by **file and symbol, never line number** — they track upstream.
