@@ -12,7 +12,7 @@
 // and contributes no coverage here at all — including them would cost minutes of
 // wall clock and change no number.
 import { defineConfig, configDefaults } from "vitest/config";
-import { ccDefines } from "./vitest.shared";
+import { ccDefines } from "./vitest.shared.ts";
 
 export default defineConfig({
   define: ccDefines,

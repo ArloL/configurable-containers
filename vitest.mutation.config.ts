@@ -7,7 +7,7 @@
 // logic lives in L1/L2"). Widening this include list would let the slow levels paper
 // over exactly the gap the Mutation column is there to report.
 import { defineConfig } from "vitest/config";
-import { ccDefines } from "./vitest.shared";
+import { ccDefines } from "./vitest.shared.ts";
 
 export default defineConfig({
   define: ccDefines,
