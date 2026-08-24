@@ -270,6 +270,20 @@ way* is in its own comment; the source is densely commented. This file carries o
 
 ## What a green test run can still hide
 
+- **`test/fitness/` pins the properties that make every other gate mean something**, and
+  the rules for adding one are not the rules for a normal test. An **exact inventory,
+  never a bound** (`toEqual([...])`, not "at most two") — a bound absorbs the next
+  violation in silence, an inventory makes whoever adds one come and write down why.
+  Match on **stripped comments** and identify by **file, not line**: this codebase names
+  the very APIs it is careful not to call (`src/resolver/types.ts` explains itself in
+  terms of `browser.cookies.set`) and pins line numbers would fail on every edit above
+  them — a check that cries wolf is deleted within months and takes its invariant with
+  it. The subject is `src/` **as text**; importing the modules would answer a question
+  about what the bundler resolves instead. `decision-cost.test.ts` is the exception that
+  measures rather than inspects, and it counts **port round trips, never milliseconds** —
+  wall clock in CI is a flake generator, and the count is what the design arguments (a
+  synchronous `isPaused`, a startup-hydrated armed set, MAC asked after the decision) are
+  actually about.
 - **Revert-verify every regression test — back the fix out, watch it go red, restore it**
   (from an editor undo, **not** `git checkout`, which discards uncommitted work). This suite
   shipped false greens twice: three e2e tests passed with auto-temp entirely broken, and L3

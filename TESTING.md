@@ -322,6 +322,48 @@ shared per host reds only the L3 one.
   exit: the two in `matcher.ts` that Stryker already reports unreachable now carry a
   `/* v8 ignore */` beside their `// Stryker disable`, naming the same fact for both
   gates. Excluding a file, or lowering a floor, is not one of the exits.
+- **Fitness functions** — `test/fitness/`, in `npm test`, milliseconds. Every gate above
+  asks whether the code is *right*; these ask whether the properties that make those gates
+  **mean** anything are still true. They are checks on the shape of the codebase and the
+  cost of its hot path, not on its behaviour, and each one exists because the property it
+  pins is stated in prose somewhere and kept true by hand:
+
+  - **The seams** (`seams.test.ts`) — `src/resolver`, `src/matcher` and `src/psl` reach no
+    browser API, read no clock, draw no randomness, and import nothing from a layer above
+    them. That purity is why F3–F6 and F11 are provable at L1 and what the mutation gate's
+    100% is a statement *about*; `import type { BrowserPort }` into `resolve.ts` compiles
+    and leaves every existing test green. Plus the `browser.*` allowlist: five files, one
+    of them the port implementation.
+  - **The listener inventory** (`listeners.test.ts`) — every `BrowserPort` event, and every
+    place it is registered, compared exactly. `mock-port` holds one handler slot per event,
+    so a second registration displaces the first with nothing going red.
+  - **The manifest** (`manifest.test.ts`) — declared permissions against called APIs, in
+    both directions. A missing one fails silently (the four in CLAUDE.md's first Firefox
+    bullet produce no error at all); an unused one is a larger install prompt and more AMO
+    surface for an API nothing calls any more.
+  - **The duplicated seed** (`seed-config.test.ts`) — `__CC_CONFIG_YAML__` is supplied twice,
+    by `harness/build-extension.ts` for the e2e levels and `vitest.shared.ts` for the unit
+    ones, and drift splits the suite's idea of what the shipped config says while both
+    halves stay green.
+  - **The suite itself** (`suite.test.ts`) — no committed `.only` (which shrinks CI to one
+    case and still reports success), skips limited to the one documented undriveable case,
+    and every `// Stryker disable` carrying its justification.
+  - **The round-trip budget** (`decision-cost.test.ts`) — the only one that measures rather
+    than inspects, and the answer to "nothing tests latency". `onBeforeRequest` is blocking,
+    so every awaited call before it answers is latency in front of a page load. It counts
+    port round trips (not milliseconds — those are a flake generator in CI) and pins the
+    exact call sequence for four paths: a navigation that stays put costs `getTab` +
+    `getIdentity` and nothing else, a reopen asks MAC only *after* deciding to act, an armed
+    container adds nothing at all, and the hops of a reopen we performed cost nothing.
+
+  The house rules for adding one: an **exact inventory, never a bound** (a bound absorbs
+  the next violation silently; an inventory makes someone write down why), **no false
+  alarms** (comments are stripped before matching, and identity is the file rather than the
+  line — a check that cries wolf gets deleted and takes its invariant with it), and **the
+  reason lives beside the exception**. Thirteen mutations were revert-verified against this
+  batch. Design notes, including what the first run found:
+  [`docs/superpowers/specs/2026-08-24-fitness-functions-design.md`](docs/superpowers/specs/2026-08-24-fitness-functions-design.md).
+
 - **Type checking** — `tsc --noEmit` and a lint pass; the `Decision` union is
   exhaustively `switch`ed (no default case) so a new variant fails to compile
   until handled.
