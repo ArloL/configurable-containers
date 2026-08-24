@@ -1,25 +1,21 @@
-// Fitness function: the manifest's permissions and the APIs the code actually calls.
+// Fitness function: the manifest's permissions against the APIs the code calls. Both
+// directions fail silently.
 //
-// Both directions fail silently, in opposite ways.
+// A MISSING permission is the failure mode CLAUDE.md opens its Firefox section with: without
+// `cookies`, `tabs.create({cookieStoreId})` throws and nothing routes; without
+// `contextualIdentities`, MAC's gate rejects the F7 handshake; without `notifications`, the
+// F9 toast is lost with no error; without `webNavigation`, every "View Page Source" is routed
+// as a navigation (F13). The e2e suite would catch some of these in minutes, as a wrong
+// container three layers from the cause; the toast it would not catch at all.
 //
-// A MISSING permission is the failure mode CLAUDE.md opens its Firefox section with:
-// without `cookies`, `tabs.create({cookieStoreId})` throws and nothing routes; without
-// `contextualIdentities`, MAC's gate rejects the F7 handshake; without `notifications`,
-// the F9 declination toast is lost with no error anyone sees; without `webNavigation`,
-// `onBeforeNavigate` never fires and every "View Page Source" is routed as a navigation
-// (F13). Some of those the e2e suite would eventually catch, in minutes, as a wrong
-// container three layers from the cause; the toast one it would not catch at all
-// (`browser-port.test.ts` covers the ordering, not the permission).
-//
-// An UNUSED permission is quieter still and never fails a test: it is a bigger install
-// prompt for the user and more surface for an AMO reviewer, for an API the extension
-// stopped calling two refactors ago. Nothing in this repo would ever mention it again.
+// An UNUSED permission never fails a test at all: it is a bigger install prompt and more
+// surface for an AMO reviewer, for an API the code stopped calling two refactors ago.
 import { describe, it, expect } from "vitest";
 import { sourceFiles, filesMatching, readRepoFile } from "./sources";
 
-// `browser.<api>.…` -> the manifest permission that API needs. Only the APIs whose
-// permission is a plain name are listed: this is a lookup table, not a model of the
-// WebExtension permission system, and an entry that guessed would be worse than absent.
+// `browser.<api>.…` -> the permission it needs. Only APIs whose permission is a plain name:
+// a lookup table, not a model of the WebExtension permission system, and a guessed entry
+// would be worse than none.
 const permissionFor: Record<string, string> = {
   cookies: "cookies",
   contextualIdentities: "contextualIdentities",
@@ -30,8 +26,8 @@ const permissionFor: Record<string, string> = {
   storage: "storage",
 };
 
-// Permissions no `browser.<name>.` call can ever account for, each with the reason it is
-// in the manifest. This list is the exception mechanism, and it is compared exactly.
+// Permissions no `browser.<name>.` call can account for, each with its reason. The exception
+// mechanism, compared exactly.
 const notCalledByName: Record<string, string> = {
   webRequestBlocking:
     "the opt-in that makes onBeforeRequest able to return { cancel: true }; it is a flag on " +
@@ -44,9 +40,9 @@ const notCalledByName: Record<string, string> = {
 
 const manifest = JSON.parse(readRepoFile("extensions/cc/manifest.json")) as { permissions: string[] };
 
-// What the shipped background actually calls. `browser-port.ts` is the only file that may
-// (test/fitness/seams.test.ts pins that), so it is also the only file that can create a
-// permission requirement — plus the extension's own plumbing, which calls storage directly.
+// What the shipped background calls. `browser-port.ts` is the only file that may
+// (test/fitness/seams.test.ts pins it), so it is the only one that can create a permission
+// requirement — plus the extension's plumbing, which calls storage directly.
 const calledApis = new Set(
   filesMatching(sourceFiles("src"), /\bbrowser\.([a-zA-Z]+)\./g)
     .flatMap((f) => f.lines)
@@ -75,19 +71,18 @@ describe("fitness — manifest permissions match what the code calls", () => {
   });
 
   it("keeps the four permissions whose loss is silent, whatever else changes", () => {
-    // Named individually and not derived from the code, because the derivation above
-    // fails open in the one case that matters: delete the `browser.notifications.create`
-    // call by accident and "the code no longer needs it" becomes true rather than red.
-    // These four are the ones CLAUDE.md records as failing with no error at all.
+    // Named individually rather than derived, because the derivation above fails open in
+    // the case that matters: delete the `browser.notifications.create` call by accident and
+    // "the code no longer needs it" becomes true instead of red. These four are the ones
+    // that fail with no error at all.
     expect(manifest.permissions).toEqual(
       expect.arrayContaining(["cookies", "contextualIdentities", "notifications", "webNavigation"])
     );
   });
 
   it("holds no permission that has quietly stopped being explained", () => {
-    // The exception list is the place a permission goes to be justified, so it must not
-    // outlive the permission itself: an entry here for something the manifest no longer
-    // asks for is a stale reason that would later wave a new one through.
+    // The exception list is where a permission is justified, so it must not outlive the
+    // permission: a stale entry would later wave a new one through.
     expect(Object.keys(notCalledByName).filter((p) => !manifest.permissions.includes(p))).toEqual([]);
   });
 });

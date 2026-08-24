@@ -1,22 +1,21 @@
 // Fitness function: the seams the test pyramid stands on.
 //
-// TESTING.md's first design claim is that the DECISION is a pure function and the
-// EFFECTS sit behind a thin adapter — that is what puts F3–F6 and F11 at L1/L2, where
-// tests are milliseconds and exhaustive, and it is what the mutation gate's 100% is a
-// statement about. None of it is enforced by the compiler. `import "…/engine/port"` into
-// the resolver, or a `Date.now()` in the matcher, type-checks perfectly and every
-// existing test stays green; what breaks is the *meaning* of the levels above.
+// TESTING.md's first design claim is that the DECISION is pure and the EFFECTS sit behind a
+// thin adapter. That is what puts F3–F6 and F11 at L1/L2, where tests are milliseconds and
+// exhaustive, and what the mutation gate's 100% is a statement about — and the compiler
+// enforces none of it. `import "…/engine/port"` into the resolver, or a `Date.now()` in the
+// matcher, type-checks fine and every test stays green; what breaks is the MEANING of the
+// levels above.
 //
-// So these are the seams written down as assertions. Each one is an allowlist compared
-// EXACTLY, not a "no more than" bound: a new file that needs an exception has to come
-// here and say so in the same commit, which is the whole mechanism. Widening a list
-// silently is the failure mode these are here to make loud.
+// So the seams are written down as assertions. Each is an allowlist compared EXACTLY, never
+// a "no more than" bound: a file that needs an exception has to come here and say so in the
+// same commit. Widening a list silently is the failure these exist to make loud.
 import { describe, it, expect } from "vitest";
 import { sourceFiles, filesMatching, pathsMatching } from "./sources";
 
-// The pure levels: no browser, no clock, no I/O, no randomness. `resolve()` is called
-// inside a blocking webRequest handler and again inside a fast-check property with a
-// pinned seed; both of those depend on it answering from its arguments alone.
+// The pure levels: no browser, no clock, no I/O, no randomness. `resolve()` runs inside a
+// blocking webRequest handler and inside a fast-check property with a pinned seed, and both
+// depend on it answering from its arguments alone.
 const pureDirs = ["src/resolver", "src/matcher", "src/psl"];
 
 describe("fitness — the pure modules stay pure", () => {
@@ -26,10 +25,10 @@ describe("fitness — the pure modules stay pure", () => {
   });
 
   it("reads no clock and draws no randomness, so a property replays from its seed", () => {
-    // Determinism is not a nicety here: the mutation gate decides each mutant from ONE
-    // run of the L1/L2 suite (vitest.mutation.config.ts), so a single Math.random() or
-    // Date.now() inside the mutated modules would make a mutant's verdict a coin flip
-    // and the 100% score unrepeatable — reported as a flaky gate, never as this cause.
+    // The mutation gate decides each mutant from ONE run of the L1/L2 suite
+    // (vitest.mutation.config.ts), so a single Math.random() or Date.now() in the mutated
+    // modules makes a mutant's verdict a coin flip and the 100% unrepeatable — reported as a
+    // flaky gate, never as this cause.
     const offenders = filesMatching(
       sourceFiles(...pureDirs),
       /\bDate\.now\b|\bnew Date\b|\bMath\.random\b|\bsetTimeout\b|\bsetInterval\b|\bperformance\.now\b/
@@ -38,10 +37,9 @@ describe("fitness — the pure modules stay pure", () => {
   });
 
   it("imports only its own siblings and the PSL library, never a layer above it", () => {
-    // What this forbids is the edge that would invert the dependency direction: a pure
-    // module reaching into `src/engine` or `src/extension`. `tldts` is the one runtime
-    // dependency (same-site is a public-suffix question and cannot be answered without
-    // the list); the resolver's own types are the only other import in the set.
+    // This forbids the edge that inverts the dependency direction: a pure module reaching
+    // into `src/engine` or `src/extension`. `tldts` is the one runtime dependency (same-site
+    // is a public-suffix question); the resolver's own types are the only other import.
     const imports = filesMatching(sourceFiles(...pureDirs), /^\s*import\s/)
       .flatMap((f) => f.lines.map((l) => `${f.path} — ${l.replace(/^\d+:\s*/, "")}`));
 
@@ -58,11 +56,11 @@ describe("fitness — the pure modules stay pure", () => {
 describe("fitness — the browser seam", () => {
   it("is touched by exactly the five files that are allowed to touch it", () => {
     // `BrowserPort` is the seam for the engine and its siblings: everything under
-    // `src/engine` except the port implementation itself goes through it, which is what
-    // lets L3 drive the whole engine against `test/engine/mock-port.ts`. A stray
-    // `browser.tabs.get` inside `src/engine` would not be a compile error and, at L3,
-    // would throw `browser is not defined` — from a floated promise, where the engine
-    // swallows it into a console.warn and the navigation just quietly stops routing.
+    // `src/engine` but the port implementation goes through it, which is what lets L3 drive
+    // the engine against `test/engine/mock-port.ts`. A stray `browser.tabs.get` in
+    // `src/engine` is no compile error and at L3 throws `browser is not defined` from a
+    // floated promise, where the engine swallows it into a console.warn and routing quietly
+    // stops.
     //
     // The four extension files are the documented exception (CLAUDE.md, "Where new logic
     // goes"): they are the extension's own plumbing — storage, the options page, the

@@ -1,15 +1,10 @@
-// Launch a HEADED Firefox with CC + probe for manual interactive testing.
-// Run: npx tsx harness/manual.ts
+// A HEADED Firefox with CC + probe, for manual testing. Run: npx tsx harness/manual.ts
 //
-// This builds the CC extension with YOUR REAL config (configurable-containers.config.yaml),
-// starts a local test server (for the cookies overlay wire-side check), and opens a real
-// Firefox window with CC + probe installed. Live sites resolve normally — navigate to
-// github.com, youtube.com, notion.com, etc. and CC will route per your config.
-//
-// The probe writes CSID:<store> into the tab title so you can see which container
-// each tab landed in.
-//
-// Ctrl+C closes Firefox and the server.
+// Builds CC with YOUR REAL config (configurable-containers.config.yaml), starts the local
+// test server (for the cookies overlay wire-side check), and opens Firefox with CC and the
+// probe installed. Live sites resolve normally, so CC routes github.com, youtube.com and the
+// rest per your config. The probe writes CSID:<store> into each tab title so you can see
+// where a tab landed. Ctrl+C closes Firefox and the server.
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -26,9 +21,9 @@ async function main() {
     headless: false,
     configYaml,
     localDomains: null, // live sites resolve normally
-    // Marionette otherwise opens the session at about:blank, which auto-temp ignores;
-    // a real user's Firefox starts on the new-tab page, so start there too and the
-    // auto-temp startup sweep greets you with a tmp container like it would at home.
+    // Marionette otherwise opens at about:blank, which auto-temp ignores. A real Firefox
+    // starts on the new-tab page, so start there and the auto-temp sweep greets you with a
+    // tmp container as it would at home.
     startupUrl: "about:newtab",
   });
 
@@ -37,9 +32,9 @@ async function main() {
   console.log("\nTry navigating to any site in your config; CC will route per the config.");
   console.log("\nPress Ctrl+C to close Firefox and exit.\n");
 
-  // No SIGINT handler here: harness/reaper.ts installs one that kills this session's
-  // browser and exits. A second handler would only race it — and would run *after* it,
-  // since the reaper's is registered when harness/firefox.ts is imported.
+  // No SIGINT handler here: harness/reaper.ts installs one that kills this session's browser
+  // and exits. A second would only race it, and would run after it, since the reaper's is
+  // registered when harness/firefox.ts is imported.
 
   // Keep the process alive until interrupted.
   await new Promise<void>(() => {});
