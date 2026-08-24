@@ -5,7 +5,7 @@ import { createPicker } from "../../src/engine/picker";
 import { parseConfig } from "../../src/config/parse";
 import { matchRule, matchGroup, hostMatcher } from "../../src/matcher/matcher";
 import { sameSite } from "../../src/psl/same-site";
-import type { Config, Decision, Deps, Target } from "../../src/resolver/types";
+import type { Config, Decision, Deps } from "../../src/resolver/types";
 import type { Tab, WebRequestDetails } from "../../src/engine/port";
 
 const deps: Deps = { matchRule, matchGroup, sameSite };
@@ -51,7 +51,7 @@ describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
 
     expect(blockingResponse).toEqual({ cancel: true });
     expect(browser.openedTabs).toHaveLength(1);
-    const created = browser.openedTabs[0];
+    const created = browser.openedTabs[0]!;
     const work = (await browser.port.queryIdentities()).find((c) => c.name === "Work")!;
     expect(created.cookieStoreId).toBe(work.cookieStoreId);
     // index+1 = right after the source, whose id becomes the new tab's opener.
@@ -84,7 +84,7 @@ describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
     await browser.navigates(aNavigationTo({ tabId: inAnotherWindow.id }));
 
     // Omitting the window sends the tab to the last focused NORMAL window instead.
-    expect(browser.openedTabs[0].windowId).toBe(7);
+    expect(browser.openedTabs[0]!.windowId).toBe(7);
   });
 
   it("keeps a window.open popup alive: its replacement opens in the popup's own window", async () => {
@@ -97,7 +97,7 @@ describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
 
     await browser.navigates(aNavigationTo({ tabId: popup.id }));
 
-    expect(browser.openedTabs[0].windowId).toBe(42);
+    expect(browser.openedTabs[0]!.windowId).toBe(42);
     expect(browser.closedTabIds).toEqual([popup.id]);
   });
 
@@ -284,7 +284,7 @@ describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
 
     expect(blockingResponse).toEqual({ cancel: true });
     expect(browser.createdContainers).toHaveLength(1);
-    expect(browser.createdContainers[0].name).toMatch(/^tmp/);
+    expect(browser.createdContainers[0]!.name).toMatch(/^tmp/);
   });
 
   it("two independent blank tabs to the same unmatched site are isolated from each other", async () => {
@@ -302,7 +302,7 @@ describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
 
     expect(browser.createdContainers.map((c) => c.name)).toEqual(["tmp1", "tmp2"]);
     const [forFirst, forSecond] = browser.openedTabs;
-    expect(forFirst.cookieStoreId).not.toBe(forSecond.cookieStoreId);
+    expect(forFirst!.cookieStoreId).not.toBe(forSecond!.cookieStoreId);
   });
 
   it("skips non-http(s) navigations", async () => {
@@ -562,7 +562,7 @@ describe("engine.reopen — extracted F1-guarded effect", () => {
     await engine.reopen(sourceTab, "https://example.com/", { kind: "temporary" });
 
     expect(browser.createdContainers).toHaveLength(1);
-    expect(browser.createdContainers[0].name).toMatch(/^tmp/);
+    expect(browser.createdContainers[0]!.name).toMatch(/^tmp/);
     expect(browser.closedTabIds).toEqual([]); // start.test is a real page — kept
   });
 
@@ -637,7 +637,7 @@ describe("engine — a paused container", () => {
 
     expect(offered).toEqual([]);
     expect(blockingResponse).toBeUndefined();
-    expect(pause.recorded[0].decision).toEqual({ kind: "choice", options: ["Personal", "Work"] });
+    expect(pause.recorded[0]!.decision).toEqual({ kind: "choice", options: ["Personal", "Work"] });
   });
 });
 
@@ -786,7 +786,7 @@ rules:
     const blockingResponse = await browser.navigates(aNavigationTo({ tabId: blank.id, url: "https://login.sso.example/oauth2/authorize" }));
 
     expect(blockingResponse).toEqual({ cancel: true });
-    expect(browser.openedTabs[0].cookieStoreId).toBe(haeger.cookieStoreId);
+    expect(browser.openedTabs[0]!.cookieStoreId).toBe(haeger.cookieStoreId);
   });
 
   it("F14: the reported chain — slack link, choice, HSP — leaves the login in HSP", async () => {

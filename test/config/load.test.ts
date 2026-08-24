@@ -26,14 +26,14 @@ describe("loadConfig", () => {
     expect(r.seeded).toBe(true);
     expect(r.error).toBeUndefined();
     expect(r.config.rules).toHaveLength(1);
-    expect(r.config.rules[0].action).toEqual({ kind: "open", containers: ["Seed"] });
+    expect(r.config.rules[0]!.action).toEqual({ kind: "open", containers: ["Seed"] });
   });
 
   it("prefers the stored config over the seed", () => {
     const r = loadConfig(STORED, SEED);
     expect(r.seeded).toBe(false);
     expect(r.error).toBeUndefined();
-    expect(r.config.rules[0].action).toEqual({ kind: "open", containers: ["Stored"] });
+    expect(r.config.rules[0]!.action).toEqual({ kind: "open", containers: ["Stored"] });
   });
 
   it("yields the empty config and the error when the stored config is broken", () => {

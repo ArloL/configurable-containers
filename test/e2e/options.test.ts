@@ -95,7 +95,7 @@ describe("options page (real Firefox, CC + probe)", () => {
       // it before touching the driver again.
       await firefox.driver.sleep(2000);
       const handles = await firefox.driver.getAllWindowHandles();
-      await firefox.driver.switchTo().window(handles[0]);
+      await firefox.driver.switchTo().window(handles[0]!);
 
       // nomatch.example matched no rule before this edit; it must now land in Editor.
       // Drive it from a FRESH tab: CC keeps a tab that is already on a page and only

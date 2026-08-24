@@ -30,7 +30,7 @@ export interface ContainerRow {
   hosts: string[];
   armed: boolean;
   armable: boolean;
-  reason?: string; // why not, when armable is false
+  reason?: string | undefined; // why not, when armable is false
 }
 
 export interface PauseStatusResponse {

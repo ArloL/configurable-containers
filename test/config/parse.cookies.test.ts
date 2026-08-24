@@ -22,7 +22,7 @@ rules:
         firstPartyDomain: ""
         partitionKey: { topLevelSite: "https://youtube.com" }
 `);
-    expect(config.rules[0].cookies).toEqual([
+    expect(config.rules[0]!.cookies).toEqual([
       {
         name: "SOCS",
         url: "https://www.youtube.com/",
@@ -47,7 +47,7 @@ rules:
       - { name: wide, url: "https://www.youtube.com/" }
       - { name: SOCS, url: "https://www.youtube.com/", value: "x" }
 `);
-    expect(config.rules[0].cookies).toEqual([
+    expect(config.rules[0]!.cookies).toEqual([
       { name: "wide", url: "https://www.youtube.com/" },
       { name: "SOCS", url: "https://www.youtube.com/", value: "x" },
     ]);
@@ -55,7 +55,7 @@ rules:
 
   it("leaves cookies undefined when the key is absent", () => {
     const config = parse(`rules:\n  - match: youtube.com\n`);
-    expect(config.rules[0].cookies).toBeUndefined();
+    expect(config.rules[0]!.cookies).toBeUndefined();
   });
 
   it("rejects cookies on an ignore rule", () => {

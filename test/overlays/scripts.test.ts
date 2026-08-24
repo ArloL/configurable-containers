@@ -59,7 +59,7 @@ describe("scriptsFor", () => {
     const handBuilt: Config = {
       rules: [
         {
-          match: config.rules[1].match,
+          match: config.rules[1]!.match,
           action: { kind: "ignore" },
           scripts: [{ run: "ignored();" }],
         },
@@ -106,11 +106,11 @@ describe("scriptRegistrations", () => {
     const handBuilt: Config = {
       rules: [
         {
-          match: config.rules[1].match,
+          match: config.rules[1]!.match,
           action: { kind: "ignore" },
           scripts: [{ run: "x();" }],
         },
-        { match: config.rules[0].match, action: { kind: "open", containers: ["A"] } },
+        { match: config.rules[0]!.match, action: { kind: "open", containers: ["A"] } },
       ],
       groups: [],
     };

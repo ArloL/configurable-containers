@@ -8,7 +8,7 @@
 //
 // Run: npm run sign:dev [version]
 import { spawnSync } from "node:child_process";
-import { readdirSync, rmSync, writeFileSync } from "node:fs";
+import { readdirSync, rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import * as path from "node:path";
 import { packageExtension } from "./package";

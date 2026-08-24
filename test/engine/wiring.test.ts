@@ -163,6 +163,6 @@ describe("wiring — siblings that share a browser event", () => {
     await browser.settle();
 
     expect(browser.createdContainers).toHaveLength(1);
-    expect(browser.createdContainers[0].name).toBe("tmp1");
+    expect(browser.createdContainers[0]!.name).toBe("tmp1");
   });
 });

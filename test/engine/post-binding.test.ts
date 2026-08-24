@@ -46,7 +46,7 @@ describe("engine — a non-GET navigation is never reopened (F9)", () => {
     expect(browser.openedTabs).toEqual([]);
     expect(browser.closedTabIds).toEqual([]);
     expect(browser.notifications).toHaveLength(1);
-    expect(browser.notifications[0].message).toBe(
+    expect(browser.notifications[0]!.message).toBe(
       "A form submission to example.com stayed in tmp1 instead of Work — moving it would have dropped the form data.",
     );
   });
@@ -100,7 +100,7 @@ describe("engine — a non-GET navigation is never reopened (F9)", () => {
     expect(blockingResponse).toBeUndefined();
     expect(offered).toEqual([]);
     expect(browser.openedTabs).toEqual([]);
-    expect(browser.notifications[0].message).toContain("instead of one of: Personal, Work");
+    expect(browser.notifications[0]!.message).toContain("instead of one of: Personal, Work");
   });
 
   it("leaves a POST that was already going to stay put alone, and stays silent", async () => {
@@ -147,7 +147,7 @@ describe("engine — a non-GET navigation is never reopened (F9)", () => {
     createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
 
     await browser.navigates(aNavigationTo({ tabId: tab.id, method: "GET" })); // reopens into Work
-    const created = browser.openedTabs[0];
+    const created = browser.openedTabs[0]!;
     const openedTab = [...browser.openTabs.values()].find((t) => t.cookieStoreId === created.cookieStoreId)!;
 
     // A form POST arriving as the reopened tab's own first request is ours already —

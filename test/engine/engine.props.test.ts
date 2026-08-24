@@ -70,7 +70,7 @@ describe("engine — property-based invariants", () => {
         if (blockingResponse && blockingResponse.cancel && browser.openedTabs.length === 1) {
           // Whatever container we opened must exist as a real store the registry
           // recognizes (default, a named permanent, or a tmp throwaway).
-          const store = browser.openedTabs[0].cookieStoreId;
+          const store = browser.openedTabs[0]!.cookieStoreId;
           const known = store === "firefox-default" || (await browser.port.getIdentity(store)) !== null;
           expect(known).toBe(true);
         }

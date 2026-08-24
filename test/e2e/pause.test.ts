@@ -48,7 +48,7 @@ describe("pause & record (real Firefox, CC + probe)", () => {
     // The probe's command relay is a DOM event injected into http(s) pages only, so the
     // tab id has to be read while parked HERE — from the options page (moz-extension://)
     // no probe command can be answered at all.
-    const target = (await listTabs(firefox.driver)).find((t) => t.url.startsWith(first.split("?")[0]))!;
+    const target = (await listTabs(firefox.driver)).find((t) => t.url.startsWith(first.split("?")[0]!))!;
     expect(target).toBeDefined();
 
     // 2. Move to a relay page of its own before doing anything else. Every probe reply is

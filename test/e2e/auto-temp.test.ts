@@ -138,7 +138,7 @@ describe("auto-temp startup sweep (real Firefox)", () => {
     // The sweep discarded the tab the driver started on, leaving it with no context —
     // re-anchor on a surviving handle before opening anything.
     const handles = await firefox.driver.getAllWindowHandles();
-    await firefox.driver.switchTo().window(handles[handles.length - 1]);
+    await firefox.driver.switchTo().window(handles[handles.length - 1]!);
     await firefox.driver.switchTo().newWindow("tab");
     try {
       await firefox.driver.get(url);

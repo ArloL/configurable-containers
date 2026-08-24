@@ -43,13 +43,13 @@ describe("updatesManifest", () => {
       ]),
     );
     expect(updates).toHaveLength(1);
-    expect(updates[0].version).toBe("2607.0.104");
+    expect(updates[0]!.version).toBe("2607.0.104");
   });
 
   it("strips the tag's v, because Firefox compares against the manifest version", () => {
     // calver-tag-action pushes `v2607.0.104` and reports `2607.0.104`; a `v` left in
     // here is not a version Firefox can compare, so no update would ever be offered.
-    expect(updatesIn(updatesManifest([dev("v2607.0.104")]))[0].version).toBe("2607.0.104");
+    expect(updatesIn(updatesManifest([dev("v2607.0.104")]))[0]!.version).toBe("2607.0.104");
   });
 
   it("links to the asset's own url rather than composing one", () => {
@@ -58,7 +58,7 @@ describe("updatesManifest", () => {
     const updates = updatesIn(
       updatesManifest([dev("v2607.0.104", [asset("some_other_name.xpi")])]),
     );
-    expect(updates[0].update_link).toBe(asset("some_other_name.xpi").browser_download_url);
+    expect(updates[0]!.update_link).toBe(asset("some_other_name.xpi").browser_download_url);
   });
 
   it("skips a dev release with no xpi", () => {

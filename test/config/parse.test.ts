@@ -21,7 +21,7 @@ describe("parseConfig — rule forms", () => {
 
   it("auto-names from the canonical host, not the raw string", () => {
     const parsed = parseConfig(`rules:\n  - match: Notion.COM\n`);
-    expect(parsed.rules[0].action).toEqual({ kind: "open", containers: ["notion.com"] });
+    expect(parsed.rules[0]!.action).toEqual({ kind: "open", containers: ["notion.com"] });
   });
 
   it("parses open single / multi / default and Temporary passthrough", () => {
@@ -32,10 +32,10 @@ describe("parseConfig — rule forms", () => {
         `  - match: trello.com\n    open: [Personal, Work]\n    default: Work\n` +
         `  - match: pinterest.com\n    open: Temporary\n`,
     );
-    expect(parsed.rules[0].action).toEqual({ kind: "open", containers: ["Flink"] });
-    expect(parsed.rules[1].action).toEqual({ kind: "open", containers: ["Personal", "Work"] });
-    expect(parsed.rules[2].action).toEqual({ kind: "open", containers: ["Personal", "Work"], default: "Work" });
-    expect(parsed.rules[3].action).toEqual({ kind: "open", containers: ["Temporary"] });
+    expect(parsed.rules[0]!.action).toEqual({ kind: "open", containers: ["Flink"] });
+    expect(parsed.rules[1]!.action).toEqual({ kind: "open", containers: ["Personal", "Work"] });
+    expect(parsed.rules[2]!.action).toEqual({ kind: "open", containers: ["Personal", "Work"], default: "Work" });
+    expect(parsed.rules[3]!.action).toEqual({ kind: "open", containers: ["Temporary"] });
   });
 
   it("parses inherit / ignore / redirector", () => {
@@ -45,10 +45,10 @@ describe("parseConfig — rule forms", () => {
         `  - match: getpocket.com\n    ignore: true\n` +
         `  - match: [t.co, slack-redir.net]\n    redirector: true\n`,
     );
-    expect(parsed.rules[0].action).toEqual({ kind: "inherit" });
-    expect(parsed.rules[1].action).toEqual({ kind: "ignore" });
-    expect(parsed.rules[2].action).toEqual({ kind: "redirector" });
-    expect(parsed.rules[2].match).toEqual([hm("t.co"), hm("slack-redir.net")]);
+    expect(parsed.rules[0]!.action).toEqual({ kind: "inherit" });
+    expect(parsed.rules[1]!.action).toEqual({ kind: "ignore" });
+    expect(parsed.rules[2]!.action).toEqual({ kind: "redirector" });
+    expect(parsed.rules[2]!.match).toEqual([hm("t.co"), hm("slack-redir.net")]);
   });
 
   it("surfaces both the cookies and scripts overlays on one rule", () => {
@@ -164,7 +164,7 @@ describe("parseConfig — rule validation", () => {
     expect(err(`rules:\n  - match: { regex: "^https://x/" }\n`).message).toMatch(/no host to name a container after/);
     // A bare host FIRST still auto-names, whatever follows it.
     const ok = parseConfig(`rules:\n  - match: [x.com, "https://y.com/*"]\n`);
-    expect(ok.rules[0].action).toEqual({ kind: "open", containers: ["x.com"] });
+    expect(ok.rules[0]!.action).toEqual({ kind: "open", containers: ["x.com"] });
   });
 
   // A content script is registered by URL pattern before any navigation happens, and a
@@ -177,10 +177,10 @@ describe("parseConfig — rule validation", () => {
     expect(e.message).toMatch(/regex match/);
     expect(e.path).toBe("rules[0].scripts");
     const c = parseConfig(`rules:\n  - match: { regex: "^https://x/" }\n    open: X\n    cookies:\n      - { name: a, url: "https://x/" }\n`);
-    expect(c.rules[0].cookies).toHaveLength(1);
+    expect(c.rules[0]!.cookies).toHaveLength(1);
     // A pattern HAS a pattern form, so scripts on one are fine.
     const q = parseConfig(`rules:\n  - match: "https://x.com/a/*"\n    open: X\n    scripts:\n      - { run: "1" }\n`);
-    expect(q.rules[0].scripts).toHaveLength(1);
+    expect(q.rules[0]!.scripts).toHaveLength(1);
   });
 
   // A wildcard with no scheme is the near-miss worth naming: it is what somebody writes

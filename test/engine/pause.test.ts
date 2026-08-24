@@ -68,7 +68,7 @@ describe("pause — arming", () => {
     await pause.disarm(shop.cookieStoreId);
 
     expect(pause.isPaused(shop.cookieStoreId)).toBe(false);
-    expect(pause.snapshot().recordings[0].endedAt).toBe(60_000);
+    expect(pause.snapshot().recordings[0]!.endedAt).toBe(60_000);
     expect(browser.badgeText).toBe("");
   });
 
@@ -117,7 +117,7 @@ describe("pause — recording", () => {
 
     pause.record(csid, "https://payment.acme.test/3ds?token=secret", intoTemporary);
 
-    expect(pause.snapshot().recordings[0].hosts).toEqual([
+    expect(pause.snapshot().recordings[0]!.hosts).toEqual([
       { host: "payment.acme.test", hits: 1, wouldHave: "a new temporary container" },
     ]);
   });
@@ -130,7 +130,7 @@ describe("pause — recording", () => {
     // The deduplication is what turns a twelve-hop Microsoft bounce into the handful of
     // lines a config is actually written from; the redirection-limit=0 workaround
     // produces the raw chain and leaves that collapse to the reader.
-    expect(pause.snapshot().recordings[0].hosts).toEqual([
+    expect(pause.snapshot().recordings[0]!.hosts).toEqual([
       { host: "login.ms.test", hits: 7, wouldHave: "a new temporary container" },
     ]);
   });
@@ -143,7 +143,7 @@ describe("pause — recording", () => {
 
     // "Was it even needed?" is only answerable if the untouched hops are visible too —
     // the ones carrying a real target are then the ones that stand out.
-    expect(pause.snapshot().recordings[0].hosts).toEqual([
+    expect(pause.snapshot().recordings[0]!.hosts).toEqual([
       { host: "shop.test", hits: 1, wouldHave: "no action" },
       { host: "payment.acme.test", hits: 1, wouldHave: "Work" },
     ]);
@@ -163,7 +163,7 @@ describe("pause — recording", () => {
 
     pause.record("firefox-container-77", "https://elsewhere.test/", intoTemporary);
 
-    expect(pause.snapshot().recordings[0].hosts).toEqual([]);
+    expect(pause.snapshot().recordings[0]!.hosts).toEqual([]);
   });
 
   it("writes through when a new host appears, so a config save cannot destroy the record", async () => {
@@ -175,7 +175,7 @@ describe("pause — recording", () => {
     // Reviewing a recording means editing the config, and a save calls runtime.reload():
     // a record held only in memory would be destroyed by the act it exists to enable.
     const stored = (await browser.port.readStored(PAUSE_STORAGE_KEY)) as PauseState;
-    expect(stored.recordings[0].hosts[0].host).toBe("payment.acme.test");
+    expect(stored.recordings[0]!.hosts[0]!.host).toBe("payment.acme.test");
   });
 });
 
@@ -191,11 +191,11 @@ describe("pause — flushing the hit counts", () => {
     // Repeat hops deliberately do not write — seven storage writes from the blocking
     // path is the cost that buys. So the flush has to happen somewhere, and disarm is
     // where: a finished recording's counts must be right.
-    expect(((await browser.port.readStored(PAUSE_STORAGE_KEY)) as PauseState).recordings[0].hosts[0].hits).toBe(1);
+    expect(((await browser.port.readStored(PAUSE_STORAGE_KEY)) as PauseState).recordings[0]!.hosts[0]!.hits).toBe(1);
 
     await pause.disarm(shop.cookieStoreId);
 
-    expect(((await browser.port.readStored(PAUSE_STORAGE_KEY)) as PauseState).recordings[0].hosts[0].hits).toBe(3);
+    expect(((await browser.port.readStored(PAUSE_STORAGE_KEY)) as PauseState).recordings[0]!.hosts[0]!.hits).toBe(3);
   });
 });
 
@@ -214,7 +214,7 @@ describe("pause — lifetime", () => {
     // the pause exists to prevent, and unpredictably. For a throwaway, last-tab-close is
     // the container's whole life.
     expect(pause.isPaused(shop.cookieStoreId)).toBe(false);
-    expect(pause.snapshot().recordings[0].endedAt).not.toBeNull();
+    expect(pause.snapshot().recordings[0]!.endedAt).not.toBeNull();
     expect(browser.badgeText).toBe("");
   });
 
@@ -262,7 +262,7 @@ describe("pause — the toolbar button", () => {
     expect(pause.isPaused(shop.cookieStoreId)).toBe(true);
     // The badge only ever reaches "1", so the toast is the one thing that names tmp3 —
     // and the user has no other way to confirm they hit the container they meant.
-    expect(browser.notifications[0].message).toContain("tmp3");
+    expect(browser.notifications[0]!.message).toContain("tmp3");
   });
 
   it("a second click resumes routing", async () => {
@@ -276,7 +276,7 @@ describe("pause — the toolbar button", () => {
 
     expect(pause.isPaused(shop.cookieStoreId)).toBe(false);
     expect(browser.notifications).toHaveLength(2);
-    expect(browser.notifications[1].message).toContain("tmp3");
+    expect(browser.notifications[1]!.message).toContain("tmp3");
   });
 
   it("refuses the default container out loud", async () => {
@@ -288,6 +288,6 @@ describe("pause — the toolbar button", () => {
 
     // A silent no-op is the worst outcome for a control reached for under time pressure.
     expect(pause.isPaused("firefox-default")).toBe(false);
-    expect(browser.notifications[0].message).toContain("default container");
+    expect(browser.notifications[0]!.message).toContain("default container");
   });
 });

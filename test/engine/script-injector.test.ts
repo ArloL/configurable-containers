@@ -44,7 +44,7 @@ rules:
     const config = parseConfig(`rules:\n  - match: x.example\n    scripts:\n      - { run: "x();" }\n`);
     await createScriptInjector({ port: browser.port, config });
     expect(browser.registeredScripts).toHaveLength(1);
-    expect(browser.registeredScripts[0].runAt).toBe("document_start");
+    expect(browser.registeredScripts[0]!.runAt).toBe("document_start");
   });
 
   it("registers nothing when the config has no scripts", async () => {

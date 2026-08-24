@@ -47,18 +47,19 @@ function nameWithMnemonic(name: string, at: number | undefined): DocumentFragmen
     return frag;
   }
   const marked = document.createElement("u");
-  marked.textContent = name[at];
+  marked.textContent = name.slice(at, at + 1);
   frag.append(name.slice(0, at), marked, name.slice(at + 1));
   return frag;
 }
 
 const list = document.getElementById("cc-options")!;
 const items: HTMLElement[] = payload.options.map((container, i) => {
+  const hint = hints[i]!; // choiceHints returns one hint per option
   const li = document.createElement("li");
   li.setAttribute("data-cc-option", "");
-  li.setAttribute("data-key", hints[i].key);
+  li.setAttribute("data-key", hint.key);
   li.setAttribute("data-container", container);
-  if (hints[i].mnemonic) li.setAttribute("data-mnemonic", hints[i].mnemonic!);
+  if (hint.mnemonic) li.setAttribute("data-mnemonic", hint.mnemonic);
   li.setAttribute("role", "option");
   li.setAttribute("aria-selected", "false");
   // Roving tabindex: exactly one option is in the tab order, so Tab leaves the list rather
@@ -67,10 +68,10 @@ const items: HTMLElement[] = payload.options.map((container, i) => {
 
   const key = document.createElement("kbd");
   key.className = "cc-key";
-  key.textContent = hints[i].key;
+  key.textContent = hint.key;
   const name = document.createElement("span");
   name.className = "cc-name";
-  name.append(nameWithMnemonic(container, hints[i].at));
+  name.append(nameWithMnemonic(container, hint.at));
   li.append(key, name);
 
   list.appendChild(li);

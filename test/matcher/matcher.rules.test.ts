@@ -4,7 +4,7 @@ import type { Rule, Group } from "../../src/resolver/types";
 
 // Rules carry canonical HostMatchers in their `match` arrays (as the config parser
 // will produce). Rule.action is irrelevant to matching; use a minimal open action.
-const open = (name: string) => ({ kind: "open" as const, containers: [name] });
+const open = (name: string) => ({ kind: "open" as const, containers: [name] as [string] });
 
 const rules: Rule[] = [
   { match: [hostMatcher("mail.google.com")], action: open("Gmail") },

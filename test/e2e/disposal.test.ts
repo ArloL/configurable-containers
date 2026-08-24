@@ -42,7 +42,7 @@ describe("temp disposal (real Firefox)", () => {
     // Close the tmp tab (currently switched to it), then re-attach to a survivor —
     // closing the active tab leaves the driver with no current window.
     await d.close();
-    await d.switchTo().window((await d.getAllWindowHandles())[0]);
+    await d.switchTo().window((await d.getAllWindowHandles())[0]!);
 
     // Establish a STABLE observation tab in the permanent "Work" container: a matched
     // host stays put on reload (no reopen, tab not torn down), so we can reload it to
@@ -89,7 +89,7 @@ describe("temp disposal (real Firefox)", () => {
     } catch {
       /* CC reopened the tab away */
     }
-    await awaitContainerTab(d, `http://work.example:${serverPort}/?cb=quiet-`.split("?")[0]);
+    await awaitContainerTab(d, `http://work.example:${serverPort}/?cb=quiet-`.split("?")[0]!);
     const observer = await d.getWindowHandle();
 
     await d.switchTo().newWindow("tab");

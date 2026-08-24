@@ -13,7 +13,7 @@ rules:
       - at: document_start
         run: "localStorage.setItem('yt', '1');"
 `);
-    expect(config.rules[0].scripts).toEqual([
+    expect(config.rules[0]!.scripts).toEqual([
       { at: "document_start", run: "localStorage.setItem('yt', '1');" },
     ]);
   });
@@ -25,7 +25,7 @@ rules:
     scripts:
       - { run: "document.title = 'hi';" }
 `);
-    expect(config.rules[0].scripts).toEqual([{ run: "document.title = 'hi';" }]);
+    expect(config.rules[0]!.scripts).toEqual([{ run: "document.title = 'hi';" }]);
   });
 
   it("parses multiple scripts on one rule", () => {
@@ -36,7 +36,7 @@ rules:
       - { run: "a();" }
       - { at: document_end, run: "b();" }
 `);
-    expect(config.rules[0].scripts).toEqual([
+    expect(config.rules[0]!.scripts).toEqual([
       { run: "a();" },
       { at: "document_end", run: "b();" },
     ]);
@@ -44,7 +44,7 @@ rules:
 
   it("leaves scripts undefined when the key is absent", () => {
     const config = parse(`rules:\n  - match: x.com\n`);
-    expect(config.rules[0].scripts).toBeUndefined();
+    expect(config.rules[0]!.scripts).toBeUndefined();
   });
 
   it("parses cookies and scripts on the same rule", () => {
@@ -57,10 +57,10 @@ rules:
     scripts:
       - { at: document_start, run: "localStorage.setItem('wide','1');" }
 `);
-    expect(config.rules[0].cookies).toEqual([
+    expect(config.rules[0]!.cookies).toEqual([
       { name: "wide", url: "https://www.youtube.com/", value: "1" },
     ]);
-    expect(config.rules[0].scripts).toEqual([
+    expect(config.rules[0]!.scripts).toEqual([
       { at: "document_start", run: "localStorage.setItem('wide','1');" },
     ]);
   });

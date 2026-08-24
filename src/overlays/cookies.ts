@@ -5,7 +5,7 @@ import type { Config, CookieSpec, Deps } from "../resolver/types";
 // definition.
 export interface HttpHeader {
   name: string;
-  value?: string;
+  value?: string | undefined;
 }
 
 // [] when nothing matches or the match is `ignore`. Goes through the SAME injected

@@ -126,7 +126,7 @@ describe("choice screen + reopen picker (real Firefox, CC + probe)", () => {
     // Clean up: close the choice tab so it doesn't satisfy later tests' awaitChoicePage.
     await firefox.driver.close();
     const handles = await firefox.driver.getAllWindowHandles();
-    if (handles.length) await firefox.driver.switchTo().window(handles[0]);
+    if (handles.length) await firefox.driver.switchTo().window(handles[0]!);
   });
 
   it("keeps the page you were on while you choose, and lands the choice beside it", async () => {

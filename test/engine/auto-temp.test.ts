@@ -21,7 +21,7 @@ describe("auto-temp — startup sweep", () => {
 
     expect(browser.createdContainers).toHaveLength(1);
     expect(browser.openedTabs).toHaveLength(1);
-    expect(browser.openedTabs[0].url).toBeUndefined(); // Firefox rejects an explicit about:newtab
+    expect(browser.openedTabs[0]!.url).toBeUndefined(); // Firefox rejects an explicit about:newtab
     expect(browser.closedTabIds).toHaveLength(1);
   });
 
@@ -53,12 +53,12 @@ describe("auto-temp — onCreated path", () => {
     await browser.opensTab({ url: "about:newtab", cookieStoreId: "firefox-default", index: 2, active: true });
 
     expect(browser.createdContainers).toHaveLength(1);
-    const ciName = browser.createdContainers[0].name;
+    const ciName = browser.createdContainers[0]!.name;
     expect(ciName).toMatch(/^tmp/);
     expect(browser.openedTabs).toHaveLength(1);
     // No url: the replacement tab gets the browser's new-tab page (see auto-temp.ts).
     expect(browser.openedTabs[0]).toMatchObject({ index: 2, active: true });
-    expect(browser.openedTabs[0].url).toBeUndefined();
+    expect(browser.openedTabs[0]!.url).toBeUndefined();
     expect(browser.closedTabIds).toHaveLength(1);
   });
 
@@ -70,7 +70,7 @@ describe("auto-temp — onCreated path", () => {
 
     expect(browser.createdContainers).toHaveLength(1);
     expect(browser.openedTabs).toHaveLength(1);
-    expect(browser.openedTabs[0].url).toBeUndefined(); // Firefox rejects an explicit about:home
+    expect(browser.openedTabs[0]!.url).toBeUndefined(); // Firefox rejects an explicit about:home
     expect(browser.closedTabIds).toHaveLength(1);
   });
 
@@ -124,7 +124,7 @@ describe("auto-temp — onCreated path", () => {
     await browser.opensTab({ url: "about:newtab", cookieStoreId: "firefox-default", openerTabId: 99 });
 
     expect(browser.openedTabs).toHaveLength(1);
-    expect(browser.openedTabs[0].openerTabId).toBe(99);
+    expect(browser.openedTabs[0]!.openerTabId).toBe(99);
   });
 
   it("containerizes a new tab in the window it was opened in", async () => {
@@ -134,7 +134,7 @@ describe("auto-temp — onCreated path", () => {
     await browser.opensTab({ url: "about:newtab", cookieStoreId: "firefox-default", windowId: 7 });
 
     // Ctrl+T in a second window must not move that tab to the first.
-    expect(browser.openedTabs[0].windowId).toBe(7);
+    expect(browser.openedTabs[0]!.windowId).toBe(7);
   });
 
   it("uses a shared suffix when provided", async () => {
@@ -144,10 +144,10 @@ describe("auto-temp — onCreated path", () => {
     createAutoTemp({ port: browser.port, tmpSuffix: suffix });
 
     await browser.opensTab({ url: "about:newtab", cookieStoreId: "firefox-default" });
-    expect(browser.createdContainers[0].name).toBe("tmps1");
+    expect(browser.createdContainers[0]!.name).toBe("tmps1");
 
     await browser.opensTab({ url: "about:newtab", cookieStoreId: "firefox-default" });
-    expect(browser.createdContainers[1].name).toBe("tmps2");
+    expect(browser.createdContainers[1]!.name).toBe("tmps2");
   });
 
   it("handles createIdentity failure gracefully and resets creating flag", async () => {
@@ -177,7 +177,7 @@ describe("auto-temp — onTabUpdated fallback path", () => {
 
     expect(browser.createdContainers).toHaveLength(1);
     expect(browser.openedTabs).toHaveLength(1);
-    expect(browser.openedTabs[0].url).toBeUndefined(); // Firefox rejects an explicit about:newtab
+    expect(browser.openedTabs[0]!.url).toBeUndefined(); // Firefox rejects an explicit about:newtab
     expect(browser.closedTabIds).toHaveLength(1);
   });
 

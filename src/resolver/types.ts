@@ -6,7 +6,10 @@
 export type Matcher = unknown;
 
 export type Action =
-  | { kind: "open"; containers: string[]; default?: string } // 1+ names; "Temporary" reserved
+  // A non-empty tuple, so `containers[0]` needs no guard in the resolver: the parser
+  // already refuses an empty `open:`, and this is that refusal written where the
+  // resolver can read it. "Temporary" is reserved.
+  | { kind: "open"; containers: [string, ...string[]]; default?: string }
   | { kind: "inherit" }
   | { kind: "ignore" }
   | { kind: "redirector" };
