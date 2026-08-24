@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { By, Key } from "selenium-webdriver";
+import { By, Key, error } from "selenium-webdriver";
 import { launch, awaitContainerTab, listTabs, type Session } from "../../harness/firefox";
 
 describe("choice screen + reopen picker (real Firefox, CC + probe)", () => {
@@ -184,7 +184,15 @@ describe("choice screen + reopen picker (real Firefox, CC + probe)", () => {
     await awaitChoicePage();
     // Esc used to navigate this tab to the url, which in a tab of its own only earns
     // another choice page. Cancelling means closing it.
-    await firefox.driver.actions().sendKeys(Key.ESCAPE).perform();
+    try {
+      await firefox.driver.actions().sendKeys(Key.ESCAPE).perform();
+    } catch (e) {
+      // Esc closes the very tab the keystroke was delivered to, so whether the command's
+      // reply beats the teardown is the browser's business rather than this case's: 154
+      // answers first, 140 ESR raises NoSuchWindowError. Either way the keystroke landed,
+      // and that the tab closed is what the assertions below are for.
+      if (!(e instanceof error.NoSuchWindowError)) throw e;
+    }
 
     // The choice tab closes under the driver, so observe from the article's own tab.
     await firefox.driver.switchTo().window(articleHandle);

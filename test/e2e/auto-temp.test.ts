@@ -52,10 +52,19 @@ describe("auto-temp (real Firefox, CC + probe)", () => {
     await parkOnProbePage("one");
 
     const created = await openRealNewTab(firefox.driver);
-    expect(created.url).toBe("about:newtab");
-    expect(created.cookieStoreId).toBe("firefox-default"); // Firefox opens it in default…
+    // `tabs.create({})` answers with a snapshot taken before the new-tab page's url
+    // commits. Firefox 154 has already put "about:newtab" in it; 140 ESR still says
+    // "about:blank". That lag is not incidental to this case — it is why auto-temp
+    // listens on onTabUpdated as well as onCreated (bug 1586612), so on ESR this is the
+    // only case that exercises the second path at all.
+    //
+    // What matters here is that Firefox opened it in the DEFAULT container. That it is a
+    // real new-tab page rather than an about:blank tab — which auto-temp ignores by
+    // design — is pinned by awaitNewTabPageTab below, which accepts nothing else.
+    expect(created.url).toMatch(/^about:(newtab|blank)$/);
+    expect(created.cookieStoreId).toBe("firefox-default"); // …and auto-temp moves it out.
 
-    const tab = await awaitNewTabPageTab(); // …and auto-temp moves it out.
+    const tab = await awaitNewTabPageTab();
     expect(tab.cookieStoreId).toMatch(/^firefox-container-\d+$/);
     expect(tab.container).toMatch(/^tmp/);
 

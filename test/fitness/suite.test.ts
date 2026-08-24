@@ -27,9 +27,19 @@ describe("fitness — the run that says green ran everything", () => {
     // WebDriver cannot deliver at all, so the case is kept as an executable description
     // of what the L3 test already pins (CLAUDE.md, "e2e: what the driver cannot do").
     //
-    // Pinned as an exact list so a skip added in a hurry has to be argued for here.
-    const skips = filesMatching(tests, /\b(it|test|describe)\.skip\s*\(/).map((f) => f.path);
-    expect(skips).toEqual(["test/e2e/choice.test.ts"]);
+    // The second is options.test.ts's config-save case, which cannot be observed on a
+    // build where `runtime.reload()` does not bring a temporarily installed extension
+    // back — measured on 140.14.0esr. It skips at RUNTIME, from the browser version, so
+    // that the case runs in full everywhere the platform allows it to.
+    //
+    // Which is why the pattern below catches an argument-less `.skip()` call as well as
+    // `it.skip(`: a runtime skip is the easier one to add in a hurry, and an inventory
+    // that only knew the static form would have been silently evaded by this very case.
+    // Pinned as an exact list so either kind has to be argued for here.
+    const skips = filesMatching(tests, /\b(it|test|describe)\.skip\s*\(|\b\w+\.skip\s*\(\s*\)/).map(
+      (f) => f.path,
+    );
+    expect(skips).toEqual(["test/e2e/choice.test.ts", "test/e2e/options.test.ts"]);
   });
 
   it("keeps the realtime cases out of `npm test` by filename, not by a skip", () => {
