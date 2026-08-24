@@ -22,8 +22,8 @@ describe("routing (real Firefox, CC + probe)", () => {
     await firefox?.close();
   });
 
-  // Open a fresh firefox-default tab and navigate it; CC will cancel + reopen, so
-  // the original tab may be torn down mid-nav — tolerate that.
+  // Open a fresh firefox-default tab and navigate it. CC cancels and reopens, so the
+  // original tab may be torn down mid-nav.
   async function navFreshTab(url: string) {
     await firefox.driver.switchTo().newWindow("tab");
     try {
@@ -50,8 +50,8 @@ describe("routing (real Firefox, CC + probe)", () => {
   });
 });
 
-// Own session: the assertion counts the throwaways that exist in the whole profile,
-// so it must not inherit any from a neighbouring test.
+// Own session: the assertion counts throwaways profile-wide, so it must not inherit any
+// from a neighbouring test.
 describe("routing — a redirect chain is one navigation (real Firefox, CC + probe)", () => {
   let firefox: Session;
   let serverPort: string;
@@ -74,9 +74,9 @@ describe("routing — a redirect chain is one navigation (real Firefox, CC + pro
       // CC reopened the tab away — expected.
     }
 
-    // Firefox holds the reopened tab at about:blank until the chain commits, so every
-    // hop after the first was a navigation CC saw as uncontained: each one used to buy
-    // another throwaway, walking tmp1 -> tmp2 for a single click.
+    // Firefox holds the reopened tab at about:blank until the chain commits, so every hop
+    // after the first looked uncontained and used to buy another throwaway: tmp1 -> tmp2
+    // for a single click.
     const { name: containerName } = await awaitContainerTab(firefox.driver, chainDestination);
     expect(containerName).toMatch(/^tmp/);
     expect((await readContainerList(firefox.driver)).filter((c) => c.startsWith("tmp"))).toEqual([containerName]);
@@ -108,9 +108,9 @@ describe("routing — a same-tab link that changes container (real Firefox, CC +
     const { name: articleContainer } = await awaitContainerTab(firefox.driver, articleUrl);
     expect(articleContainer).toMatch(/^tmp/);
 
-    // A plain same-tab link out of the articleUrl, into a host that belongs elsewhere.
-    // The driver stays parked on the articleUrl tab: CC cancels the navigation instead
-    // of tearing the tab down, which is the whole point.
+    // A plain same-tab link out of articleUrl into a host that belongs elsewhere. The
+    // driver stays parked there: CC cancels the navigation instead of tearing the tab
+    // down, which is the point.
     await firefox.driver.findElement(By.id("go")).click();
 
     const deadline = Date.now() + 15_000;
@@ -156,10 +156,9 @@ describe("routing — a link opened in a new tab (real Firefox, CC + probe)", ()
     const openersContainer = await awaitContainerTab(firefox.driver, openerUrl);
     expect(openersContainer.name).toMatch(/^tmp/);
 
-    // A real click on a target=_blank link. Firefox opens a tab that INHERITS the
-    // openerUrl's container and reads about:blank until the click commits — the same
-    // pre-commit state a redirect hop is in, but a different navigation, so it has to
-    // be isolated rather than left where it landed.
+    // A real click on a target=_blank link. Firefox opens a tab that INHERITS the opener's
+    // container and reads about:blank until the click commits — the same pre-commit state
+    // as a redirect hop, but a different navigation, so it must be isolated.
     await firefox.driver.findElement(By.id("go")).click();
 
     const linkedTabsContainer = await awaitContainerTab(firefox.driver, linkTargetUrl);
@@ -171,12 +170,11 @@ describe("routing — a link opened in a new tab (real Firefox, CC + probe)", ()
   });
 });
 
-// The counterpart to the case above, and the one that has to answer the other way: a
-// link opened in a new tab to the site it was clicked ON. The tab Firefox makes for it
-// is pre-commit on about:blank, so nothing about the tab itself says which session it
-// belongs to — only the container it inherited and the page the click came from do.
-// Reported: reading YouTube in a throwaway and opening a video from the search results
-// in a new tab put it in a SECOND throwaway, logged out.
+// The counterpart to the case above, answering the other way: a link opened in a new tab
+// to the site it was clicked ON. That tab is pre-commit on about:blank, so nothing about
+// it says which session it belongs to — only the container it inherited and the page the
+// click came from. Reported: opening a video from a YouTube search result in a new tab put
+// it in a SECOND throwaway, logged out.
 describe("routing — a same-site link opened in a new tab (real Firefox, CC + probe)", () => {
   let firefox: Session;
   let serverPort: string;
@@ -236,12 +234,11 @@ describe("routing — a window.open popup (real Firefox, CC + probe)", () => {
     await awaitContainerTab(firefox.driver, articleUrl);
     const articleTab = (await listTabs(firefox.driver)).find((tab) => tab.url === articleUrl)!;
 
-    // A share button: window.open(url, "share", "width=640,height=480"). Firefox gives
-    // it a window of its own, whose tab is pre-commit and so takes the REPLACE branch of
-    // a reopen. The replacement used to be created with no window at all, which lands it
-    // in the last focused normal window — removing the original then closed the popup and
-    // took the navigation with it. The driver stays parked on the article: window.open
-    // does not navigate this tab, so its command relay survives.
+    // A share button: window.open(url, "share", "width=640,height=480"). Firefox gives it
+    // its own window, whose tab is pre-commit and so takes the REPLACE branch. The
+    // replacement used to be created with no window at all, landing in the last focused
+    // normal window — removing the original then closed the popup and took the navigation
+    // with it. The driver stays parked on the article, so its command relay survives.
     await firefox.driver.findElement(By.id("go")).click();
 
     const deadline = Date.now() + 15_000;

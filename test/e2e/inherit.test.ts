@@ -11,26 +11,20 @@ import {
 
 // F14 — an `inherit` host in a tab whose opener is in another container.
 //
-// `openerTabId` outlives the click that set it, for the whole life of the tab, and
-// `supersede` carries it across every reopen — so a tab CC routed still points at the
-// tab it was opened from, necessarily in a DIFFERENT container, since that difference
-// is why it was reopened. Reading the initiator off the opener therefore sent an
-// `inherit` host back to the container the tab had just been reopened out of, and
-// because each reopen makes the source tab the new tab's opener, the next hop sent it
-// straight back: login tabs alternating between two containers forever. Reported for a
-// Slack link to portal.azure.com, which the hosts below mirror; the same url typed by
-// hand always looked fine, because a tab the user navigated themselves has no opener.
+// `openerTabId` outlives the click that set it, and `supersede` carries it across every
+// reopen, so a tab CC routed still points at one in a DIFFERENT container. Reading the
+// initiator off the opener therefore sent an `inherit` host back to the container the tab
+// had just been reopened out of, and since each reopen makes the source tab the new one's
+// opener, the next hop sent it straight back: login tabs alternating forever. Reported for
+// a Slack link to portal.azure.com, which the hosts below mirror.
 //
-// L3 pins the same decision (test/engine/engine.test.ts, "an inherit host in a tab that
-// has an opener"), but the browser is the source of truth for the fact it turns on: how
-// long Firefox keeps `openerTabId`, and whether `tabs.create({ openerTabId })` really
-// reproduces that lineage through a reopen. The mock keeps it because it was written to.
-// Hence the opener assertion in the middle of this case — without it, this would pass
-// just as happily on a Firefox that had dropped the opener, proving nothing.
+// L3 pins the same decision, but the browser owns the fact it turns on: how long Firefox
+// keeps `openerTabId`, and whether `tabs.create({ openerTabId })` reproduces that lineage
+// through a reopen. The mock keeps it because it was written to — hence the opener
+// assertion midway, without which this would pass on a Firefox that had dropped it.
 //
 // The reported chain runs through the choice screen, which the driver can only operate
-// once something else has opened it. This is its second half, which is where the fix
-// lives: a tab with a cross-container opener, navigating to an `inherit` host.
+// once something else opened it. This is its second half, where the fix lives.
 const SSO_CONFIG = `
 rules:
   - match: sso.example

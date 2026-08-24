@@ -84,8 +84,8 @@ describe("choice screen + reopen picker (real Firefox, CC + probe)", () => {
   }
 
   it("lands with an option already focused, so arrows and Enter are enough to choose", async () => {
-    // The page used to render with focus nowhere: the two keys a user reaches for first
-    // — an arrow and Enter — did nothing at all, and the hotkeys were the only way in.
+    // The page used to render with focus nowhere, so an arrow and Enter — the first two
+    // keys anyone tries — did nothing, and the hotkeys were the only way in.
     const url = `http://figma.example:${serverPort}/?arrow-enter`;
     await navFreshTab(url);
     await awaitChoicePage();
@@ -107,8 +107,8 @@ describe("choice screen + reopen picker (real Firefox, CC + probe)", () => {
     await navFreshTab(url);
     await awaitChoicePage();
 
-    // "w" for Work, beside the positional "2" — the accelerator a user remembers when
-    // the same site is open in two containers every day.
+    // "w" for Work, beside the positional "2": the accelerator you remember when the same
+    // site is open in two containers every day.
     const opts = await firefox.driver.findElements(By.css("[data-cc-option][data-mnemonic='w']"));
     expect(await opts[0]?.getAttribute("data-container")).toBe("Work");
 
@@ -130,16 +130,16 @@ describe("choice screen + reopen picker (real Firefox, CC + probe)", () => {
   });
 
   it("keeps the page you were on while you choose, and lands the choice beside it", async () => {
-    // Its own query string: earlier cases leave their own figma.example tabs open in
-    // this session, and a bare host url would match those instead of this one's.
+    // Its own query string: earlier cases leave figma.example tabs open in this session,
+    // and a bare host url would match those instead.
     const multiOpenUrl = `http://figma.example:${serverPort}/?keeps-the-page`;
     const articleUrl = `http://nomatch.example:${serverPort}/?same=1&link=${encodeURIComponent(multiOpenUrl)}`;
     await navFreshTab(articleUrl);
     const { name: articleContainer } = await awaitContainerTab(firefox.driver, articleUrl);
 
-    // A same-tab link into a multi-open rule. The choice page used to be loaded into
-    // THIS tab, so the article was gone before anything had been chosen — the very loss
-    // a single-container reopen avoids by keeping the source tab.
+    // A same-tab link into a multi-open rule. The choice page used to load into THIS tab,
+    // so the article was gone before anything had been chosen — the loss a single-container
+    // reopen avoids by keeping the source tab.
     await firefox.driver.findElement(By.id("go")).click();
 
     const deadline = Date.now() + 15_000;
@@ -163,8 +163,8 @@ describe("choice screen + reopen picker (real Firefox, CC + probe)", () => {
     const { name: chosenContainer } = await awaitContainerTab(firefox.driver, multiOpenUrl);
     expect(chosenContainer).toBe("Work");
 
-    // Indices are read from ONE fresh snapshot: tabs closing elsewhere in the session
-    // renumber every tab after them, so the earlier reading is only good against itself.
+    // Indices come from ONE fresh snapshot: a tab closing elsewhere renumbers every tab
+    // after it, so an earlier reading is only good against itself.
     const after = await listTabs(firefox.driver);
     const articleStillOpen = after.find((tab) => tab.url === articleUrl);
     const chosenTab = after.find((tab) => tab.url.startsWith(multiOpenUrl));
@@ -182,7 +182,7 @@ describe("choice screen + reopen picker (real Firefox, CC + probe)", () => {
 
     await firefox.driver.findElement(By.id("go")).click();
     await awaitChoicePage();
-    // Esc used to navigate this tab to the url — which, in a tab of its own, only earns
+    // Esc used to navigate this tab to the url, which in a tab of its own only earns
     // another choice page. Cancelling means closing it.
     await firefox.driver.actions().sendKeys(Key.ESCAPE).perform();
 
@@ -200,12 +200,10 @@ describe("choice screen + reopen picker (real Firefox, CC + probe)", () => {
     expect(tabs.some((tab) => tab.url.startsWith(multiOpenUrl)), "nothing was opened").toBe(false);
   });
 
-  // SKIPPED: Firefox `commands.onCommand` fires only on browser-CHROME key events, which
-  // Selenium cannot synthesize in headless mode (W3C actions deliver to web content, not
-  // chrome). The handler logic is fully covered by the L3 picker test (rule lookup,
-  // restricted list, showChoice); the shared choice page + reopen are proven end to end
-  // by the two choice-screen tests above. Re-enable when a chrome-key-capable driver
-  // (or a programmatic command trigger) is available. See choice-screen design spec §8.
+  // SKIPPED: `commands.onCommand` fires only on browser-CHROME key events, which Selenium
+  // cannot synthesize (W3C actions deliver to web content). The handler logic is covered by
+  // the L3 picker test, and the shared choice page and reopen by the two cases above.
+  // Re-enable when a chrome-key-capable driver is available. Design spec §8.
   it.skip("reopen picker: command on a default-Temporary tab offers the rule's list and reopens into Personal", async () => {
     const url = `http://youtube.example:${serverPort}/`;
     await navFreshTab(url);
