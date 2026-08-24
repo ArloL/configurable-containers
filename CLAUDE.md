@@ -461,7 +461,8 @@ reasonable-looking change wrong**.
 - **GitHub immutable releases are ENABLED**: assets can't be edited, so the dev xpi ships
   in the same `gh release create`, and a rollback is *deleting* a release plus
   republishing the manifest.
-- **`npm audit` is loud and `npm audit --omit=dev` is the one that means anything.** The
+- **`npm audit` is loud and `npm run audit` (`--omit=dev`) is the one that means anything,
+  and it gates every push.** The
   xpi is an esbuild bundle of `src/`, so no `node_modules` package ships and every current
   advisory is transitive dev tooling with no upstream fix (`image-size` under
   `addons-linter`, `brace-expansion` under two `minimatch` lines, `nanoid`, `qs`). `npm

@@ -336,6 +336,22 @@ mutant no other case catches.
   This gate finds dead defences too, and takes the same exit: the two in `matcher.ts`
   Stryker reports unreachable carry a `/* v8 ignore */` beside their `// Stryker disable`.
   Excluding a file, or lowering a floor, is not an exit.
+- **The production dependency tree** — `npm run audit` (`npm audit --omit=dev`), every
+  push. The xpi is an esbuild bundle of `src/`, so no `node_modules` package ships and
+  every current advisory is dev tooling with no upstream fix. That makes the unfiltered
+  `npm audit` permanently loud and this one meaningful: the shipped tree is two packages
+  wide (`tldts`, `yaml`), and an advisory in either is a real one, in code that runs
+  inside every page load's decision.
+- **The reproducibility promise** — `npm run verify:reproducible`, nightly. Every release
+  body says "Reproduce this build:" and gives two commands; this runs them, rebuilding the
+  last **listed** release from its own published source archive with its own published
+  `BUILD_TIMESTAMP` and comparing the sha256 with the xpi attached beside it. It is the
+  only check of that promise, and the GitHub asset is the only copy it can be made
+  against — AMO repacks uploads, so its copy differs by entry order and mtimes whatever
+  the build did. The release-picking is unit-tested (`test/extension/verify-reproducible.test.ts`)
+  because picking wrong is the failure that matters: both channels share one tag sequence,
+  and reproducing a dev build reports a mismatch that is not one, since AMO signed it on
+  the way out.
 - **Determinism of the browser tier** — `npm run test:flake`, nightly. Every other gate
   asks whether the suite is green. This asks whether green means anything: L4/L5 drive a
   real Firefox through a real network stack and real timers, and one run cannot tell a

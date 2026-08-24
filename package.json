@@ -11,8 +11,10 @@
     "test:flake": "tsx scripts/flake-check.ts",
     "typecheck": "tsc --noEmit",
     "lint": "oxlint --type-aware --deny-warnings src test harness scripts extensions",
+    "audit": "npm audit --omit=dev",
     "manual": "tsx harness/manual.ts",
     "package": "tsx scripts/package.ts",
+    "verify:reproducible": "tsx scripts/verify-reproducible.ts",
     "sign:dev": "tsx scripts/sign-dev.ts",
     "lint:ext": "tsx scripts/package.ts && web-ext lint --source-dir dist/cc",
     "submit": "web-ext sign --source-dir dist/cc --artifacts-dir dist --channel listed --api-key \"$WEB_EXT_API_KEY\" --api-secret \"$WEB_EXT_API_SECRET\""
