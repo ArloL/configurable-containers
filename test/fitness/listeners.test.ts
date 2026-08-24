@@ -1,22 +1,19 @@
 // Fitness function: one browser event, one registration.
 //
-// `test/engine/mock-port.ts` holds a SINGLE handler slot per event — `onTabRemoved(h) {
-// onTabRemovedH = h }`, an assignment, not a push. That is deliberate and load-bearing
-// twice over: it is how `test/engine/restart.ts` retires a dead session's listeners (a
-// second `wireBackground` against the same fake browser replaces them, the way Firefox
-// drops a background context's listeners with the context), and it is the reason
-// CLAUDE.md's `viewSourceNav` note gives for that map having no `onTabRemoved` cleanup.
+// `runtime.onMessage` is the one event where a second registration is a bug in FIREFOX,
+// not merely an inconvenience in a test double: an async handler returns a Promise for
+// every message it sees and claims the reply channel from the sibling the message was
+// addressed to. `wireBackground` owns the single registration and dispatches by `type`,
+// and this inventory is what keeps it single.
 //
-// The cost is that a SECOND registration of the same event anywhere in `src/` is
-// invisible: the later one silently displaces the earlier, nothing goes red, and the
-// displaced behaviour is simply not wired for every L3 case that drives the composed
-// background. Real Firefox is additive and runs both, so this is a hole in what L3 can
-// SEE rather than a shipped bug — which is exactly the kind that survives, because no
-// symptom points at it.
+// The rest of the events are additive in Firefox and, since 2026-08-24, in
+// `test/engine/mock-port.ts` too. They are still inventoried, for a weaker but real
+// reason: two siblings on one event is a fact about the composed background that ought to
+// be deliberate, and every case here that used to be a blind spot was found by reading
+// this list rather than by anything going red.
 //
 // Hence an exact inventory rather than a bound. Adding a registration means editing this
-// list, and the list is where the question "what does the mock do with two of these?"
-// gets asked.
+// list, and the list is where the question gets asked.
 import { describe, it, expect } from "vitest";
 import { sourceFiles, filesMatching } from "./sources";
 
@@ -59,22 +56,19 @@ describe("fitness — one browser event, one registration", () => {
       onBeforeNavigate: ["src/engine/engine.ts"],
       onTabCreated: ["src/engine/auto-temp.ts"],
 
-      // TWO sites, TWO listeners — a genuine fan-out, and the one the single-slot mock
-      // cannot represent. The disposer registers after `createPause` in `wireBackground`,
-      // so under `test/engine/mock-port.ts` the disposer's sweep wins and pause's
-      // disarm-on-empty is never wired. Both run in Firefox (`tabs.onRemoved` is
-      // additive), and pause's own unit tests build a `createPause` on a port of their
-      // own, so the behaviour is covered — what is NOT covered, and cannot be while this
-      // reads two, is disarm-on-empty in the composed background. See FOLLOWUPS.md.
+      // TWO sites, TWO listeners — a deliberate fan-out. Both run, in Firefox and at L3:
+      // the mock keeps a list per event, and `test/engine/wiring.test.ts` pins pause's
+      // disarm-on-empty happening with the disposer registered on the same event. While
+      // the mock held one slot the disposer (constructed second) displaced pause here,
+      // and that case could not be written at all.
       onTabRemoved: ["src/engine/disposer.ts", "src/engine/pause.ts"],
 
-      // The same fan-out, the same blind spot: `createRedirectorCloser` registers after
-      // `createAutoTemp`, so at L3 the closer's handler is the one that survives and
-      // auto-temp is driven by `onTabCreated` alone. That matters more than it looks —
-      // auto-temp listens on BOTH events precisely because Firefox bug 1586612 makes
-      // `onCreated` fire with "about:blank" before the real url, and an onCreated-only
-      // draft passed L3 and failed in real Firefox (CLAUDE.md). L3 is back to being
-      // unable to tell the difference.
+      // The same shape: `createRedirectorCloser` registers after `createAutoTemp`, and
+      // both are called. Auto-temp listens on BOTH tab events precisely because Firefox
+      // bug 1586612 makes `onCreated` fire with "about:blank" before the real url, and an
+      // onCreated-only draft passed L3 and failed in real Firefox (CLAUDE.md) — so the
+      // single slot had quietly put L3 back in exactly that position. `wiring.test.ts`
+      // now pins the update-driven path with the closer registered alongside.
       onTabUpdated: ["src/engine/auto-temp.ts", "src/engine/redirector-closer.ts"],
 
       onBeforeSendHeaders: ["src/engine/cookie-seeder.ts"],

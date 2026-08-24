@@ -1,7 +1,7 @@
 # Fitness Functions — Design
 
 **Date:** 2026-08-24
-**Status:** Implemented (first batch)
+**Status:** Implemented (first batch); §4's finding resolved in the same-day follow-up (§5)
 **Topic:** Executable checks on the *shape* of the codebase and the *cost* of its hot
 path, rather than on its behaviour — the quality criteria this project already states in
 prose and has, until now, kept true by hand.
@@ -114,10 +114,36 @@ events with two, of which one is benign and two are not:
 
 Both are blind spots at L3 rather than shipped bugs — Firefox's `tabs.onRemoved` and
 `tabs.onUpdated` are additive, so both listeners run in the browser, and the e2e level
-covers the behaviours end to end. Recorded in `FOLLOWUPS.md` with the two candidate
-fixes rather than fixed here: one of them changes `src/` to satisfy a test double, the
-other changes the mock's fidelity contract and invalidates three CLAUDE.md notes that
-lean on it. That is the author's call, not a drive-by.
+covers the behaviours end to end.
 
 The point worth keeping: the check found this on its first run, in a codebase whose
 own documentation had already written the hazard down twice.
+
+## 5. Resolution (2026-08-24, follow-up)
+
+Fixed at the root rather than in `src/`. `mock-port` now keeps a **list per event**
+instead of a slot, because that is what `addListener` does; the single slot had been
+doing two unrelated jobs, and only one of them was "model Firefox".
+
+The other job — retiring a dead session's listeners on restart — moved to
+`aSessionPort` in `test/engine/restart.ts`, beside the `aSessionClock` that already did
+exactly this for timers. Both now model one fact: Firefox destroys the context a dead
+background's callbacks live in. A restart therefore retires twice, and `restart.test.ts`
+pins that a message after a restart is answered by the background that is running.
+
+Two behaviours became observable at L3 for the first time and are pinned in
+`test/engine/wiring.test.ts`: pause's disarm-on-empty with the disposer registered on the
+same event, and auto-temp's update-driven path with the redirector-closer registered on
+the same event. Both were revert-verified against a mock restored to last-registration-
+wins, and both go red.
+
+Blocking events keep faithful merge semantics rather than a slot: `onBeforeRequest` and
+`onBeforeSendHeaders` call every listener and take the first response, and `onMessage`
+returns the first non-undefined reply — which is the behaviour that makes `wireBackground`'s
+synchronous `undefined` for a foreign message the right thing to write.
+
+Four CLAUDE.md/TESTING.md notes that gave the single slot as their *reason* were rewritten.
+Two conclusions stood with a corrected premise (`viewSourceNav` still does not want an
+`onTabRemoved` cleanup; `runtime.onMessage` is still a single registration — because a
+second one breaks the reply channel in Firefox itself, which was always the stronger half
+of that argument).

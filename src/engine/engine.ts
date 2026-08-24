@@ -221,9 +221,8 @@ export function createEngine(opts: EngineOptions): Engine {
   // Nothing has to expire it: every top-level navigation in a tab announces itself here
   // first, so the next one clears the mark, and a redirect of the view-source load
   // itself keeps it — which is what that hop needs. A tab closed while still showing
-  // source leaves its id behind; that is one integer, and NOT worth an onTabRemoved
-  // listener, because `mock-port` holds a single handler slot per event and a second
-  // registration would silently displace the disposer's.
+  // source leaves its id behind; that is one integer, and NOT worth a third listener on
+  // an event `pause` and the disposer already share.
   const viewSourceNav = new Set<number>();
 
   // One top-level navigation at a time per tab.

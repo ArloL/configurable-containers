@@ -115,12 +115,12 @@ export function wireBackground(opts: WiringOptions): Background {
   picker = createPicker({ port, config, deps: { matchRule }, reopen: engine.reopen });
 
   // The ONE runtime.onMessage registration. Siblings expose a handler and are dispatched
-  // by `type` from here, for two reasons that both fail silently: mock-port holds a
-  // single handler slot per event, so a second addListener replaces the first without
-  // any test going red; and in Firefox an async handler returns a Promise for EVERY
+  // by `type` from here, because in Firefox an async handler returns a Promise for EVERY
   // message it sees, which claims the reply channel from the sibling the message was
   // addressed to. Returning undefined synchronously for an unknown type is what leaves
-  // that channel free.
+  // that channel free. Unlike the tab events, a second registration here is a bug in the
+  // browser and not only in a test double — `test/fitness/listeners.test.ts` is what keeps
+  // this the only one.
   port.onMessage((msg, sender) => {
     const type = (msg as { type?: unknown } | null | undefined)?.type;
     if (type === "cc-pick") return picker.handleMessage(msg, sender);
