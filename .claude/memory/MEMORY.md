@@ -1,6 +1,7 @@
 - [Critical thinking partner](critical-thinking-partner.md) — constructive disagreement gated to decisions and reviews; build collaboratively during brainstorming
 - [No Gherkin DSL for tests](no-gherkin-dsl.md) — no prose spec at all; the tests are the spec, read via naming
 - [Compare tooling before deciding](compare-tooling-before-deciding.md) — wants detailed tool comparisons before being asked to pick
+- [Firefox is obtainable in a sandbox](firefox-is-obtainable-in-a-sandbox.md) — run `scripts/get-firefox.sh`; never report L4/L5 as unrunnable without naming the blocked host
 - [E2E driver is Selenium not Playwright](e2e-driver-selenium-not-playwright.md) — Playwright can't see WebExtension container tabs; harness uses selenium/geckodriver
 - [Logical commits](logical-commits.md) — split by reason for the change, dependency-ordered, each one green; conventional prefixes
 - [No scratch notes in the repo](no-scratch-notes-in-repo.md) — fold findings into CLAUDE.md/tests, then delete the notes file

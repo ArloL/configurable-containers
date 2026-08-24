@@ -369,6 +369,19 @@ reasonable-looking change wrong**.
 
 ## e2e: what the driver cannot do, and what the probe does instead
 
+- **A machine with no Firefox can get one: `./scripts/get-firefox.sh`.** It fetches both
+  channels into `.firefox/`, and then `FIREFOX_BIN=.firefox/esr/firefox npm test` runs the
+  suite exactly as `ci.yml`'s `latest-esr` leg does. **geckodriver needs no setup** —
+  Selenium Manager ships inside `selenium-webdriver` and fetches it the first time a driver
+  is built, so nothing looks for one on PATH. The other prerequisite is a `mac/` checkout
+  (`git clone --depth 1 https://github.com/mozilla/multi-account-containers.git mac`),
+  without which `mac-interop.test.ts` fails on a bare ENOENT.
+- **In a sandbox, `ftp.mozilla.org` being blocked is NOT evidence that Firefox cannot be
+  downloaded.** It is a legacy alias that network policies often omit;
+  `download.mozilla.org` (which redirects to `archive.mozilla.org`) is the host that
+  serves the builds, and GitHub release assets come from `objects.githubusercontent.com`.
+  Probe those before concluding L4/L5 cannot be run here — that conclusion has been drawn
+  wrongly more than once, and it silently drops the only levels that see a real browser.
 - **Unsigned CC loads on *release* Firefox by TEMPORARY install** (`installAddon(xpi,
   true)`), which grants `webRequestBlocking`. Don't reach for Developer Edition, Nightly
   or signing to fix a load failure — `xpinstall.signatures.required=false` is ignored on
