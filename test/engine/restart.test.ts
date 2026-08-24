@@ -293,3 +293,29 @@ describe("restart — a paused container", () => {
     expect(browser.seededCookies.map((c) => c.name)).toContain("consent");
   });
 });
+
+// The other half of what a restart has to retire. Timers are the obvious one — the
+// disposer's re-arming sweep would otherwise keep running through a closure holding a
+// live port — but listeners are the same problem: `mock-port` is additive, exactly as
+// Firefox is, so wiring a second background ADDS handlers rather than replacing them.
+// Firefox retires the old ones by destroying the context they live in; `aSessionPort`
+// models that by gating them.
+describe("restart — the dead session stops hearing the browser", () => {
+  it("hands a message to the background that is running, not the one that was", async () => {
+    const { browser, clock } = aBrowserWithFakeClock();
+    const shop = browser.addContainerNamed({ name: "Shop" });
+    browser.existingTab({ url: "https://shop.example/", cookieStoreId: shop.cookieStoreId });
+
+    const first = await startTheBackground(browser, clock, workConfig());
+    const second = await restartTheBackground(first, browser, clock, workConfig());
+
+    await browser.receivesMessage({ type: "cc-pause-toggle", cookieStoreId: shop.cookieStoreId });
+
+    // Answered by the live session — its armed set is the one the blocking handler will
+    // consult. An ungated dead listener would claim the reply channel first (it registered
+    // first) and arm a set nothing reads any more: the options page would report routing
+    // paused while every navigation carried on being routed.
+    expect(second.pause.isPaused(shop.cookieStoreId)).toBe(true);
+    expect(first.pause.isPaused(shop.cookieStoreId)).toBe(false);
+  });
+});

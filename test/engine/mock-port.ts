@@ -115,17 +115,28 @@ export function aFakeBrowser(): MockPort {
   let containerId = 0;
   let macThrows = false;
   let createTabThrows = false;
-  let handler: ((d: WebRequestDetails) => Promise<BlockingResponse | void>) | null = null;
-  let beforeNavigateH: ((d: NavigationDetails) => void) | null = null;
-  let onTabCreatedH: ((tab: Tab) => void) | null = null;
-  let onTabRemovedH: ((tabId: number) => void) | null = null;
-  let onTabUpdatedH: ((tab: Tab, info: TabUpdateInfo) => void) | null = null;
-  let headersHandler: ((d: HeadersDetails) => Promise<BlockingHeadersResponse | void>) | null = null;
-  let messageHandler: ((msg: unknown, sender: MessageSender) => unknown | Promise<unknown>) | null = null;
-  let commandHandler: ((name: string) => void) | null = null;
+  // Listeners are LISTS, one per event, because `browser.*.addListener` is additive:
+  // Firefox calls every listener an extension registered, in registration order. The mock
+  // held a single slot per event until 2026-08-24, and the cost was exactly what you would
+  // expect of a mock that models "the last registration wins" — `wireBackground` registers
+  // onTabRemoved twice (pause, then the disposer) and onTabUpdated twice (auto-temp, then
+  // the redirector-closer), so at L3 the first of each pair was never called and two
+  // behaviours the composed background relies on were silently not wired.
+  //
+  // What the single slot was ALSO doing — retiring a dead session's listeners on restart —
+  // is now `aSessionPort` in restart.ts, beside the clock facade that already did the same
+  // job for timers. One mechanism per job; this one answers only "what does Firefox do".
+  const beforeRequestHs: ((d: WebRequestDetails) => Promise<BlockingResponse | void>)[] = [];
+  const beforeNavigateHs: ((d: NavigationDetails) => void)[] = [];
+  const onTabCreatedHs: ((tab: Tab) => void)[] = [];
+  const onTabRemovedHs: ((tabId: number) => void)[] = [];
+  const onTabUpdatedHs: ((tab: Tab, info: TabUpdateInfo) => void)[] = [];
+  const headersHs: ((d: HeadersDetails) => Promise<BlockingHeadersResponse | void>)[] = [];
+  const messageHs: ((msg: unknown, sender: MessageSender) => unknown | Promise<unknown>)[] = [];
+  const commandHs: ((name: string) => void)[] = [];
+  const actionClickedHs: ((tab: Tab) => void)[] = [];
   let activeTab: Tab | null = null;
   let badgeText = "";
-  let actionClickedH: ((tab: Tab) => void) | null = null;
   const cookieStore = new Map<string, Map<string, Cookie>>(); // storeId -> name -> cookie
   const registeredScripts: RegisterContentScriptDetails[] = [];
   // storage.local. Lives on the BROWSER, not the background session, which is the whole
@@ -162,10 +173,10 @@ export function aFakeBrowser(): MockPort {
 
   const port: BrowserPort = {
     onBeforeRequest(h) {
-      handler = h;
+      beforeRequestHs.push(h);
     },
     onBeforeNavigate(h) {
-      beforeNavigateH = h;
+      beforeNavigateHs.push(h);
     },
     async getTab(id) {
       return openTabs.get(id) ?? null;
@@ -181,7 +192,8 @@ export function aFakeBrowser(): MockPort {
         throw new Error(`Illegal URL: ${props.url}`);
       }
       const tab = makeTab(props);
-      onTabCreatedH?.(tab); // real Firefox fires onCreated synchronously during tabs.create
+      // real Firefox fires onCreated synchronously during tabs.create
+      for (const h of onTabCreatedHs) h(tab);
       return tab;
     },
     async removeTab(id) {
@@ -192,7 +204,7 @@ export function aFakeBrowser(): MockPort {
       // Without this a tab CC itself closed (a reopen superseding its source, a stranded
       // redirector) was invisible to every onTabRemoved listener, so the disposer never
       // learned that the container it emptied had gone empty.
-      if (wasOpen) onTabRemovedH?.(id);
+      if (wasOpen) for (const h of onTabRemovedHs) h(id);
     },
     async queryIdentities() {
       return [...containers.values()];
@@ -213,13 +225,13 @@ export function aFakeBrowser(): MockPort {
       return null;
     },
     onTabCreated(h) {
-      onTabCreatedH = h;
+      onTabCreatedHs.push(h);
     },
     onTabRemoved(h) {
-      onTabRemovedH = h;
+      onTabRemovedHs.push(h);
     },
     onTabUpdated(h) {
-      onTabUpdatedH = h;
+      onTabUpdatedHs.push(h);
     },
     async queryTabs(filter) {
       const all = [...openTabs.values()];
@@ -230,7 +242,7 @@ export function aFakeBrowser(): MockPort {
       containers.delete(cookieStoreId);
     },
     onBeforeSendHeaders(h) {
-      headersHandler = h;
+      headersHs.push(h);
     },
     async setCookie(details) {
       seededCookies.push(details);
@@ -246,10 +258,10 @@ export function aFakeBrowser(): MockPort {
       return { unregister: async () => { /* no-op for tests */ } };
     },
     onMessage(h) {
-      messageHandler = h;
+      messageHs.push(h);
     },
     onCommand(h) {
-      commandHandler = h;
+      commandHs.push(h);
     },
     async getActiveTab() {
       return activeTab;
@@ -261,7 +273,7 @@ export function aFakeBrowser(): MockPort {
       notifications.push(n);
     },
     onActionClicked(h) {
-      actionClickedH = h;
+      actionClickedHs.push(h);
     },
     async setBadge(text) {
       badgeText = text;
@@ -280,16 +292,31 @@ export function aFakeBrowser(): MockPort {
   return {
     port,
     async navigates(d) {
-      if (!handler) throw new Error("no onBeforeRequest handler registered");
-      return handler(d);
+      if (beforeRequestHs.length === 0) throw new Error("no onBeforeRequest handler registered");
+      // Firefox calls every blocking listener and merges what they return, with a cancel
+      // from any one of them winning. CC registers exactly one effective handler (the
+      // engine's, through wiring's gate) — `test/fitness/listeners.test.ts` pins that — so
+      // "first listener with something to say answers" is a faithful enough merge, and it
+      // is what lets a retired session's gated handler return undefined and stand aside.
+      let response: BlockingResponse | void = undefined;
+      for (const h of beforeRequestHs) {
+        const r = await h(d);
+        if (r && response === undefined) response = r;
+      }
+      return response;
     },
     startsNavigating(d) {
-      if (!beforeNavigateH) throw new Error("no onBeforeNavigate handler registered");
-      beforeNavigateH({ frameId: 0, ...d });
+      if (beforeNavigateHs.length === 0) throw new Error("no onBeforeNavigate handler registered");
+      for (const h of beforeNavigateHs) h({ frameId: 0, ...d });
     },
     async sendsHeaders(d) {
-      if (!headersHandler) throw new Error("no onBeforeSendHeaders handler registered");
-      return headersHandler(d);
+      if (headersHs.length === 0) throw new Error("no onBeforeSendHeaders handler registered");
+      let edits: BlockingHeadersResponse | void = undefined;
+      for (const h of headersHs) {
+        const r = await h(d);
+        if (r && edits === undefined) edits = r;
+      }
+      return edits;
     },
     openTabs,
     containers,
@@ -309,19 +336,19 @@ export function aFakeBrowser(): MockPort {
     addContainerNamed: (props) => makeIdentity({ name: props.name, color: props.color ?? "blue", icon: props.icon ?? "circle" }),
     async opensTab(props) {
       const tab = makeTab(props);
-      onTabCreatedH?.(tab);
+      for (const h of onTabCreatedHs) h(tab);
       await flushMicrotasks();
       return tab;
     },
     async closesTab(tab) {
       openTabs.delete(tab.id);
-      onTabRemovedH?.(tab.id);
+      for (const h of onTabRemovedHs) h(tab.id);
       await flushMicrotasks();
     },
     async updatesTab(tab, info) {
       // Reflect the updated tab into the mock's map so getTab sees the new URL.
       openTabs.set(tab.id, tab);
-      onTabUpdatedH?.(tab, info);
+      for (const h of onTabUpdatedHs) h(tab, info);
       await flushMicrotasks();
     },
     macAssigns: (url, value) => void macMap.set(url, value),
@@ -329,15 +356,24 @@ export function aFakeBrowser(): MockPort {
     tabCreationFails: (on) => void (createTabThrows = on),
     cookieIn: (storeId, name) => cookieStore.get(storeId)?.get(name) ?? null,
     async receivesMessage(msg, from) {
-      if (!messageHandler) throw new Error("no onMessage handler registered");
-      return messageHandler(msg, { tabId: from?.id });
+      if (messageHs.length === 0) throw new Error("no onMessage handler registered");
+      // The one event where a second listener is a bug in Firefox too, not just an
+      // inconvenience here: an async handler returns a Promise for EVERY message it sees
+      // and claims the reply channel from the sibling the message was addressed to. Hence
+      // `wireBackground`'s single registration and its synchronous `undefined` for a type
+      // it does not own — modelled here as "the first listener with an answer replies".
+      for (const h of messageHs) {
+        const reply = await h(msg, { tabId: from?.id });
+        if (reply !== undefined) return reply;
+      }
+      return undefined;
     },
     async receivesCommand(name) {
-      commandHandler?.(name);
+      for (const h of commandHs) h(name);
       await flushMicrotasks();
     },
     async clicksAction(tab) {
-      actionClickedH?.(tab);
+      for (const h of actionClickedHs) h(tab);
       await flushMicrotasks();
     },
     activeTabIs(tab) {

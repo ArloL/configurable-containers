@@ -174,8 +174,11 @@ home of F1, F2, F7, F8, F10, F13, F14.
   extension entry point calls. That is deliberate: a harness that wired the siblings
   itself would hold a second copy of the startup order, and deleting a reconstruction
   from the real entry point would leave the suite green. Two fidelity rules keep it
-  honest — the mock's one-handler-per-event slots retire the previous session's
-  listeners, and a per-session clock facade retires its timers.
+  honest, and both retire the previous session: a per-session port facade stops its
+  listeners being called and a per-session clock facade stops its timers firing. The mock
+  itself is additive, exactly as `addListener` is, so re-wiring a background adds handlers
+  rather than replacing them — Firefox retires the old ones by destroying the context they
+  live in, and the two facades are what model that.
 
 ## L4 — Integration in real Firefox
 
@@ -335,8 +338,8 @@ shared per host reds only the L3 one.
     and leaves every existing test green. Plus the `browser.*` allowlist: five files, one
     of them the port implementation.
   - **The listener inventory** (`listeners.test.ts`) — every `BrowserPort` event, and every
-    place it is registered, compared exactly. `mock-port` holds one handler slot per event,
-    so a second registration displaces the first with nothing going red.
+    place it is registered, compared exactly. A second `runtime.onMessage` listener breaks
+    the reply channel in Firefox itself, and this is what keeps that registration single.
   - **The manifest** (`manifest.test.ts`) — declared permissions against called APIs, in
     both directions. A missing one fails silently (the four in CLAUDE.md's first Firefox
     bullet produce no error at all); an unused one is a larger install prompt and more AMO

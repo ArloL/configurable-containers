@@ -47,10 +47,12 @@ way* is in its own comment; the source is densely commented. This file carries o
   `reopenedNav` and `viewSourceNav` are one family, each keyed on a navigation and read
   inside the blocking handler. A sibling module is for behaviour with a life of its own
   (`pause` has storage, a badge and an options page); a `Set` the handler reads is not.
-  Note `viewSourceNav` deliberately has **no `onTabRemoved` cleanup**: `mock-port` keeps
-  one handler slot per event, so a second registration would silently displace the
-  disposer's, and the leak is one integer per source tab closed while still on
-  `view-source:`.
+  Note `viewSourceNav` deliberately has **no `onTabRemoved` cleanup**: the leak is one
+  integer per source tab closed while still on `view-source:`, which is not worth a third
+  listener on an event two siblings already share. (Until 2026-08-24 the reason given was
+  that a second registration would displace the disposer's under `mock-port`'s single
+  handler slot. The mock is additive now, like Firefox — the conclusion stands, the
+  premise was wrong.)
 - **The blocking handler takes one navigation at a time PER TAB (`inTurn`, `engine.ts`).**
   Each decision is a read-then-act across four awaits (`getTab`, the MAC handshake,
   `createIdentity`, `createTab`), and Firefox can deliver a **second `main_frame` request
@@ -78,10 +80,11 @@ way* is in its own comment; the source is densely commented. This file carries o
   caller.
 - **`wireBackground` owns the single `runtime.onMessage` registration** and dispatches by
   `type`; siblings expose `handleMessage` and must return `undefined` **synchronously**
-  for a message that is not theirs. A second `addListener` fails twice over and silently:
-  `mock-port` keeps one handler slot per event, so the first registration is replaced
-  with nothing going red, and in Firefox an `async` handler returns a Promise for *every*
-  message, which claims the reply channel from the sibling it was addressed to. Assert on
+  for a message that is not theirs. A second `addListener` breaks the reply channel in
+  **Firefox**: an `async` handler returns a Promise for *every* message it sees, claiming
+  the channel from the sibling the message was addressed to. `mock-port` models the
+  hazard rather than hiding it (the first listener with an answer replies) and
+  `test/fitness/listeners.test.ts` pins the registration as the single one. Assert on
   the **un-awaited** return — `await` flattens `Promise<undefined>` to `undefined`, which
   is how the pre-existing case passed either way.
 - **The choice page's keyboard grammar is PURE and lives in `picker-protocol.ts`**
@@ -334,11 +337,20 @@ way* is in its own comment; the source is densely commented. This file carries o
 - **`test/engine/mock-port.ts` fidelity is where "L3 green, Firefox broken" comes from.** It
   fires `onTabCreated` from `createTab`, fires `onTabRemoved` from `removeTab` (Firefox
   doesn't care who closed the tab — while it didn't, a tab **CC itself closed** was invisible
-  to the disposer), and throws on privileged `about:` urls. Never relax these.
-- **`test/engine/restart.ts` needs one handler slot per event and the per-session clock
-  facade** — without it the old disposer re-arms its GC through a closure holding a live port,
-  and the harness reports state surviving a restart that never happened. Restart from a
-  settled state: async work in flight is unmodelled.
+  to the disposer), throws on privileged `about:` urls, and keeps listeners in a **list per
+  event, not a slot** — `addListener` is additive in Firefox, and while the mock modelled
+  "last registration wins" the two events `wireBackground` registers twice (`onTabRemoved`:
+  pause then the disposer; `onTabUpdated`: auto-temp then the redirector-closer) had their
+  first listener silently dropped, so pause's disarm-on-empty and auto-temp's bug-1586612
+  path were unwired in every composed-background case. Never relax these.
+- **`test/engine/restart.ts` retires a dead session TWICE — `aSessionClock` for its timers,
+  `aSessionPort` for its listeners** — because `mock-port` is additive like Firefox, so
+  re-wiring a background *adds* handlers rather than replacing them. Without the clock
+  facade the old disposer re-arms its GC through a closure holding a live port; without the
+  port facade every one of the previous session's siblings keeps running, and either way the
+  harness reports state surviving a restart that never happened. Both model one fact:
+  Firefox destroys the context a dead background's callbacks live in. Restart from a settled
+  state: async work in flight is unmodelled.
 - **An F9 e2e must start from a COMMITTED page**: from a fresh tab CC reopens first, the 302
   is then another hop of a navigation `reopenedNav` already owns, and the assertion proves
   nothing. If the POST guard regresses the tab wedges and every WebDriver call blocks — **a

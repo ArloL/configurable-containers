@@ -120,3 +120,49 @@ describe("wiring — the options page's pause conversation", () => {
     expect(session.pause.isPaused(shop.cookieStoreId)).toBe(false);
   });
 });
+
+// Two events have TWO listeners each in the composed background — `onTabRemoved` (pause,
+// then the disposer) and `onTabUpdated` (auto-temp, then the redirector-closer). Firefox
+// runs both; `mock-port` did not, until it was made additive. Neither behaviour below
+// had a case at this level while the mock held one handler slot per event: each sibling's
+// own tests build it on a port of its own, where nothing else is registered, so both
+// passed while the wired-up extension was the thing that could not be observed.
+describe("wiring — siblings that share a browser event", () => {
+  it("disarms a container whose last tab closes, with the disposer listening on the same event", async () => {
+    const browser = aFakeBrowser();
+    const work = browser.addContainerNamed({ name: "Work" });
+    const tab = await browser.opensTab({ url: "https://figma.example/", cookieStoreId: work.cookieStoreId });
+    const background = await startTheBackground(browser, aFakeClock(), config);
+
+    expect((await background.pause.arm(work.cookieStoreId)).ok).toBe(true);
+    expect(background.pause.isPaused(work.cookieStoreId)).toBe(true);
+
+    await browser.closesTab(tab);
+    await browser.settle();
+
+    // An armed container the user can no longer see is an armed container they will
+    // forget about — and a forgotten one is routing silently off for as long as it
+    // lives. Pause disarms on empty for that reason; the disposer registering after it
+    // is what used to make this unobservable here.
+    expect(background.pause.isPaused(work.cookieStoreId)).toBe(false);
+  });
+
+  it("containerizes a new tab that only reveals about:newtab on update, with the redirector-closer listening on the same event", async () => {
+    const browser = aFakeBrowser();
+    await startTheBackground(browser, aFakeClock(), config);
+
+    // Firefox bug 1586612: tabs.onCreated sometimes fires with "about:blank" before the
+    // real url arrives on tabs.onUpdated. Auto-temp listens on both events for exactly
+    // this, and an onCreated-only draft passed L3 and failed in real Firefox — which is
+    // the state L3 was quietly back in while the redirector-closer's registration was
+    // displacing auto-temp's.
+    const tab = await browser.opensTab({ url: "about:blank", cookieStoreId: "firefox-default" });
+    expect(browser.createdContainers).toHaveLength(0); // about:blank is not a candidate
+
+    await browser.updatesTab({ ...tab, url: "about:newtab" }, { status: "complete" });
+    await browser.settle();
+
+    expect(browser.createdContainers).toHaveLength(1);
+    expect(browser.createdContainers[0].name).toBe("tmp1");
+  });
+});
