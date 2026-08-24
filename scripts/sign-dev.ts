@@ -15,7 +15,6 @@ import { packageExtension } from "./package";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = path.resolve(HERE, "../dist/dev");
-// put the signed xpi web-ext downloads in this directory
 const SIGNED_DIR = path.join(OUT_DIR, "signed");
 const WEB_EXT = path.resolve(HERE, "../node_modules/.bin/web-ext");
 
@@ -43,7 +42,6 @@ async function main() {
     outDir: OUT_DIR
   });
 
-  // clear signed directory of potential old builds
   rmSync(SIGNED_DIR, { recursive: true, force: true });
 
   const res = spawnSync(

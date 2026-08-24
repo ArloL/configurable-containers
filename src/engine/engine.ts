@@ -261,7 +261,7 @@ export function createEngine(opts: EngineOptions): Engine {
     const ours = reopenedNav.get(d.tabId);
     if (ours) {
       if ("requestId" in ours) {
-        if (ours.requestId === d.requestId) return; // another hop of the same navigation
+        if (ours.requestId === d.requestId) return;
         reopenedNav.delete(d.tabId); // a later navigation: route it normally
       } else if (deps.sameSite(ours.awaiting, d.url)) {
         reopenedNav.set(d.tabId, { requestId: d.requestId });

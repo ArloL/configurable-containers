@@ -63,16 +63,15 @@ export interface MockPort {
   seededCookies: SetCookieDetails[];
   notifications: NotificationSpec[];
   registeredScripts: RegisterContentScriptDetails[];
-  /** Current browser_action badge text; "" when cleared. */
   badgeText: string;
 
   // The engine floats its notification rather than awaiting it, so a test asserting on
   // notifications must settle first.
   settle(): Promise<void>;
 
-  /** A tab that is already open. Fires nothing. */
+  /** Arranged, not performed: fires nothing, unlike opensTab. */
   existingTab(props: TabProps & { url: string }): Tab;
-  /** A container that already exists. Fires nothing. */
+  /** Arranged, not performed: fires nothing. */
   addContainerNamed(props: { name: string; color?: string; icon?: string }): ContextualIdentity;
 
   /** Fires browser.tabs.onCreated, as a real tabs.create does. */

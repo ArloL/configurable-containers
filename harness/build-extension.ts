@@ -33,9 +33,8 @@ rules:
 // the SAME number the bundle carries, rather than a copy of it that could drift.
 export const PRODUCTION_GRACE_MS = 300000;
 
-// Bundle the extension background (engine + real port + tldts + yaml) into one
-// classic script Firefox can load as an MV2 background, plus the keyboard-driven choice
-// page script. Returns the background path (the harness installs the whole dir).
+// One classic script Firefox can load as an MV2 background, plus the choice-page script.
+// Returns the background path; the harness installs the whole directory.
 export async function buildExtension(
   opts: { graceMs?: number; redirectorDelayMs?: number; configYaml?: string; notifyEchoTo?: string } = {},
 ): Promise<string> {
