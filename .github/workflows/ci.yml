@@ -42,6 +42,11 @@ jobs:
 
       - run: npm ci
       - run: npm run typecheck
+
+      # Source lint. Type-aware, so it needs no browser and no build, and it is the only
+      # gate that reads promises rather than types (.oxlintrc.json says what for).
+      - run: npm run lint
+
       - run: npm run lint:ext
 
       # The deterministic levels with a coverage floor (TESTING.md, "Cross-cutting

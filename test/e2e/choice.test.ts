@@ -60,7 +60,7 @@ describe("choice screen + reopen picker (real Firefox, CC + probe)", () => {
     // The page rendered both options.
     const opts = await firefox.driver.findElements(By.css("[data-cc-option]"));
     const containers = await Promise.all(opts.map((o) => o.getAttribute("data-container")));
-    expect(containers.sort()).toEqual(["Personal", "Work"]);
+    expect(containers.sort((a, b) => String(a).localeCompare(String(b)))).toEqual(["Personal", "Work"]);
 
     // Keyboard selection (the non-negotiable path).
     const workKey = await optionKeyFor("Work");
@@ -225,7 +225,7 @@ describe("choice screen + reopen picker (real Firefox, CC + probe)", () => {
     // The picker is restricted to the rule's open list.
     const opts = await firefox.driver.findElements(By.css("[data-cc-option]"));
     const containers = await Promise.all(opts.map((o) => o.getAttribute("data-container")));
-    expect(containers.sort()).toEqual(["Personal", "Temporary"]);
+    expect(containers.sort((a, b) => String(a).localeCompare(String(b)))).toEqual(["Personal", "Temporary"]);
 
     const personalKey = await optionKeyFor("Personal");
     await firefox.driver.actions().sendKeys(personalKey).perform();

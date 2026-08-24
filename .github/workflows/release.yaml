@@ -41,6 +41,7 @@ jobs:
       - run: npm ci
 
       - run: npm run typecheck
+      - run: npm run lint
 
       # Everything that can reject the build runs BEFORE calver-tag-action, so a
       # failure never leaves a pushed tag behind with no release against it.

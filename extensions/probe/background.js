@@ -5,7 +5,7 @@ async function cookieNames(url, storeId) {
   try {
     const cs = await browser.cookies.getAll({ url, storeId });
     return cs.map((c) => c.name).join(",");
-  } catch (_e) {
+  } catch {
     return "";
   }
 }
@@ -17,13 +17,13 @@ async function reportTab(tabId, cookieStoreId, url) {
   let name = "";
   try {
     name = (await browser.contextualIdentities.get(cookieStoreId)).name;
-  } catch (_e) {
+  } catch {
     // firefox-default has no identity — leave name empty.
   }
   let list = "";
   try {
     list = (await browser.contextualIdentities.query({})).map((c) => c.name).join(",");
-  } catch (_e) {
+  } catch {
     // ignore
   }
   const here = await cookieNames(url, cookieStoreId);
@@ -46,7 +46,7 @@ async function reportTab(tabId, cookieStoreId, url) {
         "document.documentElement.setAttribute('data-cc-cookies-here', " + JSON.stringify(here) + ");" +
         "document.documentElement.setAttribute('data-cc-cookies-default', " + JSON.stringify(def) + ");",
     });
-  } catch (_e) {
+  } catch {
     // about:, view-source:, moz-extension: pages cannot be injected — ignore.
   }
 }
@@ -139,14 +139,14 @@ browser.runtime.onMessage.addListener(async (msg, sender) => {
 
 browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status === "complete" && /^https?:/.test(tab.url || "")) {
-    reportTab(tabId, tab.cookieStoreId, tab.url);
+    void reportTab(tabId, tab.cookieStoreId, tab.url);
   }
 });
 
 // Self-provision one container so a non-default cookieStoreId exists to observe.
 // Opens about:blank; the harness navigates this tab to the local server, which
 // triggers the onUpdated report above with the container's cookieStoreId.
-(async () => {
+void (async () => {
   const identity = await browser.contextualIdentities.create({
     name: "probe",
     color: "blue",

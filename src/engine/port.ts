@@ -14,7 +14,9 @@ export interface WebRequestDetails {
   requestId: string;
   tabId: number;
   url: string;
-  type: "main_frame" | "sub_frame" | string;
+  // webRequest's resourceType. Not a union: the dozen values Firefox can send make any
+  // partial one collapse to `string` anyway. Only "main_frame" is acted on.
+  type: string;
   method: string;
   originUrl?: string | undefined;
   documentUrl?: string | undefined;
@@ -34,7 +36,7 @@ export interface HeadersDetails {
   requestId: string;
   tabId: number;
   url: string;
-  type: "main_frame" | "sub_frame" | string;
+  type: string; // as WebRequestDetails.type
   requestHeaders: HttpHeader[]; // present only because the listener opts into them
 }
 
@@ -190,7 +192,7 @@ export interface BrowserPort {
   // Returns the handler's result, so the choice page gets {ok:true}/{ok:false} and can fail
   // open. The sender is how the picker learns which tab spoke: the page cannot name a tab
   // it is not.
-  onMessage(handler: (msg: unknown, sender: MessageSender) => unknown | Promise<unknown>): void;
+  onMessage(handler: (msg: unknown, sender: MessageSender) => unknown): void;
 
   // Reopen picker keyboard command (manifest "commands").
   onCommand(handler: (name: string) => void): void;

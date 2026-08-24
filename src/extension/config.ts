@@ -60,7 +60,7 @@ export async function clearReplacedConfigYaml(): Promise<void> {
 }
 
 export async function readSyncItems(): Promise<Record<string, unknown>> {
-  return (await browser.storage.sync.get()) as Record<string, unknown>;
+  return await browser.storage.sync.get();
 }
 
 // Set first, then remove. After the set the record is complete: the meta names which parts

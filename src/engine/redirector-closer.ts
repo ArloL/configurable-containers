@@ -25,12 +25,17 @@ export function createRedirectorCloser(opts: RedirectorCloserOptions): void {
     if (!isRedirectorUrl(tab.url, config, deps.matchRule)) return;
 
     const tabId = tab.id;
-    clock.setTimeout(async () => {
-      // Re-check: the tab may have redirected onward or been closed since.
-      const current = await port.getTab(tabId);
-      if (!current) return;
-      if (!isRedirectorUrl(current.url, config, deps.matchRule)) return;
-      await port.removeTab(tabId);
+    // The callback is floated, not handed to setTimeout as an async function: a timer
+    // takes a void return, so a rejection out of one has nobody to reject to. Same shape
+    // as the engine's declined-navigation toast and pause's writes.
+    clock.setTimeout(() => {
+      void (async () => {
+        // Re-check: the tab may have redirected onward or been closed since.
+        const current = await port.getTab(tabId);
+        if (!current) return;
+        if (!isRedirectorUrl(current.url, config, deps.matchRule)) return;
+        await port.removeTab(tabId);
+      })().catch((e) => console.warn("[redirector-closer] close failed", e));
     }, delayMs);
   });
 }
