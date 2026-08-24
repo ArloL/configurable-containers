@@ -31,6 +31,10 @@ The full suite is ~150s per channel.
 - geckodriver looked like a second blocker. It is not: **Selenium Manager** ships inside
   `selenium-webdriver` and fetches it the first time `new Builder().forBrowser("firefox")`
   runs, so there is nothing to install and nothing on PATH to arrange.
+- **Always set `FIREFOX_BIN`.** Without it Selenium Manager goes and downloads Firefox
+  itself — from `ftp.mozilla.org`, the one blocked host — and the failure reads
+  `Unable to obtain browser driver`, which looks like a geckodriver problem and is not.
+  That is very likely what made this look impossible in the first place.
 - `mac/` is gitignored and absent from a fresh clone, and `mac-interop.test.ts` **fails
   rather than skips** without it, with a bare ENOENT that reads like a broken case rather
   than a missing checkout.
