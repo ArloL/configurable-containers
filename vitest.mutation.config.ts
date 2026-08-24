@@ -12,7 +12,7 @@ import { ccDefines } from "./vitest.shared";
 export default defineConfig({
   define: ccDefines,
   test: {
-    include: ["test/{resolver,matcher,psl}/**/*.test.ts"],
+    include: ["test/{resolver,matcher,psl,config,overlays}/**/*.test.ts"],
     // Stryker decides each mutant from ONE run of this suite, so a property test that
     // draws a different sample per run would make a mutant's verdict a coin flip and
     // the score unrepeatable. The seed is pinned for the mutation run only — `npm test`

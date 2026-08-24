@@ -19,6 +19,10 @@ export function loadConfig(stored: string | undefined, seed: string): LoadResult
     // Empty config => nothing matches => every site gets a fresh throwaway. Never fall
     // back to the seed: months-stale rules are a silent wrong answer, throwaway-only a
     // loud one.
+    // The second arm is unreachable now that `parseConfig` wraps everything `yaml` can
+    // raise, and is kept because "loadConfig answers with a ConfigError" is this
+    // function's contract rather than the parser's.
+    /* v8 ignore next */
     const error = e instanceof ConfigError ? e : new ConfigError(String(e));
     return { config: { rules: [], groups: [] }, error, seeded };
   }

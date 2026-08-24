@@ -56,16 +56,21 @@ export default defineConfig({
         // Floors, a point or two under what the suite measures today — not targets.
         // Raise them when the number rises; a drop is a file, or a branch of one, that
         // nothing deterministic reaches any more.
-        statements: 90,
-        branches: 88,
+        statements: 93,
+        branches: 91,
         functions: 84,
-        lines: 90,
+        lines: 93,
         // The pure modules the mutation gate also owns are held at 100 here, so a new
         // branch in them is caught by the fast gate too, on the push that adds it
         // rather than that night.
         "src/resolver/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
         "src/matcher/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
         "src/psl/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
+        // Added to the mutation gate's scope on 2026-08-24, so held to the same floor
+        // here: a new branch in either is caught on the push that writes it rather than
+        // that night.
+        "src/config/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
+        "src/overlays/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
       },
     },
   },

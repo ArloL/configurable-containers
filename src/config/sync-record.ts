@@ -127,6 +127,10 @@ export function decodeRecord(items: Record<string, unknown>): RemoteConfig {
   const text = parts.join("");
   // Length alone would not do: swapping one host for another of the same width is an
   // ordinary edit, and this exists to reject a MIXTURE of old and new parts.
+  //
+  // Stryker disable next-line ConditionalExpression: the length test is a cheap pre-filter
+  // in front of the hash, not a second question — text of a different length that hashes
+  // to the same digest is a collision, so dropping it cannot change an answer.
   if (text.length !== meta.len || hashText(text) !== meta.hash) return { state: "incomplete" };
 
   return { state: "ok", text, updatedAt: meta.updatedAt, parts: meta.parts };
@@ -150,6 +154,10 @@ export function reconcile(
     case "incomplete":
     case "unreadable":
       return { action: "none" };
+    // Stryker disable next-line ConditionalExpression: dropping the body falls through into
+    // `ok`, where an absent record's undefined text loses every comparison and the
+    // tie-break ternary answers "push" — the same answer, by a route nobody should rely
+    // on. Equivalent, not untested: reconcile-from-absent is asserted below.
     case "absent":
       return { action: "push" };
     case "ok": {
@@ -164,6 +172,8 @@ export function reconcile(
       // every pre-sync config the same stamp. The tie-break must give both machines the
       // SAME answer: "local wins" has both push and overwrite each other forever. Comparing
       // the texts, not their hashes, means no collision can bring that back.
+      // Stryker disable next-line EqualityOperator: `>=` cannot differ — equal text
+      // returned `none` above, so the two texts here are never the same.
       return remote.text > local.text
         ? { action: "adopt", text: remote.text, updatedAt: remote.updatedAt }
         : { action: "push" };

@@ -18,7 +18,13 @@ export default {
   // (`src/engine`, `src/extension`) are out of scope: their tests are the L3 mock-browser
   // suite, which is slower by an order of magnitude and whose failures under mutation are
   // usually "the mock does not model that", not "the logic is untested".
-  mutate: ["src/resolver/**/*.ts", "src/matcher/**/*.ts", "src/psl/**/*.ts"],
+  mutate: [
+    "src/resolver/**/*.ts",
+    "src/matcher/**/*.ts",
+    "src/psl/**/*.ts",
+    "src/config/**/*.ts",
+    "src/overlays/**/*.ts",
+  ],
 
   // Run only the tests that covered the mutated line. Safe here because the suite has no
   // shared mutable state — every case builds its own config object.

@@ -305,9 +305,13 @@ reasonable-looking change wrong**.
   does not run (`npm run test:realtime`, nightly), and cases there must **not** pass
   `ccGraceMs`: the point is that the bundle carries the shipped constant.
 - **The mutation gate is at 100% and `npm test` does not run it** (`npm run test:mutation`,
-  nightly). It mutates only the pure modules and lets only **L1/L2** kill the mutants, so
-  a new branch in `resolve`/`matcher`/`same-site` needs a *resolver or matcher* case — an
-  L3 engine case that covers it leaves the gate red. A survivor is killed or named
+  nightly). It mutates only the pure modules — `resolver`, `matcher`, `psl`, `config`,
+  `overlays` — and lets only the tests that **own** each of them kill the mutants
+  (`test/{resolver,matcher,psl,config,overlays}`), so a new branch in `resolve`/`matcher`/
+  `same-site`/`parse` needs a case in *that module's* suite; an L3 engine case that covers
+  it leaves the gate red. The parser's error **messages and `path`s are inside the gate**:
+  `test/config/parse.rejections.test.ts` pins one row per rejection, so rewording a
+  diagnostic without updating it is a failure, not a silent drift. A survivor is killed or named
   (`// Stryker disable … : why`), never absorbed by lowering the threshold. Two settings
   in `stryker.config.mjs` fail as `stryker run` dying at startup rather than as a bad
   score: `tsconfigFile: "none"` (its rewriter calls `ts.parseConfigFileTextToJson`, which
