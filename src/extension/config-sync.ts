@@ -1,18 +1,15 @@
-// Mirrors the stored config into browser.storage.sync so a config edited on one machine
-// reaches the others. See the 2026-07-30 design spec.
+// Mirrors the stored config into browser.storage.sync so an edit on one machine reaches the
+// others. See the 2026-07-30 design spec.
 //
-// `storage.local.configYaml` stays the single source of truth for routing: nothing in
-// the engine, the wiring or loadConfig learns that sync exists. The sync area is a
-// MIRROR — read, compared, and either overwritten from local or copied into local — and
-// applying an adopted config reuses the path a Save already takes (write storage, then
-// runtime.reload()). That is what keeps this out of the startup contract wireBackground
-// documents: listeners still register synchronously and the gated first navigation still
-// waits on exactly one promise.
+// `storage.local.configYaml` stays the single source of truth for routing: nothing in the
+// engine, the wiring or loadConfig learns that sync exists. The sync area is a MIRROR — read,
+// compared, then either overwritten from local or copied into local — and applying an adopted
+// config reuses the path a Save takes (write storage, then runtime.reload()). That is what
+// keeps this out of wireBackground's startup contract.
 //
-// The BACKGROUND is the only writer of the sync area. The options page writes
-// storage.local and reloads; the fresh background then reconciles and pushes. One
-// publisher means no window in which a dying options page and a starting background both
-// write.
+// The BACKGROUND is the sync area's only writer. The options page writes storage.local and
+// reloads; the fresh background reconciles and pushes. One publisher means no window in
+// which a dying options page and a starting background both write.
 
 import {
   ConfigTooLargeError,
@@ -37,9 +34,9 @@ import {
 
 export interface SyncPorts {
   readLocal(): Promise<{ text: string; updatedAt: number }>;
-  // Replaces the local config with one that arrived from another machine and applies it.
-  // Never called with text equal to the local text — reconcile() guarantees that, and it
-  // is the guarantee that stops two machines reloading each other forever.
+  // Replaces the local config with one from another machine and applies it. Never called
+  // with text equal to the local text: reconcile() guarantees that, and that guarantee is
+  // what stops two machines reloading each other forever.
   adopt(text: string, updatedAt: number): Promise<void>;
   readSync(): Promise<Record<string, unknown>>;
   writeSync(items: Record<string, unknown>, remove: string[]): Promise<void>;
@@ -66,9 +63,9 @@ export function createConfigSync(ports: SyncPorts): ConfigSync {
     try {
       items = await ports.readSync();
     } catch (e) {
-      // No Firefox Account, storage disabled, a transient backend error. None of this can
-      // change how a tab is routed: routing reads storage.local and never learns whether
-      // the mirror is healthy. Retried at the next startup and the next change event.
+      // No Firefox Account, storage disabled, a transient backend error. None of it changes
+      // how a tab is routed — routing reads storage.local. Retried at the next startup and
+      // the next change event.
       ports.warn("could not read storage.sync", e);
       return "failed";
     }
@@ -108,9 +105,8 @@ export function createConfigSync(ports: SyncPorts): ConfigSync {
     }
   }
 
-  // Serialised: a change event arrives while a push is in flight (a push is itself a
-  // change event), and two concurrent reconciliations could both read a pre-write area
-  // and both decide to push.
+  // Serialised: a push is itself a change event, and two concurrent reconciliations could
+  // both read the pre-write area and both decide to push.
   let inFlight: Promise<SyncOutcome> = Promise.resolve("in-sync");
   function enqueue(): Promise<SyncOutcome> {
     inFlight = inFlight.then(reconcileOnce, reconcileOnce);
@@ -120,8 +116,8 @@ export function createConfigSync(ports: SyncPorts): ConfigSync {
   return {
     sync: enqueue,
     start() {
-      // Register before the first reconciliation, not after: a change landing while that
-      // first pass runs would otherwise be the one change nobody hears about.
+      // Register before the first reconciliation: a change landing during that first pass
+      // would otherwise be the one nobody hears about.
       ports.onSyncChanged(() => void enqueue());
       return enqueue();
     },
@@ -129,8 +125,8 @@ export function createConfigSync(ports: SyncPorts): ConfigSync {
 }
 
 // ---------------------------------------------------------------------------
-// The real ports. Everything below this line touches browser.* and is the only
-// part of the module that cannot run under a fake.
+// The real ports: everything below touches browser.* and is the only part of the module
+// that cannot run under a fake.
 // ---------------------------------------------------------------------------
 
 export function browserSyncPorts(): SyncPorts {
@@ -139,9 +135,9 @@ export function browserSyncPorts(): SyncPorts {
       const text = (await readStoredConfigYaml()) ?? "";
       const stored = await readStoredUpdatedAt();
       if (stored !== undefined) return { text, updatedAt: stored };
-      // Installed before this slice existed, so nothing ever stamped this config. An
-      // untouched seed must rank BELOW every real edit, or a fresh install could win the
-      // tie-break and replace another machine's rules with the shipped default.
+      // Installed before this slice existed, so nothing stamped this config. An untouched
+      // seed must rank BELOW every real edit, or a fresh install wins the tie-break and
+      // replaces another machine's rules with the shipped default.
       const updatedAt = text === SEED_CONFIG_YAML ? UNEDITED : PRE_SYNC_EDIT;
       await browser.storage.local.set({ [CONFIG_UPDATED_AT_KEY]: updatedAt });
       return { text, updatedAt };
@@ -149,9 +145,8 @@ export function browserSyncPorts(): SyncPorts {
 
     async adopt(text, updatedAt) {
       const previous = await readStoredConfigYaml();
-      // Keep what we are about to overwrite. Without this, the first startup after this
-      // slice ships is a silent overwrite of a hand-written file — the one failure here
-      // that editing cannot undo.
+      // Keep what we are about to overwrite: without it, the first startup after this ships
+      // silently destroys a hand-written config, the one failure editing cannot undo.
       const backup =
         previous !== undefined && previous !== text ? { [CONFIG_REPLACED_KEY]: previous } : {};
       await browser.storage.local.set({
@@ -159,8 +154,7 @@ export function browserSyncPorts(): SyncPorts {
         [CONFIG_UPDATED_AT_KEY]: updatedAt,
         ...backup,
       });
-      // The same apply path a Save takes. There is deliberately no second way for a
-      // config to take effect.
+      // The same apply path a Save takes; there is deliberately no second one.
       browser.runtime.reload();
     },
 

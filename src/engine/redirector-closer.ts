@@ -12,12 +12,11 @@ export interface RedirectorCloserOptions {
   delayMs?: number;
 }
 
-// A sibling of the engine, disposer, cookie-seeder, and script-injector (wired at
-// background.ts, not nested). Owns one tabs.onUpdated listener. Mirrors TCP's
-// maybeCloseRedirectorTab: when a tab completes loading on a redirector domain, wait
-// the delay, then close it — but ONLY if it is still on a redirector domain (the re-check
-// is the safety mechanism, not timer cancellation). A tab that redirected onward
-// in-place is left alone (F12 conditional close).
+// A sibling of the engine, wired in wiring.ts, not nested. Owns one tabs.onUpdated listener.
+// Mirrors TCP's maybeCloseRedirectorTab: when a tab finishes loading on a redirector domain,
+// wait the delay, then close it — but ONLY if it is still on one. The re-check is the safety
+// mechanism, not timer cancellation, so a tab that redirected onward in place is left alone
+// (F12 conditional close).
 export function createRedirectorCloser(opts: RedirectorCloserOptions): void {
   const { port, clock, config, deps, delayMs = REDIRECTOR_DELAY_MS } = opts;
 

@@ -14,19 +14,17 @@ function mapTab(t: browser.tabs.Tab): Tab {
   };
 }
 
-// The extension id the harness build echoes notifications to, so an e2e can observe a
-// toast that lives in no DOM. "" in every shipped build, which esbuild folds away.
+// The extension id the harness build echoes notifications to, so an e2e can observe a toast
+// that lives in no DOM. "" in every shipped build, which esbuild folds away.
 declare const __CC_NOTIFY_ECHO_TO__: string;
 
-// Real BrowserPort over browser.*. Mechanical, logic-free — all decisions come from
-// resolve() inside the engine. The only Firefox-specific note: a blocking
-// onBeforeRequest listener may return a Promise<BlockingResponse>, which Firefox
-// awaits before the request proceeds.
+// Real BrowserPort over browser.*. Mechanical and logic-free; every decision comes from
+// resolve() inside the engine. One Firefox note: a blocking onBeforeRequest listener may
+// return a Promise<BlockingResponse>, which Firefox awaits before the request proceeds.
 export function createBrowserPort(): BrowserPort {
-  // The badge colour is set once, on first use, rather than at construction: the colour
-  // never changes, but constructing the port must stay free of browser.* calls — every
-  // other method here only touches browser.* when invoked, and a constructor that did
-  // otherwise would fail for any caller that has not stubbed browserAction.
+  // Set once on first use, not at construction: the colour never changes, but constructing
+  // the port must stay free of browser.* calls, or any caller that has not stubbed
+  // browserAction breaks.
   let badgeColoured = false;
 
   return {
@@ -170,12 +168,11 @@ export function createBrowserPort(): BrowserPort {
 
     async notify(n) {
       await browser.notifications.create({ type: "basic", title: n.title, message: n.message });
-      // AFTER the create resolves, never before: a missing "notifications" permission
-      // must make the e2e assertion fail, not pass with the notification broken.
-      // `!== ""` rather than a bare truthiness check so esbuild folds the condition to
-      // a literal `false` in shipped bundles — the build does not minify (an AMO
-      // reviewer reads this file), so the branch itself survives either way, and
-      // `if (false)` is the readable proof that it is dead.
+      // AFTER the create resolves, never before: a missing "notifications" permission must
+      // fail the e2e, not pass with the toast broken. `!== ""` rather than bare truthiness so
+      // esbuild folds this to a literal `false` in shipped bundles — the build does not
+      // minify (an AMO reviewer reads this file), so `if (false)` is readable proof the
+      // branch is dead.
       if (__CC_NOTIFY_ECHO_TO__ !== "") {
         await browser.runtime.sendMessage(__CC_NOTIFY_ECHO_TO__, { cmd: "cc-notification", ...n });
       }
@@ -203,9 +200,9 @@ export function createBrowserPort(): BrowserPort {
   };
 }
 
-// Production clock: schedules on the extension's global timer (return value unused).
-// `now` is wall-clock on purpose — a stored deadline is compared against it after a
-// background restart that a monotonic counter would not have been running for.
+// Production clock: schedules on the extension's global timer (return value unused). `now`
+// is wall-clock on purpose — a stored deadline is compared against it after a restart a
+// monotonic counter would not have been running for.
 export const realClock: Clock = {
   setTimeout: (fn, ms) => {
     globalThis.setTimeout(fn, ms);

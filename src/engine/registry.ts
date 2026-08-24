@@ -1,29 +1,26 @@
 import type { BrowserPort } from "./port";
 import type { ContainerRef, Target } from "../resolver/types";
 
-// Reserved name prefix: our throwaways are named `tmp<N>`. Identity is derived from the
-// name, so it survives a restart — the background context (and every map in it) dies on
-// every config save, and the name is the only durable record left.
+// Reserved name prefix: throwaways are named `tmp<N>`. Identity comes from the name so it
+// survives a restart — the background context, and every map in it, dies on each config
+// save, leaving the name as the only durable record.
 export const TMP_PREFIX = "tmp";
 
-// The reserved name in full: the prefix AND a decimal suffix, which is what
-// `createIdentity` mints. The suffix is not decoration — the prefix alone would claim
-// every container a USER named `tmpwork` or `tmpfiles.org` (an auto-named rule for that
-// host produces exactly the latter), and claiming one means two silent losses: the
-// disposer deletes it once its last tab closes, taking the logins in it, and `toRef`
-// reads a tab in it as "in a throwaway", so routing answers the continuity question
-// about a permanent container. `config/parse` refuses a config that names a container
-// of this exact shape, which is the other half of keeping the two sets apart.
+// The reserved name in full: prefix AND decimal suffix, which is what `createIdentity`
+// mints. The digits are load-bearing — on the prefix alone a user's `tmpwork`, or an
+// action-less rule for `tmpfiles.org`, is claimed as ours, and that costs two silent
+// losses: the disposer deletes it once its last tab closes, logins and all, and `toRef`
+// reads a tab in it as "in a throwaway". `config/parse` refusing a container named in this
+// shape is the other half of keeping the two sets apart.
 const TMP_NAME = /^tmp(\d+)$/;
 
 export function isThrowawayName(name: string): boolean {
   return TMP_NAME.test(name);
 }
 
-// The largest N among existing `tmp<N>` container names, or 0 if there are none.
-// The suffix counter is in-memory, so a background restart would otherwise reissue
-// tmp1 and collide by name with a live throwaway. Names are the only durable record
-// (see TMP_PREFIX above), so the counter is recovered from them at startup.
+// The largest N among existing `tmp<N>` names, or 0. The suffix counter is in-memory, so
+// without this a restart reissues tmp1 beside a live tmp1. Names are the only durable
+// record (see TMP_PREFIX), so the counter is recovered from them at startup.
 export function highestTmpSuffix(names: string[]): number {
   let max = 0;
   for (const name of names) {

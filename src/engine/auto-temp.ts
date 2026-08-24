@@ -17,24 +17,19 @@ function isAutoTempCandidate(tab: Tab): boolean {
   return tab.url === "about:newtab" || tab.url === "about:home";
 }
 
-// Listens on tabs.onCreated / tabs.onUpdated and immediately reopens
-// about:newtab / about:home tabs (which start in firefox-default) into a fresh
-// temporary container. Mirrors TCP's `maybeReopenInTmpContainer` automatic-mode
-// path. We listen on BOTH events because a tab's url is not final at onCreated.
-//
-// about:blank is deliberately NOT a candidate, and the reason is crucial: in
-// Firefox a tab reads as about:blank for its whole pre-commit life, so a tab that is
-// on its way to a real page is indistinguishable from a genuinely blank one. Observed
-// event stream for `tabs.create({ url: "http://…" })` with no container:
+// Reopens about:newtab / about:home tabs (which start in firefox-default) into a fresh
+// temporary container, as TCP's `maybeReopenInTmpContainer` does. Listens on BOTH
+// tabs.onCreated and tabs.onUpdated, because a tab's url is not final at onCreated:
 //   onCreated  url="about:blank"  csid="firefox-default"
 //   onUpdated  url="about:blank"  csid="firefox-default"
 //   onUpdated  url="http://…"     <- the url only appears here
-// Treating about:blank as a candidate would destroy that tab (containerize removes
-// the original) before its navigation ever commits, so target=_blank links,
-// window.open, and the engine's own reopens would silently open an empty new tab
-// instead of the page. Known cost: a user who has disabled the new-tab page
-// (browser.newtabpage.enabled=false) gets about:blank on Ctrl+T and is not
-// auto-containerized. TCP has the same limitation.
+//
+// about:blank is deliberately NOT a candidate: a tab reads as about:blank for its whole
+// pre-commit life, so one on its way to a real page looks identical to a blank one, and
+// containerizing it removes the original before the navigation commits — target=_blank
+// links, window.open and CC's own reopens would all open an empty tab instead of the page.
+// Cost: with the new-tab page disabled (browser.newtabpage.enabled=false) Ctrl+T gives
+// about:blank and is not containerized. TCP has the same limitation.
 export function createAutoTemp(opts: AutoTempOptions): void {
   const { port } = opts;
   const suffix = opts.tmpSuffix ?? defaultSuffix();
@@ -47,23 +42,20 @@ export function createAutoTemp(opts: AutoTempOptions): void {
       color: "blue",
       icon: "circle",
     });
-    // Placement is `supersede`'s, not ours — window, index, active and openerTabId
-    // all come from the tab being taken over, and a candidate here is always an
-    // about: page, so it takes supersede's replace branch (create, then remove the
-    // original). This was a hand-rolled second copy of that rule until it was folded
-    // in; the same duplication had already drifted once in the picker.
+    // Placement is `supersede`'s: window, index, active and openerTabId come from the tab
+    // being taken over, and a candidate is always an about: page, so it takes the replace
+    // branch. This used to be a hand-rolled copy of that rule; the same duplication had
+    // already drifted once in the picker.
     //
-    // No url on purpose. Firefox refuses `tabs.create({ url: "about:newtab" })`
-    // ("Illegal URL") — and about:home likewise — so passing the tab's own url here
-    // made every containerize throw *after* the tmp identity was created: orphan tmp
-    // containers, tab never moved. Omitting url gives the user's real new-tab page,
-    // which is what we want anyway. TCP does the same (it passes url only when it
-    // matches /^https?:/).
+    // No url on purpose. Firefox rejects `tabs.create({ url: "about:newtab" })` ("Illegal
+    // URL"), and about:home too, so passing the tab's own url made every containerize throw
+    // AFTER creating the identity: orphan tmp containers, tab never moved. Omitting url
+    // gives the user's real new-tab page anyway, as TCP does.
     await supersede(port, tab, { cookieStoreId: ci.cookieStoreId });
   }
 
-  // Startup sweep: containerize pre-existing about:newtab / about:home tabs
-  // that were opened before the extension loaded (most commonly the first tab).
+  // Startup sweep: about:newtab / about:home tabs opened before the extension loaded,
+  // usually the window's first tab.
   void (async () => {
     try {
       const tabs = await port.queryTabs({});

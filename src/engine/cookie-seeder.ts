@@ -8,10 +8,10 @@ export interface CookieSeederOptions {
   deps: Pick<Deps, "matchRule">;
 }
 
-// A sibling of the engine and disposer (wired at background.ts, not nested). Owns one
-// blocking main_frame onBeforeSendHeaders listener. Mirrors TCP's maybeSetAndAddToHeader:
-// set each configured cookie into the tab's OWN store (F11) and, if it isn't already on
-// the wire, splice it into the outgoing Cookie header (F12). Never routes/moves a tab.
+// A sibling of the engine, wired in wiring.ts, not nested. Owns one blocking main_frame
+// onBeforeSendHeaders listener. Mirrors TCP's maybeSetAndAddToHeader: set each configured
+// cookie into the tab's OWN store (F11) and, unless it is already on the wire, splice it
+// into the outgoing Cookie header (F12). Never moves a tab.
 export function createCookieSeeder(opts: CookieSeederOptions): void {
   const { port, config, deps } = opts;
 

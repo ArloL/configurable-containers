@@ -1,26 +1,23 @@
-// The shape the config takes inside browser.storage.sync, and the decision of what to
-// do when the local and the remote copy disagree. Pure, so the whole policy is testable
-// without a browser — src/extension/config-sync.ts only moves bytes. See the 2026-07-30
-// design spec §3.
+// The shape the config takes inside browser.storage.sync, and what to do when the local and
+// remote copies disagree. Pure, so the whole policy is testable without a browser —
+// src/extension/config-sync.ts only moves bytes. See the 2026-07-30 design spec §3.
 
 export const SYNC_VERSION = 1;
 export const META_KEY = "ccConfigMeta";
 export const PART_KEY_PREFIX = "ccConfigPart";
 
-// Firefox enforces QUOTA_BYTES_PER_ITEM = 8192 on storage.sync, counted over the JSON
-// encoding of the value. A config is newline-dense YAML and every newline doubles in
-// width under JSON escaping, so 3000 characters cannot exceed the limit even if EVERY
-// character escaped (~6KB). The author's config is already 5.7KB, so a one-item
-// implementation does not fail today — it fails a few rules from now, on whichever
-// machine happens to save last.
+// Firefox enforces QUOTA_BYTES_PER_ITEM = 8192 on storage.sync, over the JSON encoding of
+// the value. Config YAML is newline-dense and every newline doubles under JSON escaping, so
+// 3000 characters stay under the limit even if EVERY character escaped (~6KB). The author's
+// config is already 5.7KB, so a one-item implementation does not fail today — it fails a few
+// rules from now, on whichever machine saves last.
 export const CHUNK_CHARS = 3000;
 
-// Firefox also enforces QUOTA_BYTES = 102400 across the whole area, so the part count
-// has to be bounded by the WORST case too: 16 parts of fully-escaped text is ~96KB,
-// which still clears. (32 would not — 192KB worst case — even though 32 parts of
-// ordinary YAML would have measured fine, which is exactly the kind of limit that holds
-// until someone's config is newline-dense.) 48000 characters is eight times the
-// author's config; past it, a config fails loudly rather than being truncated to fit.
+// Firefox also enforces QUOTA_BYTES = 102400 over the whole area, so the part count is
+// bounded by the WORST case too: 16 parts of fully-escaped text is ~96KB and clears; 32
+// would be 192KB and would not, even though 32 parts of ordinary YAML measure fine — the
+// kind of limit that holds until someone's config is newline-dense. 48000 characters is
+// eight times the author's config; past it a config fails loudly instead of truncating.
 export const MAX_PARTS = 16;
 
 export interface SyncMeta {
@@ -52,9 +49,8 @@ export class ConfigTooLargeError extends Error {
   }
 }
 
-// FNV-1a, 32 bits. Its job is to reject a record assembled from a mix of an old part and
-// a new one; it is not resisting an adversary. Pure and dependency-free so both machines
-// compute the same digest from the same text.
+// FNV-1a, 32 bits. It rejects a record assembled from a mix of old and new parts; it is not
+// resisting an adversary. Dependency-free so both machines get the same digest.
 export function hashText(text: string): string {
   let h = 0x811c9dc5;
   for (let i = 0; i < text.length; i++) {
@@ -71,9 +67,9 @@ export function partKey(index: number): string {
 export function splitParts(text: string): string[] {
   const parts: string[] = [];
   for (let i = 0; i < text.length; i += CHUNK_CHARS) parts.push(text.slice(i, i + CHUNK_CHARS));
-  // An empty config is a legal config: parseConfig("") succeeds and means "nothing
-  // matches". Emitting zero parts would decode as `absent`, making "the user published
-  // an empty config" indistinguishable from "nobody has published anything".
+  // An empty config is legal: parseConfig("") means "nothing matches". Zero parts would
+  // decode as `absent`, making "published an empty config" and "never published"
+  // indistinguishable.
   if (parts.length === 0) parts.push("");
   return parts;
 }
@@ -104,13 +100,12 @@ function readMeta(value: unknown): SyncMeta | undefined {
   return { v: m.v, parts: m.parts, len: m.len, hash: m.hash, updatedAt: m.updatedAt };
 }
 
-// Distinguishing `incomplete` from `absent` is the most consequential branch here. The
-// parts and the meta key reach a receiving machine as ordinary storage changes and
-// nothing makes them land together, so a mid-arrival read sees a meta claiming three
-// parts with two present. Collapsing that into `absent` would mean *push* — this machine
-// would publish its own older config over the update that was still landing, and the
-// sender would then adopt the rollback. `incomplete` waits; the rest of the keys fire
-// another change event.
+// Telling `incomplete` from `absent` is the most consequential branch here. Parts and the
+// meta key arrive as ordinary storage changes with nothing making them land together, so a
+// mid-arrival read sees a meta claiming three parts with two present. Reading that as
+// `absent` means PUSH: this machine publishes its older config over the update still
+// landing, and the sender adopts the rollback. `incomplete` waits for the next change
+// event.
 export function decodeRecord(items: Record<string, unknown>): RemoteConfig {
   const meta = readMeta(items[META_KEY]);
   if (meta === undefined) {
@@ -130,8 +125,8 @@ export function decodeRecord(items: Record<string, unknown>): RemoteConfig {
     parts.push(part);
   }
   const text = parts.join("");
-  // Length alone would not do: an edit swapping one host for another of the same width
-  // is an ordinary edit, and the check exists to reject a MIXTURE of old and new parts.
+  // Length alone would not do: swapping one host for another of the same width is an
+  // ordinary edit, and this exists to reject a MIXTURE of old and new parts.
   if (text.length !== meta.len || hashText(text) !== meta.hash) return { state: "incomplete" };
 
   return { state: "ok", text, updatedAt: meta.updatedAt, parts: meta.parts };
@@ -158,20 +153,17 @@ export function reconcile(
     case "absent":
       return { action: "push" };
     case "ok": {
-      // Load-bearing: adoption ends in runtime.reload(). If equal text could adopt, two
-      // machines would reload each other forever — an extension restarting every few
-      // seconds on both machines at once.
+      // Load-bearing: adoption ends in runtime.reload(), so if equal text could adopt, two
+      // machines would restart each other forever.
       if (remote.text === local.text) return { action: "none" };
       if (remote.updatedAt > local.updatedAt) {
         return { action: "adopt", text: remote.text, updatedAt: remote.updatedAt };
       }
       if (remote.updatedAt < local.updatedAt) return { action: "push" };
-      // Equal stamps, different text. Not hypothetical: the stamp backfill gives every
-      // config edited before this slice the same value, so the first startup after an
-      // update has exactly this shape. The tie-break must compute the SAME answer on both
-      // machines — "local wins" would have both of them push, each overwriting the other,
-      // forever. Comparing the text itself rather than its hash means no collision can
-      // reintroduce that: two different strings always compare unequal.
+      // Equal stamps, different text — the NORMAL first startup, since the backfill gives
+      // every pre-sync config the same stamp. The tie-break must give both machines the
+      // SAME answer: "local wins" has both push and overwrite each other forever. Comparing
+      // the texts, not their hashes, means no collision can bring that back.
       return remote.text > local.text
         ? { action: "adopt", text: remote.text, updatedAt: remote.updatedAt }
         : { action: "push" };

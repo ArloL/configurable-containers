@@ -4,9 +4,8 @@
 // match forms and the two rules that fall out of them (auto-naming, scripts-on-regex).
 import { parse, YAMLParseError } from "yaml";
 import { hostMatcher, patternMatcher, regexMatcher, type Matcher } from "../matcher/matcher";
-// The naming contract belongs to the registry, which mints the names; imported rather
-// than restated so the two halves of it cannot drift. (Types only from there at runtime
-// — no browser reaches the config parser.)
+// The naming contract belongs to the registry, which mints the names; imported rather than
+// restated so the two halves cannot drift. (Types only — no browser reaches the parser.)
 import { isThrowawayName } from "../engine/registry";
 import type { Action, Config, CookieSpec, Group, Rule, ScriptSpec } from "../resolver/types";
 
@@ -39,9 +38,9 @@ function isMapping(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-// Turn one raw `match` entry into a Matcher. Three forms, told apart by shape: the
-// mapping `{ regex: … }`, a string containing "://" (a match pattern — the scheme is
-// what makes a pattern a pattern), and anything else, read as a bare hostname.
+// One raw `match` entry to a Matcher. Three forms, told apart by shape: the mapping
+// `{ regex: … }`, a string containing "://" (a match pattern — the scheme is what makes one),
+// and anything else, read as a bare hostname.
 const GLOB_META = /[*?[]/;
 const PATTERN_SEP = "://";
 
@@ -69,9 +68,8 @@ function toMatcher(entry: unknown, path: string): Matcher {
       throw new ConfigError(`${path}: ${(e as Error).message}`, { path });
     }
   }
-  // A glob with no scheme is the near-miss worth naming: `*.example.com` is what
-  // somebody writes who means the match pattern, and the bare-hostname parser would
-  // otherwise reject it as if the wildcard itself were the problem.
+  // A glob with no scheme is the near-miss worth naming: `*.example.com` is what someone
+  // writes meaning the match pattern, and the hostname parser would blame the wildcard.
   if (GLOB_META.test(entry)) {
     throw new ConfigError(`${path}: "${entry}" is not a bare hostname — a wildcard needs the full pattern form, as in "*://*.example.com/*"`, { path });
   }
@@ -82,10 +80,9 @@ function toMatcher(entry: unknown, path: string): Matcher {
   }
 }
 
-// `firstHost` is the container name an action-less rule auto-names itself after, and it
-// is null unless the FIRST entry is a bare hostname: a pattern or a regex has no host to
-// take a name from (`*://*.example.com/*` could plausibly mean three different names,
-// and a regex none at all), so such a rule has to say `open:`.
+// `firstHost` is what an action-less rule auto-names its container after. Null unless the
+// FIRST entry is a bare hostname: a pattern has no one host to take a name from
+// (`*://*.example.com/*` could mean three), and a regex none at all, so those need `open:`.
 function parseMatch(raw: unknown, path: string): { matchers: Matcher[]; firstHost: string | null } {
   const list = Array.isArray(raw) ? raw : [raw];
   if (list.length === 0) {
@@ -96,12 +93,11 @@ function parseMatch(raw: unknown, path: string): { matchers: Matcher[]; firstHos
   return { matchers, firstHost: first.kind === "host" ? first.host : null };
 }
 
-// `tmp<N>` is the name the registry mints for a throwaway, and a name is the only thing
-// that tells one apart — so a permanent container of that name is deleted by the disposer
-// once its last tab closes, taking whatever was logged in inside it, and until then a tab
-// in it is read as "already in a throwaway". Both are silent, which is why this is an
-// error and not a warning. Only the exact shape is reserved: `tmpwork` and `tmpfiles.org`
-// (which an auto-named rule for that host produces) are ordinary names.
+// `tmp<N>` is what the registry mints for a throwaway, and the name is all that tells one
+// apart — so a permanent container named that is deleted by the disposer once its last tab
+// closes, logins and all, and until then a tab in it reads as "already in a throwaway".
+// Both losses are silent, hence an error rather than a warning. Only the exact shape is
+// reserved: `tmpwork` and `tmpfiles.org` are ordinary names.
 function checkContainerName(name: string, path: string): void {
   if (isThrowawayName(name)) {
     throw new ConfigError(
@@ -249,8 +245,7 @@ function parseRule(raw: unknown, i: number): Rule {
     if (firstHost === null) {
       throw new ConfigError(`${path} has no action and its first match is not a bare hostname, so there is no host to name a container after; add "open:"`, { path });
     }
-    // The auto-named case reaches the same check: `- match: tmp1` is a legal hostname and
-    // would name its container after it.
+    // The auto-named case lands here too: `- match: tmp1` is a legal hostname.
     checkContainerName(firstHost, `${path}.match[0]`);
     action = { kind: "open", containers: [firstHost] }; // auto-name after the first host
   } else {
@@ -299,11 +294,10 @@ function parseRule(raw: unknown, i: number): Rule {
     if (action.kind === "ignore") {
       throw new ConfigError(`${path}.scripts is not allowed on an "ignore" rule`, { path: `${path}.scripts` });
     }
-    // A content script is registered against URL patterns, before any navigation, and a
-    // regex has no pattern form (`matcher.matcherToPatterns`). Refused here, where the
-    // user is looking at the rule: the alternatives are registering `*://*/*` — their
-    // snippet on every page they open — or dropping the regex and injecting on a subset
-    // of what the rule routes, which is a silent wrong answer.
+    // Content scripts register against URL patterns before any navigation, and a regex has
+    // no pattern form (`matcher.matcherToPatterns`). Refused here, where the user is looking
+    // at the rule: the alternatives are `*://*/*` — their snippet on every page they open —
+    // or injecting on a subset of what the rule routes, a silent wrong answer.
     if (matchers.some((m) => m.kind === "regex")) {
       throw new ConfigError(`${path}.scripts is not allowed on a rule with a regex match (a content script registers by URL pattern, which a regex has none of); give the script's hosts a rule of their own`, { path: `${path}.scripts` });
     }

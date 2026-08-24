@@ -2,16 +2,16 @@
 // No browser, no I/O. Consumed by the cookie-seeder (src/engine/cookie-seeder.ts).
 import type { Config, CookieSpec, Deps } from "../resolver/types";
 
-// A single HTTP request/response header. Re-exported from src/engine/port.ts so the
-// port seam and this pure module share one definition.
+// One HTTP header. Re-exported from src/engine/port.ts so the port seam and this pure
+// module share a definition.
 export interface HttpHeader {
   name: string;
   value?: string;
 }
 
-// The cookies to seed for `url`: the first matching rule's overlay, or [] when no
-// rule matches or the matched rule is `ignore`. Routed through the SAME injected
-// matchRule as the router, so overlay precedence can never drift from routing.
+// The cookies to seed for `url`: the first matching rule's overlay, or [] when nothing
+// matches or the match is `ignore`. Through the SAME injected matchRule as the router, so
+// overlay precedence cannot drift from routing.
 export function cookiesFor(url: string, config: Config, matchRule: Deps["matchRule"]): CookieSpec[] {
   const rule = matchRule(url, config.rules);
   if (!rule || rule.action.kind === "ignore") return [];
@@ -30,9 +30,8 @@ export function parseCookieHeader(headers: HttpHeader[]): Record<string, string>
   return jar;
 }
 
-// Return a new header array with the `Cookie` header rebuilt from the jar (any
-// existing Cookie header, whatever its casing, is dropped and one canonical
-// `Cookie` header appended).
+// A new header array with `Cookie` rebuilt from the jar: any existing one, whatever its
+// casing, is dropped and a single canonical `Cookie` appended.
 export function writeCookieHeader(headers: HttpHeader[], jar: Record<string, string>): HttpHeader[] {
   const value = Object.entries(jar).map(([k, v]) => `${k}=${v}`).join("; ");
   const out = headers.filter((h) => h.name.toLowerCase() !== "cookie");

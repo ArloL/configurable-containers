@@ -14,9 +14,8 @@ import { browserSyncPorts, createConfigSync } from "./config-sync";
 declare const __CC_GRACE_MS__: number;
 declare const __CC_REDIRECTOR_DELAY_MS__: number;
 
-// Synchronous by contract: every browser.* listener is registered while this script
-// evaluates, before the async tail below can lose the session's first navigation.
-// See src/extension/wiring.ts for why that ordering is crucial.
+// Synchronous by contract: every browser.* listener registers while this script evaluates,
+// before the async tail below can lose the session's first navigation. wiring.ts says why.
 const background = wireBackground({
   port: createBrowserPort(),
   clock: realClock,
@@ -29,13 +28,12 @@ void (async () => {
   const stored = await readStoredConfigYaml();
   const loaded = loadConfig(stored, SEED_CONFIG_YAML);
 
-  // First run: the seed becomes the user's config, and storage is truth from here
-  // on — a later version shipping a different seed never overrides an edited config.
-  // This happens even when the seed does NOT parse: storing the broken text is what
-  // lets the editor (opened below) show it with its parse error, so the user can fix
-  // it. Skipping the write would greet them with a blank textarea and no clue.
-  // Stamped UNEDITED so a fresh install joining an established Firefox Sync account
-  // pulls the real config rather than pushing the shipped default over it.
+  // First run: the seed becomes the user's config and storage is the truth from here on, so
+  // a later build's seed never overrides an edited config. This happens even when the seed
+  // does NOT parse — storing the broken text is what lets the editor below show it with its
+  // parse error, where skipping the write would greet the user with a blank textarea.
+  // Stamped UNEDITED so a fresh install joining an established Sync account pulls the real
+  // config instead of pushing the shipped default over it.
   if (loaded.seeded) await writeStoredConfigYaml(SEED_CONFIG_YAML, UNEDITED);
 
   background.useConfig(loaded.config);
@@ -53,8 +51,8 @@ void (async () => {
 
   await background.injectScripts();
 
-  // Last, because it is the only step that can end in runtime.reload(): a config that
-  // arrived from another machine is applied by restarting, and there is no point doing
-  // that while this startup is still finishing. Everything routing needs is already live.
+  // Last, because it is the only step that can end in runtime.reload(): an adopted config is
+  // applied by restarting, and there is no point doing that mid-startup. Everything routing
+  // needs is already live.
   await createConfigSync(browserSyncPorts()).start();
 })();

@@ -1,20 +1,19 @@
-// The keyboard-driven choice page. Stateless: the background encodes {url,options} into
-// the URL hash; this script decodes, renders the options with keyboard hints, and reports
-// a selection via runtime.sendMessage. On {ok:true} the background's reopen consumes this
-// tab. See the choice-screen design spec §4.
+// The keyboard-driven choice page. Stateless: the background encodes {url,options} into the
+// URL hash; this decodes, renders the options with keyboard hints, and reports a selection
+// via runtime.sendMessage. On {ok:true} the background's reopen consumes this tab. See the
+// choice-screen design spec §4.
 //
-// This page lives in a tab of its own, beside the page the user was on, so Esc means
-// CANCEL — close this tab and leave that page alone. It deliberately never navigates
-// itself to the payload url: that url resolved to a choice in the first place, so loading
-// it here would just be answered with another choice page. (It also kept the hash payload
-// — which is attacker-reachable via a crafted moz-extension://<id>/choice.html#… link — on
-// a path to `location.href`, where a javascript: url would have run privileged. The
-// background re-checks the url it receives for the same reason.)
+// The page lives in a tab of its own, beside the page the user was on, so Esc means CANCEL:
+// close this tab, leave that page alone. It never navigates itself to the payload url —
+// that url resolved to a choice, so loading it here just draws another choice page, and it
+// would put the attacker-reachable hash payload (a crafted moz-extension://<id>/choice.html#…
+// link) on a path to `location.href`, where a javascript: url runs privileged. The
+// background re-checks the url it receives for the same reason.
 //
-// Keyboard handling is a pure decision (`choiceIntent`, unit-tested at L1) plus the DOM
-// effects here. The page focuses its first option as it renders: with nothing focused,
-// the two things a user reaches for first — arrows and Enter — did nothing at all, and
-// the hotkeys were the only way in.
+// Keyboard handling is a pure decision (`choiceIntent`, tested at L1) plus the DOM effects
+// here. The page focuses its first option as it renders: with nothing focused, arrows and
+// Enter — the first two keys anyone tries — did nothing, and the hotkeys were the only way
+// in.
 
 import {
   choiceBindings,
@@ -39,8 +38,8 @@ async function closeSelf(): Promise<void> {
 document.getElementById("cc-dest")!.textContent = "Opening: " + payload.url;
 
 // The container name with its mnemonic letter underlined. Built from DOM nodes, not
-// innerHTML: the names come from the user's config and this is a privileged
-// moz-extension: page, so markup in a name must stay text.
+// innerHTML: names come from the user's config and this is a privileged moz-extension:
+// page, so markup in a name must stay text.
 function nameWithMnemonic(name: string, at: number | undefined): DocumentFragment {
   const frag = document.createDocumentFragment();
   if (at === undefined) {
@@ -62,8 +61,8 @@ const items: HTMLElement[] = payload.options.map((container, i) => {
   if (hints[i].mnemonic) li.setAttribute("data-mnemonic", hints[i].mnemonic!);
   li.setAttribute("role", "option");
   li.setAttribute("aria-selected", "false");
-  // Roving tabindex: exactly one option is in the tab order, so Tab leaves the list
-  // rather than walking it — arrows are how you move inside a listbox.
+  // Roving tabindex: exactly one option is in the tab order, so Tab leaves the list rather
+  // than walking it — arrows move inside a listbox.
   li.tabIndex = -1;
 
   const key = document.createElement("kbd");
@@ -90,16 +89,16 @@ function setFocus(index: number): void {
   });
 }
 
-// The reopen could not be performed. Say so and leave the options live rather than
-// loading the url here: this tab is not the user's page, and the choice still stands.
+// The reopen failed. Say so and leave the options live rather than loading the url here:
+// this tab is not the user's page, and the choice still stands.
 function reportFailed(container: string): void {
   status.hidden = false;
   status.textContent = `Could not open ${container}. Pick again, or press Esc to cancel.`;
 }
 
-// One pick at a time. Two keystrokes in the time a reopen takes would otherwise open the
-// site twice — the reopen that consumes this tab is what normally ends the interaction,
-// and until it lands the page is still listening.
+// One pick at a time: two keystrokes inside one reopen would open the site twice. The
+// reopen consuming this tab is what normally ends the interaction, and the page listens
+// until it lands.
 let picking = false;
 
 async function pick(index: number): Promise<void> {
@@ -126,8 +125,8 @@ async function pick(index: number): Promise<void> {
 document.addEventListener("keydown", (e) => {
   const intent = choiceIntent(e, bindings, items.length, focused);
   if (!intent) return;
-  // Only now: an unhandled key (a browser shortcut, a stray modifier chord) keeps its
-  // default. Space would scroll and Enter would re-fire the focused option's click.
+  // Only now, so an unhandled key (a browser shortcut, a stray chord) keeps its default.
+  // Space would scroll and Enter would re-fire the focused option's click.
   e.preventDefault();
   if (intent.kind === "cancel") {
     void closeSelf();
@@ -143,12 +142,11 @@ list.addEventListener("click", (e) => {
   if (li) void pick(items.indexOf(li));
 });
 
-// Take the keyboard as the page renders, so the first keystroke lands on an option
-// instead of nowhere. `window.focus()` pulls focus into content, which is what makes this
-// a dialog you can answer rather than a page you must click into — but only when this tab
-// is the one on screen: a middle-clicked link puts the choice in a BACKGROUND tab
-// (`supersede` inherits the source's `active`), and stealing focus to it would yank the
-// user off the page they are reading. The element focus below is set either way, so
-// switching to that tab later still arrives on an option.
+// Take the keyboard as the page renders, so the first keystroke lands on an option instead
+// of nowhere. `window.focus()` pulls focus into content, making this a dialog you can answer
+// rather than a page you must click into — but only when this tab is on screen: a
+// middle-clicked link puts the choice in a BACKGROUND tab (`supersede` inherits the source's
+// `active`), and stealing focus would yank the user off what they are reading. The element
+// focus below is set either way, so switching to the tab later still lands on an option.
 if (!document.hidden) window.focus();
 if (items.length) setFocus(0);

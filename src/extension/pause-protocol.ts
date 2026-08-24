@@ -1,10 +1,10 @@
-// The shared protocol between the background `pause` module and the options page. Pure,
-// no browser, no DOM — so the shapes stay unit-testable, exactly like picker-protocol.ts.
+// The protocol between the background `pause` module and the options page. Pure — no
+// browser, no DOM — like picker-protocol.ts.
 //
-// Unlike the choice page, this protocol DOES name a container. It has to: the sender is
-// the options tab, and that is not the tab under discussion, so there is nothing to
-// derive the container from. The background therefore VALIDATES the cookieStoreId
-// (a real identity, and never the default container) instead of trusting it.
+// Unlike the choice page, this protocol DOES name a container, because the sender is the
+// options tab, not the tab under discussion, so there is nothing to derive it from. The
+// background therefore VALIDATES the cookieStoreId — a real identity, never the default
+// container — instead of trusting it.
 
 import type { Recording } from "../engine/pause";
 
@@ -25,9 +25,8 @@ export interface ContainerRow {
   cookieStoreId: string;
   name: string;
   tabCount: number;
-  // The hosts of that container's open tabs. Not decoration: a list reading
-  // "tmp3 / tmp8 / tmp12" says nothing about which one is holding the checkout the user
-  // is trying to protect, and is unusable at the one moment this is reached for.
+  // The hosts of that container's open tabs. Not decoration: "tmp3 / tmp8 / tmp12" says
+  // nothing about which one holds the checkout the user is trying to protect.
   hosts: string[];
   armed: boolean;
   armable: boolean;
