@@ -353,7 +353,9 @@ mutant no other case catches.
   the build did. The release-picking is unit-tested (`test/extension/verify-reproducible.test.ts`)
   because picking wrong is the failure that matters: both channels share one tag sequence,
   and reproducing a dev build reports a mismatch that is not one, since AMO signed it on
-  the way out.
+  the way out. **Inert until the first listed release** — every release so far is a
+  prerelease, so the job currently reports "nothing to reproduce" and passes; `FOLLOWUPS.md`
+  carries that until it stops being true.
 - **Determinism of the browser tier** — `npm run test:flake`, nightly. Every other gate
   asks whether the suite is green. This asks whether green means anything: L4/L5 drive a
   real Firefox through a real network stack and real timers, and one run cannot tell a

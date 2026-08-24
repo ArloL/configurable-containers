@@ -382,6 +382,9 @@ reasonable-looking change wrong**.
   serves the builds, and GitHub release assets come from `objects.githubusercontent.com`.
   Probe those before concluding L4/L5 cannot be run here — that conclusion has been drawn
   wrongly more than once, and it silently drops the only levels that see a real browser.
+  **Always pass `FIREFOX_BIN`**: without it Selenium Manager downloads Firefox itself from
+  `ftp.mozilla.org`, and the failure reads `Unable to obtain browser driver` — which looks
+  like a geckodriver problem and is not.
 - **`runtime.reload()` does not bring a TEMPORARILY installed extension back on 140 ESR.**
   Measured 2026-08-24 against 154.0: after a config save the OLD background is still
   running the OLD config, and CC's own pages stop resolving at their `moz-extension` uuid.

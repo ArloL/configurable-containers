@@ -56,3 +56,67 @@ page forging a cross-origin POST. See
 The decline is deliberately shaped so this stays a change to *how the engine executes an
 unchanged decision*: `resolve()` still answers `reopen`, and only the engine's ability to
 carry it out is in question.
+
+## Does a config save reach ESR users at all? (2026-08-24)
+
+`runtime.reload()` does not bring a **temporarily installed** extension back on
+140.14.0esr. Measured against 154.0 for comparison: after the options page saves and
+reloads, the OLD background is still running the OLD config — `work.example`, which the
+edit stops matching, still lands in `Work` — and CC's own pages stop resolving at their
+`moz-extension` uuid. On 154.0 the same steps apply the new config. The one case that
+observes this skips below 154 (`test/e2e/options.test.ts`), which is the only case the
+ESR leg of `ci.yml` cannot run.
+
+**What is not known is whether this reaches real users**, and the gap matters: if a
+permanently installed CC behaves the same way on ESR, then **saving a config never takes
+effect there** and nothing says so — the editor reports "Saved — reloading" either way.
+That is a silent wrong answer of the kind this whole suite exists to prevent, on the one
+action every user performs.
+
+The harness cannot settle it. An unsigned xpi loads on release Firefox only by temporary
+install (`installAddon(xpiPath, true)` in `harness/firefox.ts`), which is also what grants
+`webRequestBlocking`; only a permanent install needs signing, and a signed add-on takes a
+different path through the add-on manager. So the two cases the measurement cannot
+separate are exactly the two that differ.
+
+**What would settle it, and it is a manual step:** install a *signed* dev build — the xpi
+`npm run sign:dev` produces — permanently in a real ESR profile, edit the config, save,
+and see whether routing follows. If it does, this entry is a harness limitation and can be
+deleted. If it does not, it is a shipped bug on ESR and the fix is a config-apply path that
+does not depend on `runtime.reload()`.
+
+## The reproducible-build gate is inert until the first listed release (2026-08-24)
+
+`npm run verify:reproducible` rebuilds the last **listed** release from its own source
+archive and compares hashes. Every release this repo has published so far is a
+`prerelease` — the dev channel — so `latestListedRelease` answers `undefined`, the nightly
+job prints "No listed release yet — nothing to reproduce" and passes.
+
+That is the designed behaviour and the case is pinned, but it means the job is green every
+night while checking nothing. Deliberately not made a failure: a repo that has not cut a
+listed release yet would then be red nightly for no fault. **Re-check on the first listed
+release** — that run is the gate's first real execution, and the thing most likely to be
+wrong is the rebuild environment rather than the build (the source archive gets its own
+`npm ci`, and `scripts/package.ts` must produce the same bytes from it).
+
+While here: the three jobs added to `nightly.yml` on 2026-08-24 — `flake`,
+`reproducible-build` and `firefox-nightly` — have not run once between them. The first
+scheduled run is their first execution, and `latest-nightly` as a `setup-firefox` input is
+unverified (its `latest-esr` sibling was, and worked).
+
+## The impure shells are where coverage stops (2026-08-24)
+
+Three files sit well under the rest and are carried by the global floor rather than by
+anything of their own: `src/extension/config.ts` (24% statements, **0% branches**),
+`src/extension/config-sync.ts` (67%/31%) and `src/engine/browser-port.ts` (74%/62%).
+
+All three are shells around cores that are already at 100% under mutation — `config.ts` is
+`browser.storage` plumbing, `config-sync.ts` moves bytes around the `sync-record` policy,
+`browser-port.ts` maps `browser.*` objects to the port's shapes. So this is a boundary
+question rather than a defect: the decisions are tested, the adapters are not, and the
+adapters are what an L4 case exercises without contributing coverage (the code runs in
+another process).
+
+Worth revisiting if a bug is ever traced to one of them. The cheapest first move is
+`config.ts` against a fake `browser.storage`, since 0% branch coverage means not one of its
+`?? undefined` / area-name guards has ever been executed by a deterministic test.
