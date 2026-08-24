@@ -206,7 +206,9 @@ F13, F14.
 ## L4 — Integration in real Firefox
 
 Install the built extension via geckodriver's temporary-addon install and drive a real
-headless Firefox. Catches what mocks cannot: real event ordering, real `cookieStoreId`
+headless Firefox. On a machine with no Firefox, `./scripts/get-firefox.sh` fetches both
+channels into `.firefox/` and `FIREFOX_BIN=.firefox/esr/firefox npm test` runs the suite
+the way CI's ESR leg does; geckodriver needs no setup, since Selenium Manager fetches it. Catches what mocks cannot: real event ordering, real `cookieStoreId`
 assignment, real container create/dispose, real redirects.
 
 - **Real routing** — navigate; assert `tab.cookieStoreId`; assert containers created and
