@@ -9,10 +9,13 @@ import { isThrowawayName } from "../engine/registry";
 import type { Action, Config, CookieSpec, Group, Rule, ScriptSpec } from "../resolver/types";
 
 export class ConfigError extends Error {
-  readonly path?: string;
-  readonly line?: number;
-  readonly col?: number;
-  constructor(message: string, opts: { path?: string; line?: number; col?: number } = {}) {
+  readonly path?: string | undefined;
+  readonly line?: number | undefined;
+  readonly col?: number | undefined;
+  constructor(
+    message: string,
+    opts: { path?: string | undefined; line?: number | undefined; col?: number | undefined } = {}
+  ) {
     super(message);
     this.name = "ConfigError";
     this.path = opts.path;
@@ -89,7 +92,7 @@ function parseMatch(raw: unknown, path: string): { matchers: Matcher[]; firstHos
   }
   const matchers = list.map((e, j) => toMatcher(e, `${path}.match[${j}]`));
   const first = matchers[0];
-  return { matchers, firstHost: first.kind === "host" ? first.host : null };
+  return { matchers, firstHost: first?.kind === "host" ? first.host : null };
 }
 
 // `tmp<N>` is what the registry mints for a throwaway, and the name is all that tells one
@@ -108,14 +111,13 @@ function checkContainerName(name: string, path: string): void {
 
 function parseOpen(raw: Record<string, unknown>, path: string): Action {
   const open = raw.open;
-  let containers: string[];
+  let containers: [string, ...string[]];
   if (typeof open === "string") {
     if (open === "") throw new ConfigError(`${path}.open must not be an empty container name`, { path: `${path}.open` });
     checkContainerName(open, `${path}.open`);
     containers = [open];
   } else if (Array.isArray(open)) {
-    if (open.length === 0) throw new ConfigError(`${path}.open must not be empty`, { path: `${path}.open` });
-    containers = open.map((c, j) => {
+    const names: string[] = open.map((c, j) => {
       if (typeof c !== "string") {
         throw new ConfigError(`${path}.open[${j}] must be a container name (string)`, { path: `${path}.open[${j}]` });
       }
@@ -125,6 +127,11 @@ function parseOpen(raw: Record<string, unknown>, path: string): Action {
       checkContainerName(c, `${path}.open[${j}]`);
       return c;
     });
+    // The emptiness check, in the form that also produces the non-empty tuple. `open: []`
+    // maps over nothing and throws here rather than a line earlier.
+    const [first, ...rest] = names;
+    if (first === undefined) throw new ConfigError(`${path}.open must not be empty`, { path: `${path}.open` });
+    containers = [first, ...rest];
   } else {
     throw new ConfigError(`${path}.open must be a string or a list of strings`, { path: `${path}.open` });
   }
@@ -168,7 +175,7 @@ function parseCookie(raw: unknown, path: string): CookieSpec {
     if (typeof v !== "string" || !SAME_SITE.has(v)) {
       throw new ConfigError(`${path}.sameSite must be one of no_restriction, lax, strict`, { path: `${path}.sameSite` });
     }
-    spec.sameSite = v as CookieSpec["sameSite"];
+    spec.sameSite = v as NonNullable<CookieSpec["sameSite"]>;
   }
 
   if ("expirationDate" in raw) {
@@ -180,7 +187,7 @@ function parseCookie(raw: unknown, path: string): CookieSpec {
   if ("partitionKey" in raw) {
     const v = raw.partitionKey;
     if (!isMapping(v)) throw new ConfigError(`${path}.partitionKey must be an object`, { path: `${path}.partitionKey` });
-    spec.partitionKey = v as CookieSpec["partitionKey"];
+    spec.partitionKey = v as NonNullable<CookieSpec["partitionKey"]>;
   }
 
   return spec;
@@ -213,7 +220,7 @@ function parseScript(raw: unknown, path: string): ScriptSpec {
     if (typeof v !== "string" || !RUN_AT.has(v)) {
       throw new ConfigError(`${path}.at must be one of document_start, document_end, document_idle`, { path: `${path}.at` });
     }
-    spec.at = v as ScriptSpec["at"];
+    spec.at = v as NonNullable<ScriptSpec["at"]>;
   }
 
   return spec;
@@ -240,7 +247,8 @@ function parseRule(raw: unknown, i: number): Rule {
   }
 
   let action: Action;
-  if (present.length === 0) {
+  const chosen = present[0];
+  if (chosen === undefined) {
     if (firstHost === null) {
       throw new ConfigError(`${path} has no action and its first match is not a bare hostname, so there is no host to name a container after; add "open:"`, { path });
     }
@@ -248,7 +256,7 @@ function parseRule(raw: unknown, i: number): Rule {
     checkContainerName(firstHost, `${path}.match[0]`);
     action = { kind: "open", containers: [firstHost] }; // auto-name after the first host
   } else {
-    switch (present[0]) {
+    switch (chosen) {
       case "inherit":
         if (raw.inherit !== true) throw new ConfigError(`${path}.inherit must be true`, { path });
         action = { kind: "inherit" };
@@ -261,8 +269,9 @@ function parseRule(raw: unknown, i: number): Rule {
         if (raw.redirector !== true) throw new ConfigError(`${path}.redirector must be true`, { path });
         action = { kind: "redirector" };
         break;
-      default: // "open"
+      case "open":
         action = parseOpen(raw, path);
+        break;
     }
   }
 

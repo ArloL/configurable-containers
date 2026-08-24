@@ -16,8 +16,8 @@ export interface WebRequestDetails {
   url: string;
   type: "main_frame" | "sub_frame" | string;
   method: string;
-  originUrl?: string;
-  documentUrl?: string;
+  originUrl?: string | undefined;
+  documentUrl?: string | undefined;
 }
 
 // A top-level navigation ABOUT to start, from webNavigation.onBeforeNavigate. The one place
@@ -93,7 +93,7 @@ export interface RegisteredContentScript {
 }
 
 export interface TabUpdateInfo {
-  status?: "loading" | "complete";
+  status?: "loading" | "complete" | undefined;
 }
 
 export interface Tab {
@@ -102,7 +102,7 @@ export interface Tab {
   cookieStoreId: string; // "firefox-default" | "firefox-container-N"
   index: number;
   active: boolean;
-  openerTabId?: number;
+  openerTabId?: number | undefined;
   // Required, not optional. Without it every reopen lands in the last focused NORMAL
   // window: a window.open popup (pre-commit, so replaced rather than kept) loses its window
   // and closes, and a tab in any unfocused window teleports to the focused one.
@@ -123,7 +123,7 @@ export interface BlockingResponse {
 // `tabId` is absent when the sender is not a tab (another extension page, a background
 // context). The picker declines those.
 export interface MessageSender {
-  tabId?: number;
+  tabId?: number | undefined;
 }
 
 export interface CreateTabProps {
@@ -132,7 +132,7 @@ export interface CreateTabProps {
   // the only way to land there.
   url?: string;
   cookieStoreId: string;
-  openerTabId?: number;
+  openerTabId?: number | undefined;
   index?: number;
   active?: boolean;
   // Omitted means "the current window". Every reopen passes the source tab's own, so the

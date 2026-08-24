@@ -1,5 +1,5 @@
 import type {
-  BrowserPort, Clock, ContextualIdentity, CreateIdentityProps, CreateTabProps, RegisteredContentScript, Tab, TabUpdateInfo, WebRequestDetails,
+  BrowserPort, Clock, ContextualIdentity, CreateIdentityProps, CreateTabProps, RegisteredContentScript, Tab,
 } from "./port";
 
 function mapTab(t: browser.tabs.Tab): Tab {
@@ -57,7 +57,9 @@ export function createBrowserPort(): BrowserPort {
 
     async createTab(p: CreateTabProps): Promise<Tab> {
       const t = await browser.tabs.create({
-        url: p.url, cookieStoreId: p.cookieStoreId, windowId: p.windowId,
+        // `url` is spread in only when there is one: see supersede().
+        ...(p.url === undefined ? {} : { url: p.url }),
+        cookieStoreId: p.cookieStoreId, windowId: p.windowId,
         index: p.index, active: p.active, openerTabId: p.openerTabId,
       });
       return {

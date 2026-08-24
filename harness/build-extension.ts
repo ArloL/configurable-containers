@@ -36,7 +36,12 @@ export const PRODUCTION_GRACE_MS = 300000;
 // One classic script Firefox can load as an MV2 background, plus the choice-page script.
 // Returns the background path; the harness installs the whole directory.
 export async function buildExtension(
-  opts: { graceMs?: number; redirectorDelayMs?: number; configYaml?: string; notifyEchoTo?: string } = {},
+  opts: {
+    graceMs?: number | undefined;
+    redirectorDelayMs?: number | undefined;
+    configYaml?: string | undefined;
+    notifyEchoTo?: string | undefined;
+  } = {},
 ): Promise<string> {
   await build({
     entryPoints: [ENTRY, CHOICE_ENTRY, OPTIONS_ENTRY],

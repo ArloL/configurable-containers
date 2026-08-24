@@ -51,7 +51,7 @@ export interface ChoiceHint {
 // with no ASCII letter binds nothing and keeps its positional key.
 function initialOf(name: string): { letter: string; at: number } | undefined {
   for (let i = 0; i < name.length; i++) {
-    const c = name[i].toLowerCase();
+    const c = name.charAt(i).toLowerCase();
     if (c >= "a" && c <= "z") return { letter: c, at: i };
   }
   return undefined;
@@ -65,10 +65,11 @@ export function choiceHints(options: string[]): ChoiceHint[] {
   const keys = choiceKeys(options.length);
   const taken = new Set(keys);
   return options.map((name, i) => {
+    const key = keys[i]!; // choiceKeys(n) returns exactly n keys
     const initial = initialOf(name);
-    if (!initial || taken.has(initial.letter)) return { key: keys[i] };
+    if (!initial || taken.has(initial.letter)) return { key };
     taken.add(initial.letter);
-    return { key: keys[i], mnemonic: initial.letter, at: initial.at };
+    return { key, mnemonic: initial.letter, at: initial.at };
   });
 }
 

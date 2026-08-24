@@ -105,7 +105,7 @@ describe("redirect binding — a SAML POST binding (real Firefox, CC + probe)", 
     // And it is the only tab at the destination — no reopened twin sitting in Work.
     const landed = (await listTabs(firefox.driver)).filter((tab) => tab.url.startsWith(acs));
     expect(landed).toHaveLength(1);
-    expect(landed[0].container).toBe(from);
+    expect(landed[0]!.container).toBe(from);
 
     const note = await readNotifications(firefox.driver, (n) => n.message.includes("work.example"));
     expect(note.title).toBe("Configurable Containers");

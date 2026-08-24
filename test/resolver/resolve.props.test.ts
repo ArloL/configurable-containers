@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import fc from "fast-check";
 import { resolve } from "../../src/resolver/resolve";
 import { realMatchers, aConfigOf, aNavigation, theDefaultContainer, aThrowaway, theContainerNamed } from "./helpers";
-import type { Rule, Group, ContainerRef, NavContext } from "../../src/resolver/types";
+import type { Rule, Group, ContainerRef } from "../../src/resolver/types";
 
 const deps = realMatchers();
 
@@ -18,9 +18,9 @@ const arbContainer: fc.Arbitrary<ContainerRef> = fc.oneof(
 const arbAction = fc.oneof(
   fc.record({
     kind: fc.constant("open" as const),
-    // Explicit `string[]`: fast-check 4 infers `const` type parameters, so a bare
-    // call yields readonly tuples that don't fit Action's mutable `containers`.
-    containers: fc.constantFrom<string[]>(["X"], ["Temporary"], ["Personal", "Work"]),
+    // Explicit type argument: fast-check 4 infers `const` type parameters, so a bare
+    // call yields readonly tuples that don't fit Action's mutable, non-empty `containers`.
+    containers: fc.constantFrom<[string, ...string[]]>(["X"], ["Temporary"], ["Personal", "Work"]),
   }),
   fc.constant({ kind: "inherit" as const }),
   fc.constant({ kind: "ignore" as const }),

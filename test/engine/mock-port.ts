@@ -27,12 +27,12 @@ export const DEFAULT_WINDOW_ID = 1;
 
 // What a test says to conjure a tab. windowId is opt-in: only window cases mention one.
 export interface TabProps {
-  url?: string;
+  url?: string | undefined;
   cookieStoreId: string;
-  index?: number;
-  active?: boolean;
-  openerTabId?: number;
-  windowId?: number;
+  index?: number | undefined;
+  active?: boolean | undefined;
+  openerTabId?: number | undefined;
+  windowId?: number | undefined;
 }
 
 // Resolve after pending microtasks so floated async callbacks (maybeQueue/tryRemove) settle.

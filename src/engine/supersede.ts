@@ -35,7 +35,10 @@ export async function supersede(
   const keep = /^https?:/.test(source.url);
 
   const created = await port.createTab({
-    url: props.url,
+    // Spread, not `url: props.url`: "no url" has to reach Firefox as a create call with no
+    // url in it (CreateTabProps.url). That an explicit `undefined` happens to be tolerated
+    // is not something to build the new-tab path on.
+    ...(props.url === undefined ? {} : { url: props.url }),
     cookieStoreId: props.cookieStoreId,
     windowId: source.windowId,
     index: keep ? source.index + 1 : source.index,

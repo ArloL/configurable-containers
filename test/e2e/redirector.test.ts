@@ -18,7 +18,7 @@ describe("redirector auto-close (real Firefox, CC + probe)", () => {
     // The previous case leaves the driver on a tab CC closed, and newWindow needs a
     // live context ("Browsing context has been discarded") — re-anchor first.
     const handles = await firefox.driver.getAllWindowHandles();
-    await firefox.driver.switchTo().window(handles[handles.length - 1]);
+    await firefox.driver.switchTo().window(handles[handles.length - 1]!);
     await firefox.driver.switchTo().newWindow("tab");
     try {
       await firefox.driver.get(url);

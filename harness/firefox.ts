@@ -173,11 +173,11 @@ function injectMacAssignment(
 async function buildXpiFor(
   ext: "probe" | "cc" | "mac",
   opts: {
-    graceMs?: number;
-    redirectorDelayMs?: number;
-    configYaml?: string;
-    notifyEchoTo?: string;
-    macAssign?: { url: string; userContextId: string; beaconUrl: string };
+    graceMs?: number | undefined;
+    redirectorDelayMs?: number | undefined;
+    configYaml?: string | undefined;
+    notifyEchoTo?: string | undefined;
+    macAssign?: { url: string; userContextId: string; beaconUrl: string } | undefined;
   },
 ): Promise<{ xpiPath: string; cleanup: () => void }> {
   if (ext === "cc") await buildExtension(opts);
@@ -321,7 +321,7 @@ export async function readCookieStoreId(driver: WebDriver, timeoutMs = 5000): Pr
   while (Date.now() < deadline) {
     lastTitle = await driver.getTitle();
     const m = lastTitle.match(/^CSID:(.+)$/);
-    if (m) return m[1];
+    if (m) return m[1]!;
     await driver.sleep(100);
   }
   throw new Error(`Timed out waiting for probe report; last title: ${JSON.stringify(lastTitle)}`);
@@ -582,8 +582,8 @@ export async function awaitContainerTab(
       try {
         await driver.switchTo().window(handle);
         const m = (await driver.getTitle()).match(/^CSID:(.+)$/);
-        if (m && /^firefox-container-\d+$/.test(m[1]) && (await driver.getCurrentUrl()).startsWith(url)) {
-          return { store: m[1], name: await readContainerName(driver) };
+        if (m && /^firefox-container-\d+$/.test(m[1]!) && (await driver.getCurrentUrl()).startsWith(url)) {
+          return { store: m[1]!, name: await readContainerName(driver) };
         }
       } catch {
         // A handle may have closed mid-loop; skip it this round.

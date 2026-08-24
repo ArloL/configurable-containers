@@ -248,12 +248,12 @@ describe("restart — a paused container", () => {
     session = await restartTheBackground(session, browser, clock.clock, workConfig());
 
     expect(session.pause.isPaused(shop.cookieStoreId)).toBe(true);
-    expect(session.pause.snapshot().recordings[0].hosts.map((h) => h.host)).toEqual(["payment.acme.test"]);
+    expect(session.pause.snapshot().recordings[0]!.hosts.map((h) => h.host)).toEqual(["payment.acme.test"]);
 
     // The dedupe set is rebuilt from the stored recording, so a host the previous session
     // already recorded must not come back as a second row.
     session.pause.record(shop.cookieStoreId, "https://payment.acme.test/again", { kind: "reopen", into: { kind: "temporary" } });
-    expect(session.pause.snapshot().recordings[0].hosts).toHaveLength(1);
+    expect(session.pause.snapshot().recordings[0]!.hosts).toHaveLength(1);
   });
 
   it("still seeds cookies in a paused container — an overlay never decides a container", async () => {

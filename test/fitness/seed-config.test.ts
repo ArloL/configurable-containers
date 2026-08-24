@@ -21,7 +21,7 @@ import { parseConfig } from "../../src/config/parse";
 function seedIn(path: string): string {
   const m = /const TEST_CONFIG_YAML = `([\s\S]*?)`;/.exec(readRepoFile(path));
   if (!m) throw new Error(`no TEST_CONFIG_YAML literal in ${path} — it moved or was renamed`);
-  return m[1];
+  return m[1]!;
 }
 
 const copies = {

@@ -46,7 +46,7 @@ const manifest = JSON.parse(readRepoFile("extensions/cc/manifest.json")) as { pe
 const calledApis = new Set(
   filesMatching(sourceFiles("src"), /\bbrowser\.([a-zA-Z]+)\./g)
     .flatMap((f) => f.lines)
-    .flatMap((line) => [...line.matchAll(/\bbrowser\.([a-zA-Z]+)\./g)].map((m) => m[1]))
+    .flatMap((line) => [...line.matchAll(/\bbrowser\.([a-zA-Z]+)\./g)].map((m) => m[1]!))
 );
 
 describe("fitness — manifest permissions match what the code calls", () => {

@@ -36,7 +36,7 @@ function fakeReopen(): {
 }
 
 function decodeChoiceUrl(url: string | undefined) {
-  return decodePayload(url!.split("#")[1]);
+  return decodePayload(url!.split("#")[1]!);
 }
 
 // The picker no longer registers runtime.onMessage — the wiring owns the single
@@ -60,9 +60,9 @@ describe("picker — choice screen (onChoice flow)", () => {
     // The choice page is a NEW tab beside it — the article is still open, and nothing
     // navigated the user's own tab anywhere.
     expect(browser.openedTabs).toHaveLength(1);
-    expect(browser.openedTabs[0].url).toContain(CHOICE_PAGE + "#");
-    expect(browser.openedTabs[0].index).toBe(readingSomething.index + 1);
-    expect(browser.openedTabs[0].openerTabId).toBe(readingSomething.id);
+    expect(browser.openedTabs[0]!.url).toContain(CHOICE_PAGE + "#");
+    expect(browser.openedTabs[0]!.index).toBe(readingSomething.index + 1);
+    expect(browser.openedTabs[0]!.openerTabId).toBe(readingSomething.id);
     expect(browser.closedTabIds).toEqual([]);
     expect(browser.openTabs.get(readingSomething.id)?.url).toBe("https://kottke.example/");
   });
@@ -75,8 +75,8 @@ describe("picker — choice screen (onChoice flow)", () => {
 
     await picker.showChoice(middleClicked.id, "https://figma.example/", ["Personal", "Work"]);
 
-    expect(browser.openedTabs[0].index).toBe(middleClicked.index);
-    expect(browser.openedTabs[0].openerTabId).toBe(99);
+    expect(browser.openedTabs[0]!.index).toBe(middleClicked.index);
+    expect(browser.openedTabs[0]!.openerTabId).toBe(99);
     expect(browser.closedTabIds).toEqual([middleClicked.id]);
   });
 
@@ -87,7 +87,7 @@ describe("picker — choice screen (onChoice flow)", () => {
 
     await picker.showChoice(inAnotherWindow.id, "https://figma.example/", ["Personal", "Work"]);
 
-    expect(browser.openedTabs[0].windowId).toBe(7);
+    expect(browser.openedTabs[0]!.windowId).toBe(7);
   });
 
   it("carries the destination and the eligible containers to the page, and no tab id", async () => {
@@ -97,7 +97,7 @@ describe("picker — choice screen (onChoice flow)", () => {
 
     await picker.showChoice(tab.id, "https://figma.example/", ["Personal", "Work"]);
 
-    expect(decodeChoiceUrl(browser.openedTabs[0].url)).toEqual({
+    expect(decodeChoiceUrl(browser.openedTabs[0]!.url)).toEqual({
       url: "https://figma.example/",
       options: ["Personal", "Work"],
     });
@@ -134,7 +134,7 @@ describe("picker — a selection (cc-pick)", () => {
 
     await browser.receivesMessage({ type: "cc-pick", url: "https://youtube.example/", container: "Temporary" }, choiceTab);
 
-    expect(fr.calls[0].target).toEqual({ kind: "temporary" });
+    expect(fr.calls[0]!.target).toEqual({ kind: "temporary" });
   });
 
   it("declines a sender that is not a tab — the page cannot name a tab it is not", async () => {
@@ -208,9 +208,9 @@ describe("picker — reopen picker (command flow)", () => {
     await browser.receivesCommand("reopen-picker");
 
     expect(browser.openedTabs).toHaveLength(1);
-    expect(browser.openedTabs[0].windowId).toBe(DEFAULT_WINDOW_ID);
+    expect(browser.openedTabs[0]!.windowId).toBe(DEFAULT_WINDOW_ID);
     expect(browser.closedTabIds).toEqual([]);
-    expect(decodeChoiceUrl(browser.openedTabs[0].url)).toEqual({
+    expect(decodeChoiceUrl(browser.openedTabs[0]!.url)).toEqual({
       url: "http://figma.example:1234/",
       options: ["Personal", "Work"],
     });
