@@ -52,8 +52,8 @@ export function asDosLocal(utc: Date): Date {
   return new Date(utc.getTime() + once.getTimezoneOffset() * 60_000);
 }
 
-// Staged paths relative to `dir`, files only, sorted: directory order is the filesystem's
-// business and not stable across machines.
+// Sorted, because directory order is the filesystem's business and not stable across
+// machines.
 function stagedFiles(dir: string, prefix = ""): string[] {
   return readdirSync(dir, { withFileTypes: true })
     .flatMap((e) =>
@@ -112,8 +112,8 @@ export async function packageExtension(
   const xpiPath = path.join(outDir, `configurable-containers-${opts.version}.xpi`);
   rmSync(xpiPath, { force: true });
 
-  // Reproducible archive: sorted entries, one explicit mtime. Same inputs give byte-identical
-  // output, so a reviewer can checksum the .xpi instead of unpacking it.
+  // Same inputs give byte-identical output, so a reviewer can checksum the .xpi instead of
+  // unpacking it to compare.
   const mtime = asDosLocal(zipTimestamp());
   const entries: Record<string, [Uint8Array, { mtime: Date }]> = {};
   for (const rel of stagedFiles(stageDir)) {
@@ -124,9 +124,8 @@ export async function packageExtension(
   return { xpiPath, stageDir };
 }
 
-// CLI: `npx tsx scripts/package.ts 2607.0.101`. Defaults to 0.0.0 for local builds, which are
-// never submitted — real versions come from the CalVer tag in CI. Guarded against accidental
-// execution.
+// 0.0.0 by default: local builds are never submitted, and real versions come from the CalVer
+// tag in CI. The argv guard keeps an import from packaging anything.
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
   const version = process.argv[2] ?? process.env.CC_VERSION ?? "0.0.0";
   packageExtension({ version })

@@ -41,7 +41,7 @@ export function ccExtensionUrl(pagePath: string): string {
   return `moz-extension://${CC_EXTENSION_UUID}/${pagePath}`;
 }
 
-// Default fake domains resolved to loopback for e2e tests.
+// Resolved to loopback by the prefs launch() sets, so no DNS is involved.
 const DEFAULT_LOCAL_DOMAINS = [
   "work.example", "nomatch.example", "redirect.example", "figma.example", "youtube.example",
   "hop.example",
@@ -72,8 +72,8 @@ export interface LaunchOptions {
   startupUrl?: string;
 }
 
-// Zip an unpacked extension directory into a temporary .xpi (installAddon wants a file, not
-// a directory). fflate rather than a `zip` binary, as scripts/package.ts does.
+// installAddon wants a file, not a directory. fflate rather than a `zip` binary, as
+// scripts/package.ts does.
 function zipDir(
   dir: string,
   transform?: (entries: Record<string, Uint8Array>) => void,
@@ -169,7 +169,7 @@ function injectMacAssignment(
   );
 }
 
-// Build (cc only) then zip the given extension into an installable .xpi.
+// Only `cc` needs building; the others ship as source.
 async function buildXpiFor(
   ext: "probe" | "cc" | "mac",
   opts: {
@@ -327,14 +327,13 @@ export async function readCookieStoreId(driver: WebDriver, timeoutMs = 5000): Pr
   throw new Error(`Timed out waiting for probe report; last title: ${JSON.stringify(lastTitle)}`);
 }
 
-// Read the container name the probe wrote into the current tab's DOM.
 export async function readContainerName(driver: WebDriver): Promise<string> {
   return (await driver.executeScript(
     "return document.documentElement.getAttribute('data-cc-container') || '';"
   )) as string;
 }
 
-// Read the live container-name list the probe wrote into the current tab's DOM.
+// A SNAPSHOT, written when the document loaded — see listContainers for the live answer.
 export async function readContainerList(driver: WebDriver): Promise<string[]> {
   const raw = (await driver.executeScript(
     "return document.documentElement.getAttribute('data-cc-containers') || '';"
@@ -457,10 +456,9 @@ export async function probeCommand<T>(
   throw new Error(`probe command ${JSON.stringify(cmd)} timed out after ${timeoutMs}ms`);
 }
 
-// Every container's name, live from browser.contextualIdentities.query. readContainerList
-// reads a snapshot written when a document loaded, so watching a container be REMOVED through
-// it means navigating a tab on every poll; this asks the browser each time, from a tab the
-// test never touches.
+// Live from browser.contextualIdentities.query. Watching a container be REMOVED through
+// readContainerList's snapshot would mean navigating a tab on every poll; this asks the
+// browser each time, from a tab the test never touches.
 export function listContainers(driver: WebDriver): Promise<string[]> {
   return probeCommand(driver, "containers");
 }
