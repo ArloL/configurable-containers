@@ -30,7 +30,7 @@ export function decodePayload(s: string): ChoicePayload {
 const DIGITS = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
 const LETTERS = "abcdefghijklmnopqrstuvwxyz".split("");
 
-// Keyboard hints for the choice page: 1..9 then a..z (enough for any realistic rule).
+// 1..9 then a..z, which is enough for any realistic rule.
 export function choiceKeys(n: number): string[] {
   const all = [...DIGITS, ...LETTERS];
   if (n > all.length) throw new Error(`too many options (${n}); max ${all.length}`);
@@ -84,8 +84,7 @@ export function choiceBindings(hints: ChoiceHint[]): Map<string, number> {
   return map;
 }
 
-// What a keystroke means: `pick` opens a container, `focus` moves the highlight, `cancel`
-// dismisses, null means "not ours — leave it to the browser".
+// null means "not ours" — leave the keystroke to the browser.
 export type ChoiceIntent =
   | { kind: "pick"; index: number }
   | { kind: "focus"; index: number }
@@ -100,8 +99,7 @@ export interface ChoiceKeyEvent {
   metaKey?: boolean;
 }
 
-// The whole keyboard grammar of the choice page, as a function of the keystroke and where
-// the highlight is (`focused` is -1 for nowhere).
+// The whole keyboard grammar of the choice page. `focused` is -1 for "nowhere".
 //
 // A modified keystroke is never ours: Ctrl+W, Alt+Left and Cmd+L belong to the browser, and
 // swallowing them would make the page a trap. Shift does not count — it is how a capital is

@@ -125,8 +125,8 @@ export function createConfigSync(ports: SyncPorts): ConfigSync {
 }
 
 // ---------------------------------------------------------------------------
-// The real ports: everything below touches browser.* and is the only part of the module
-// that cannot run under a fake.
+// Everything below touches browser.* — the only part of this module that cannot run under
+// a fake.
 // ---------------------------------------------------------------------------
 
 export function browserSyncPorts(): SyncPorts {

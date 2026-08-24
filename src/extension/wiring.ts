@@ -25,7 +25,7 @@ export interface Background {
   // Fills `config` and releases the gated first navigation. One call, because the two
   // must happen together.
   useConfig(loaded: Config): void;
-  // Raises the throwaway counter past every tmp<N> that already exists.
+  // Raises the counter past every tmp<N> that already exists.
   resumeTmpSuffix(): Promise<void>;
   // The one sibling that reads the config eagerly, so it runs after useConfig.
   injectScripts(): Promise<void>;
@@ -93,7 +93,7 @@ export function wireBackground(opts: WiringOptions): Background {
   const tmpSuffix = (): string => String(++n);
 
   // onChoice fires at navigation time, long after construction, so the forward reference
-  // is safe. `let` makes the dependency direction explicit.
+  // is safe.
   let picker: ReturnType<typeof createPicker>;
   const engine = createEngine({
     port: gatedPort,

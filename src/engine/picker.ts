@@ -12,8 +12,7 @@ export interface PickerOptions {
 }
 
 export interface Picker {
-  // Open the choice page for the triggering tab. Called by the engine's onChoice and by
-  // the reopen-picker command.
+  // Called by the engine's onChoice and by the reopen-picker command.
   showChoice(tabId: number, url: string, options: string[]): Promise<void>;
   // The wiring owns the single runtime.onMessage registration and dispatches to this.
   // Returns undefined SYNCHRONOUSLY for a message that is not ours: in Firefox an async
@@ -28,10 +27,9 @@ function containerToTarget(container: string): Target {
   return container === TEMPORARY ? { kind: "temporary" } : { kind: "permanent", name: container };
 }
 
-// A sibling of the engine, wired in wiring.ts, not nested. Owns the choice screen (the
-// onChoice flow) and the reopen picker (keyboard command). Both show the stateless choice
-// page and, on selection, go through the engine's F1-guarded `reopen` — the picker never
-// reopens a tab by hand. See the choice-screen design spec §2.
+// Owns the choice screen and the reopen picker. Both show the stateless choice page and,
+// on selection, go through the engine's F1-guarded `reopen` — the picker never reopens a
+// tab by hand. See the choice-screen design spec §2.
 export function createPicker(opts: PickerOptions): Picker {
   const { port, config, deps, reopen } = opts;
 
@@ -44,7 +42,7 @@ export function createPicker(opts: PickerOptions): Picker {
   // replaced, landing the container tab where a single-container reopen would have put it.
   async function showChoice(tabId: number, url: string, options: string[]): Promise<void> {
     const tab = await port.getTab(tabId);
-    if (!tab) return; // tab raced away — nothing to route
+    if (!tab) return; // raced away
     const choiceUrl = port.getURL("choice.html") + "#" + encodePayload({ url, options });
     await supersede(port, tab, { url: choiceUrl, cookieStoreId: tab.cookieStoreId });
   }

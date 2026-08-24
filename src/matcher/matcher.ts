@@ -1,8 +1,7 @@
-// The three match grammars — bare hostname, WebExtension match pattern, regex — as
-// pure predicates over a URL. No browser, no I/O. See
-// docs/superpowers/specs/2026-07-10-l2-matcher-design.md §2–§3 (the shorthand) and
-// docs/superpowers/specs/2026-08-19-match-patterns-and-regex-design.md §2–§4 (the
-// other two, and why a regex has no pattern form).
+// The three match grammars as pure predicates over a URL. No browser, no I/O. See
+// docs/superpowers/specs/2026-07-10-l2-matcher-design.md §2–§3 for the shorthand and
+// docs/superpowers/specs/2026-08-19-match-patterns-and-regex-design.md §2–§4 for the other
+// two, and for why a regex has no pattern form.
 
 import type { Rule, Group } from "../resolver/types";
 
@@ -119,7 +118,6 @@ export function patternMatcher(pattern: string): PatternMatcher {
   const hostish = rest.slice(0, slash);
   const glob = rest.slice(slash);
 
-  // The bare "*" is the any-host wildcard; "*.foo.com" is foo.com and everything under it.
   const subdomains = hostish.startsWith("*.");
   let host: string | null;
   if (hostish === "*") {
@@ -198,8 +196,7 @@ export function matches(m: Matcher, url: string): boolean {
   }
 }
 
-// A rule/group matches if ANY of its entries hits. The resolver stores matchers as an
-// opaque `unknown[]`; here they are concrete `Matcher`s.
+// The resolver stores matchers as an opaque `unknown[]`; here they are concrete `Matcher`s.
 function anyMatch(entries: unknown[], url: string): boolean {
   return entries.some((e) => matches(e as Matcher, url));
 }

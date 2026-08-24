@@ -7,9 +7,8 @@ import { supersede } from "./supersede";
 export const MAC_ID = "@testpilot-containers";
 
 export interface Engine {
-  // Opens `url` in `target` beside `tab`: keeps `tab` if it is on a page, replaces it if
-  // it has nothing to lose. `reopenedNav` then leaves the new tab's navigation alone (F1).
-  // Throws; callers react.
+  // Placement is `supersede`'s; `reopenedNav` then leaves the new tab's navigation alone
+  // (F1). Throws, so callers decide whether to fail open.
   reopen(tab: Tab, url: string, target: Target): Promise<void>;
 }
 
@@ -36,7 +35,7 @@ function defaultSuffix(): () => string {
   return () => String(++n);
 }
 
-// F7: a truthy getAssignment result means MAC owns this URL and we back off.
+// F7: a truthy getAssignment means MAC owns this URL, so we back off.
 async function macOwns(port: BrowserPort, url: string): Promise<boolean> {
   try {
     const a = await port.sendExternalMessage(MAC_ID, { method: "getAssignment", url });
@@ -102,7 +101,6 @@ async function buildNavContext(
 // in the same words as the F9 notification: one function, so the two cannot drift.
 export type Declinable = Extract<Decision, { kind: "reopen" } | { kind: "choice" }>;
 
-// How the notification names where the tab is, and where the rules wanted it.
 async function containerLabel(port: BrowserPort, cookieStoreId: string): Promise<string> {
   const ci = await port.getIdentity(cookieStoreId);
   return ci ? ci.name : "the default container";
@@ -226,10 +224,8 @@ export function createEngine(opts: EngineOptions): Engine {
   // to the choice page.
   async function reopen(tab: Tab, url: string, target: Target): Promise<void> {
     const store = await registry.toStoreId(target);
-    // `supersede` owns the keep-or-replace rule and the window; the picker goes through
-    // the same function, so the two cannot drift.
     await supersede(port, tab, { url, cookieStoreId: store }, (created) => {
-      reopenedNav.set(created.id, { awaiting: url }); // leave its whole navigation alone (see 1b)
+      reopenedNav.set(created.id, { awaiting: url }); // see the reopenedNav guard below
     });
   }
 
@@ -248,7 +244,6 @@ export function createEngine(opts: EngineOptions): Engine {
   port.onBeforeRequest((d) => inTurn(d.tabId, () => navigate(d)));
 
   async function navigate(d: WebRequestDetails): Promise<BlockingResponse | void> {
-    // (0) Scope: only top-level http(s) navigations.
     if (d.type !== "main_frame") return;
     if (!/^https?:/.test(d.url)) return;
     // …and not the document fetch behind a `view-source:` load, which arrives wearing the
@@ -257,43 +252,41 @@ export function createEngine(opts: EngineOptions): Engine {
     // so a missing mark just routes as before.
     if (viewSourceNav.has(d.tabId)) return;
 
-    // (1) F1 loop guard — re-fires of a request we already acted on.
+    // F1: a re-fire of a request we already acted on.
     const key = d.requestId + "+" + d.url;
     if (handled.has(key)) return { cancel: true };
 
-    // (1b) F1 loop guard — the navigation we reopened this tab to perform, from its
-    // first request through every redirect hop of it.
+    // F1: the navigation we reopened this tab to perform, from its first request through
+    // every redirect hop of it.
     const ours = reopenedNav.get(d.tabId);
     if (ours) {
       if ("requestId" in ours) {
-        if (ours.requestId === d.requestId) return; // a hop of it — same navigation, still ours
-        reopenedNav.delete(d.tabId); // a later navigation in that tab: route it normally
+        if (ours.requestId === d.requestId) return; // another hop of the same navigation
+        reopenedNav.delete(d.tabId); // a later navigation: route it normally
       } else if (deps.sameSite(ours.awaiting, d.url)) {
-        reopenedNav.set(d.tabId, { requestId: d.requestId }); // first request: this is the one
+        reopenedNav.set(d.tabId, { requestId: d.requestId });
         return;
       } else {
-        reopenedNav.delete(d.tabId); // the awaited navigation never came — route this one
+        reopenedNav.delete(d.tabId); // the awaited navigation never came
       }
     }
 
-    // (2) Assemble NavContext.
     const tab = await port.getTab(d.tabId);
-    if (!tab) return; // tab raced away — fail open
+    if (!tab) return; // raced away — fail open
     const nav = await buildNavContext(d, tab, registry, port);
 
-    // (3) Pure decision.
     const decision = resolve(nav, config, deps);
 
-    // (3a) The user armed this container: record what routing would have done, do nothing.
-    // Each boundary is required by something specific:
+    // The user armed this container: record what routing would have done, do nothing. Each
+    // boundary is required by something specific:
     //
-    //   after (3)   — the record's value is the COUNTERFACTUAL. "would have been reopened
-    //                 into a new temporary container" says the rule was needed; "no action"
-    //                 says it was not. resolve() is pure and cheap.
-    //   before (3b) — a paused POST must raise no declination toast. F9 announces a rule
-    //                 that went UNAPPLIED; under a pause the user turned routing off.
-    //   after (1b)  — the reopenedNav guard still runs, so arming one hop after a reopen
-    //                 cannot orphan its state.
+    //   after resolve()      — the record's value is the COUNTERFACTUAL. "would have been
+    //                          reopened into a new temporary container" says the rule was
+    //                          needed; "no action" says it was not.
+    //   before the decline   — a paused POST must raise no toast. F9 announces a rule that
+    //                          went UNAPPLIED; under a pause the user turned routing off.
+    //   after reopenedNav    — that guard still runs, so arming one hop after a reopen
+    //                          cannot orphan its state.
     //
     // Adds nothing to `handled` and never cancels: no state a later navigation inherits.
     if (pause.isPaused(tab.cookieStoreId)) {
@@ -301,10 +294,10 @@ export function createEngine(opts: EngineOptions): Engine {
       return;
     }
 
-    // (3b) F9 — tabs.create can only issue a GET, so reopening a navigation with a body
-    // drops it silently. Leave it where it is and say so. Before macOwns (no reason to ask
-    // about a navigation we will not act on) and before handled.add (adds no state, so it
-    // fails open). reopenedNav has already returned for navigations that are ours.
+    // F9 — tabs.create can only issue a GET, so reopening a navigation with a body drops
+    // it silently. Leave it where it is and say so. Before macOwns (no reason to ask about
+    // a navigation we will not act on) and before handled.add (adds no state, so it fails
+    // open).
     if ((decision.kind === "reopen" || decision.kind === "choice") && d.method !== "GET") {
       // The decline is unconditional; only the toast is selective. Tying the two together
       // would make "say less" mean "route differently".
@@ -316,7 +309,6 @@ export function createEngine(opts: EngineOptions): Engine {
       return; // no cancel — the POST proceeds in the tab's current container
     }
 
-    // (4) Effects.
     switch (decision.kind) {
       case "leaveAlone":
       case "stay":
@@ -334,9 +326,9 @@ export function createEngine(opts: EngineOptions): Engine {
         try {
           await reopen(tab, d.url, decision.into);
         } catch (e) {
-          handled.delete(key); // fail open — allow a retry
+          handled.delete(key); // fail open, so the navigation can be retried
           console.warn("[engine] reopen failed", e);
-          return; // do NOT cancel
+          return;
         }
         return { cancel: true };
       }

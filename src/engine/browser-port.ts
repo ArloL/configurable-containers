@@ -18,9 +18,9 @@ function mapTab(t: browser.tabs.Tab): Tab {
 // that lives in no DOM. "" in every shipped build, which esbuild folds away.
 declare const __CC_NOTIFY_ECHO_TO__: string;
 
-// Real BrowserPort over browser.*. Mechanical and logic-free; every decision comes from
-// resolve() inside the engine. One Firefox note: a blocking onBeforeRequest listener may
-// return a Promise<BlockingResponse>, which Firefox awaits before the request proceeds.
+// Keep this logic-free: every decision belongs in resolve() or the engine. One Firefox
+// note — a blocking onBeforeRequest listener may return a Promise<BlockingResponse>, which
+// Firefox awaits before the request proceeds.
 export function createBrowserPort(): BrowserPort {
   // Set once on first use, not at construction: the colour never changes, but constructing
   // the port must stay free of browser.* calls, or any caller that has not stubbed
@@ -51,7 +51,7 @@ export function createBrowserPort(): BrowserPort {
         const t = await browser.tabs.get(tabId);
         return mapTab(t);
       } catch {
-        return null; // tab gone — engine treats as fail-open
+        return null; // gone — the engine fails open
       }
     },
 
@@ -200,9 +200,8 @@ export function createBrowserPort(): BrowserPort {
   };
 }
 
-// Production clock: schedules on the extension's global timer (return value unused). `now`
-// is wall-clock on purpose — a stored deadline is compared against it after a restart a
-// monotonic counter would not have been running for.
+// `now` is wall-clock on purpose: a stored deadline is compared against it after a restart
+// a monotonic counter would not have been running for.
 export const realClock: Clock = {
   setTimeout: (fn, ms) => {
     globalThis.setTimeout(fn, ms);

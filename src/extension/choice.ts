@@ -89,8 +89,8 @@ function setFocus(index: number): void {
   });
 }
 
-// The reopen failed. Say so and leave the options live rather than loading the url here:
-// this tab is not the user's page, and the choice still stands.
+// The options stay live rather than the url loading here: this tab is not the user's page,
+// and the choice still stands.
 function reportFailed(container: string): void {
   status.hidden = false;
   status.textContent = `Could not open ${container}. Pick again, or press Esc to cancel.`;

@@ -54,8 +54,7 @@ export function createAutoTemp(opts: AutoTempOptions): void {
     await supersede(port, tab, { cookieStoreId: ci.cookieStoreId });
   }
 
-  // Startup sweep: about:newtab / about:home tabs opened before the extension loaded,
-  // usually the window's first tab.
+  // Tabs opened before the extension loaded, usually the window's first.
   void (async () => {
     try {
       const tabs = await port.queryTabs({});
@@ -70,7 +69,6 @@ export function createAutoTemp(opts: AutoTempOptions): void {
     }
   })();
 
-  // Event listeners for future tabs.
   function maybeAutoTemp(tab: Tab): void {
     if (creating) return;
     if (processed.has(tab.id)) return;

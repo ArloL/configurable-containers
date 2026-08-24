@@ -11,8 +11,7 @@ export type Action =
   | { kind: "ignore" }
   | { kind: "redirector" };
 
-// Overlay: a cookie to seed into the tab's own container. The full browser.cookies.set
-// surface minus storeId, which the seeder always forces to the tab's own cookieStoreId
+// browser.cookies.set minus storeId, which the seeder forces to the tab's own store
 // (cookies-overlay design spec §5). resolve() ignores it; the cookie-seeder consumes it.
 export interface CookieSpec {
   name: string;
@@ -28,18 +27,18 @@ export interface CookieSpec {
   partitionKey?: { topLevelSite?: string };
 }
 
-// Overlay: a snippet to inject, the browser.contentScripts.register js/runAt surface.
-// resolve() ignores it; the script-injector consumes it (scripts-overlay design spec §5).
+// The browser.contentScripts.register js/runAt surface. resolve() ignores it; the
+// script-injector consumes it (scripts-overlay design spec §5).
 export interface ScriptSpec {
-  run: string; // required: the JS source to inject (inline `code`)
+  run: string; // inline JS source, not a file
   at?: "document_start" | "document_end" | "document_idle"; // default "document_start"
 }
 
 export interface Rule {
   match: Matcher[]; // normalized to a list (single -> [single])
   action: Action;
-  cookies?: CookieSpec[]; // overlay; resolve() ignores it (consumed by the cookie-seeder)
-  scripts?: ScriptSpec[]; // overlay; resolve() ignores it (consumed by the script-injector)
+  cookies?: CookieSpec[];
+  scripts?: ScriptSpec[];
 }
 
 export interface Group {
@@ -76,7 +75,7 @@ export interface NavContext {
 export interface Deps {
   matchRule: (url: string, rules: Rule[]) => Rule | null; // first-match
   matchGroup: (url: string, groups: Group[]) => number | null; // first-match group index
-  sameSite: (a: string, b: string) => boolean; // PSL registrable-domain equality (injected)
+  sameSite: (a: string, b: string) => boolean; // PSL registrable-domain equality
 }
 
 // Structurally identical to ContainerRef; named separately for intent — where to reopen a

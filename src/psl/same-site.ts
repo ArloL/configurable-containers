@@ -5,8 +5,8 @@ import { parse } from "tldts";
 
 const OPTS = { allowPrivateDomains: true } as const;
 
-// The registrable domain of a URL/hostname (private suffixes honoured), or null when
-// there is none (IP, single-label host, bare public suffix, invalid).
+// Null when there is no registrable domain: an IP, a single-label host, a bare public
+// suffix, or junk.
 export function registrableDomain(url: string): string | null {
   return parse(url, OPTS).domain;
 }
@@ -29,8 +29,7 @@ function site(url: string): string | null {
   return p.hostname === null ? null : "host:" + p.hostname;
 }
 
-// Same-site iff the two URLs belong to the same site. Total (never throws); tldts
-// lowercases hostnames, so this is case-insensitive.
+// Total — never throws. Case-insensitive, because tldts lowercases hostnames.
 export function sameSite(a: string, b: string): boolean {
   const sa = site(a);
   return sa !== null && sa === site(b);

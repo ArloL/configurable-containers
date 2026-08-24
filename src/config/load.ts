@@ -6,7 +6,7 @@ import type { Config } from "../resolver/types";
 
 export interface LoadResult {
   config: Config;
-  error?: ConfigError; // set iff parsing failed
+  error?: ConfigError;
   seeded: boolean; // true iff there was no stored config
 }
 

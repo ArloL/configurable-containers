@@ -3,8 +3,7 @@ import { isThrowawayName } from "./registry";
 
 const GC_INTERVAL_MS = 600_000; // 10 min, matches TCP
 
-// storage.local key: cookieStoreId -> when that container was first OBSERVED empty. The
-// header below says why the grace is stored rather than held in a timer.
+// storage.local key: cookieStoreId -> when that container was first OBSERVED empty.
 export const EMPTY_SINCE_KEY = "tmpEmptySince";
 
 type EmptySince = Record<string, number>;
@@ -12,11 +11,9 @@ type EmptySince = Record<string, number>;
 export interface DisposerOptions {
   port: BrowserPort;
   clock: Clock;
-  graceMs: number; // keep-alive window
+  graceMs: number;
 }
 
-// Removes tmp containers once empty. A sibling of the engine — no routing.
-//
 // The grace is a STORED FACT ("tmp3 has been empty since T"), not a pending timer, and that
 // is the whole design. A timer dies with the background context, and options.ts calls
 // runtime.reload() on every config save — so the timer version lost every pending grace on
@@ -49,9 +46,7 @@ export function createDisposer(opts: DisposerOptions): void {
     return keys.every((k) => a[k] === b[k]);
   }
 
-  // One pass over every throwaway: remove the expired, start the clock on the newly-empty,
-  // forget any that has a tab again (keep-alive) or has gone. Re-arms for the nearest
-  // surviving deadline.
+  // Idempotent, and re-arms itself for the nearest surviving deadline.
   async function sweep(): Promise<void> {
     const tmp = (await port.queryIdentities()).filter((c) => isThrowawayName(c.name));
     const before = await readEmptySince();

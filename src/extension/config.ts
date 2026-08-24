@@ -1,7 +1,6 @@
-// The extension's config plumbing: the build-time SEED, the storage it lives in after first
-// run, and the editor page. An L4 adapter, and the only non-page code outside the port that
-// touches browser.*. See the 2026-07-28 design spec §4/§5 and the 2026-07-30 sync spec §4;
-// the engine's BrowserPort seam knows nothing about it.
+// One of the four files allowed to touch browser.* outside the port, by design: the engine's
+// BrowserPort seam knows nothing about config storage. See the 2026-07-28 design spec §4/§5
+// and the 2026-07-30 sync spec §4.
 
 // Injected at bundle time by esbuild (harness/build-extension.ts). The FIRST-RUN SEED, not
 // the live config: e2e injects the test config, the manual launcher the author's real one,

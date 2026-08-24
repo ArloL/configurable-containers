@@ -1,24 +1,21 @@
-// Pure overlay core: which cookies apply to a URL, and Cookie-header (de)serialization.
-// No browser, no I/O. Consumed by the cookie-seeder (src/engine/cookie-seeder.ts).
+// Pure: no browser, no I/O. Consumed by src/engine/cookie-seeder.ts.
 import type { Config, CookieSpec, Deps } from "../resolver/types";
 
-// One HTTP header. Re-exported from src/engine/port.ts so the port seam and this pure
-// module share a definition.
+// Re-exported from src/engine/port.ts so the port seam and this pure module share one
+// definition.
 export interface HttpHeader {
   name: string;
   value?: string;
 }
 
-// The cookies to seed for `url`: the first matching rule's overlay, or [] when nothing
-// matches or the match is `ignore`. Through the SAME injected matchRule as the router, so
-// overlay precedence cannot drift from routing.
+// [] when nothing matches or the match is `ignore`. Goes through the SAME injected
+// matchRule as the router, so overlay precedence cannot drift from routing.
 export function cookiesFor(url: string, config: Config, matchRule: Deps["matchRule"]): CookieSpec[] {
   const rule = matchRule(url, config.rules);
   if (!rule || rule.action.kind === "ignore") return [];
   return rule.cookies ?? [];
 }
 
-// Parse a request's `Cookie` header into a { name: value } jar (empty if absent).
 export function parseCookieHeader(headers: HttpHeader[]): Record<string, string> {
   const jar: Record<string, string> = {};
   const header = headers.find((h) => h.name.toLowerCase() === "cookie");
@@ -30,8 +27,8 @@ export function parseCookieHeader(headers: HttpHeader[]): Record<string, string>
   return jar;
 }
 
-// A new header array with `Cookie` rebuilt from the jar: any existing one, whatever its
-// casing, is dropped and a single canonical `Cookie` appended.
+// Any existing `Cookie` header is dropped whatever its casing, and one canonical header
+// appended.
 export function writeCookieHeader(headers: HttpHeader[], jar: Record<string, string>): HttpHeader[] {
   const value = Object.entries(jar).map(([k, v]) => `${k}=${v}`).join("; ");
   const out = headers.filter((h) => h.name.toLowerCase() !== "cookie");
