@@ -4,6 +4,7 @@ import {
   ConfigTooLargeError,
   MAX_PARTS,
   META_KEY,
+  PART_KEY_PREFIX,
   SYNC_VERSION,
   decodeRecord,
   encodeRecord,
@@ -57,7 +58,11 @@ describe("encoding a config for storage.sync", () => {
   });
 
   it("leaves an unrelated key out of the stale list", () => {
-    expect(staleKeys({ [META_KEY]: {}, somethingElse: "1", [partKey(0)]: "a" }, 1)).toEqual([]);
+    // "someOtherKey9" is the shape that matters: drop the prefix test and its twelfth
+    // character onwards parses as a part index, so it would be deleted from someone
+    // else's storage.sync. The area is shared with every other extension the user has.
+    const foreign = { [META_KEY]: {}, somethingElse: "1", someOtherKey9: "1", [partKey(0)]: "a" };
+    expect(staleKeys(foreign, 1)).toEqual([]);
   });
 });
 
@@ -126,6 +131,145 @@ describe("hashText", () => {
 
   it("gives different digests for texts of equal length", () => {
     expect(hashText("aaaa")).not.toBe(hashText("aaab"));
+  });
+
+  // The digest is a WIRE FORMAT, not an implementation detail: it is written by one
+  // machine and compared by another, which may be running an older build. Change the
+  // algorithm and every record reads as `incomplete` on the machine that disagrees —
+  // sync stops, silently and permanently, with nothing failing anywhere. So the answers
+  // are pinned, not just the properties of the answers. FNV-1a, 32-bit, over UTF-16 code
+  // units.
+  it.each([
+    ["", "811c9dc5"], // the FNV offset basis: an empty config still gets a real digest
+    ["a", "e40c292c"],
+    ["rules: []", "fb58387a"],
+    ["rules:\n  - match: work.example\n    open: Work\n", "a5502a2c"],
+    ["ä€𝄞", "7686953f"], // beyond ASCII, including a surrogate pair
+  ])("digests %j as %s, on every build", (text, digest) => {
+    expect(hashText(text)).toBe(digest);
+  });
+
+  it("is always eight hex characters, so a leading zero is never dropped", () => {
+    // padStart is what keeps that true; without it a small digest is shorter, which
+    // still compares fine against itself and not at all against another build.
+    expect(hashText("\u0000")).toMatch(/^[0-9a-f]{8}$/);
+    expect(hashText("some other text")).toMatch(/^[0-9a-f]{8}$/);
+  });
+});
+
+// Both machines have to agree on where the record lives and what its digest looks like,
+// and they may be running different builds. These constants and that algorithm are a wire
+// format; renaming one is a silent, permanent sync failure with nothing failing anywhere.
+describe("the wire format", () => {
+  it("keeps the storage keys it has always used", () => {
+    expect(META_KEY).toBe("ccConfigMeta");
+    expect(PART_KEY_PREFIX).toBe("ccConfigPart");
+    expect(partKey(0)).toBe("ccConfigPart0");
+    expect(partKey(MAX_PARTS - 1)).toBe("ccConfigPart15");
+  });
+
+  it("says how big the config was when it refuses to publish it", () => {
+    const tooBig = "x".repeat(CHUNK_CHARS * MAX_PARTS + 1);
+    try {
+      encodeRecord(tooBig, 1);
+      expect.unreachable("a config over the area quota must not encode");
+    } catch (e) {
+      // The message reaches the user through the options page; a bare "failed" leaves
+      // them with a config that silently stops syncing and no idea why.
+      expect(e).toBeInstanceOf(ConfigTooLargeError);
+      expect((e as ConfigTooLargeError).name).toBe("ConfigTooLargeError");
+      expect((e as ConfigTooLargeError).message).toBe(
+        `config needs ${MAX_PARTS + 1} sync parts, limit is ${MAX_PARTS}`,
+      );
+      expect((e as ConfigTooLargeError).parts).toBe(MAX_PARTS + 1);
+    }
+  });
+});
+
+describe("a meta that does not describe the parts beside it", () => {
+  const metaOf = (items: Record<string, unknown>) => items[META_KEY] as Record<string, unknown>;
+
+  // Each of these assembles into text that passes the length and hash check. What rejects
+  // them is the part count itself being impossible — so if that guard goes, they decode as
+  // `ok` and a truncated config is adopted as though it were whole.
+  it("refuses a fractional part count that stops short of the parts present", () => {
+    const items = published("x", 5);
+    expect(decodeRecord({ ...items, [META_KEY]: { ...metaOf(items), parts: 0.5 } })).toEqual({
+      state: "incomplete",
+    });
+  });
+
+  it("refuses a zero part count, even for the empty config it would assemble correctly", () => {
+    // "" is a legal config meaning nothing matches, and it publishes as ONE empty part.
+    // Zero parts joins to "" as well, and would be indistinguishable from it.
+    const items = published("", 5);
+    expect(decodeRecord({ ...items, [META_KEY]: { ...metaOf(items), parts: 0 } })).toEqual({
+      state: "incomplete",
+    });
+  });
+
+  it("refuses more parts than the area can hold, even with every one of them present", () => {
+    const text = "x".repeat(CHUNK_CHARS * MAX_PARTS);
+    const items = encodeRecord(text, 5);
+    const overfull = {
+      ...items,
+      [partKey(MAX_PARTS)]: "y",
+      [META_KEY]: { ...metaOf(items), parts: MAX_PARTS + 1, len: text.length + 1, hash: hashText(text + "y") },
+    };
+    // Internally consistent and complete; refused because QUOTA_BYTES says a record this
+    // size cannot have been written whole.
+    expect(decodeRecord(overfull)).toEqual({ state: "incomplete" });
+  });
+
+  it("refuses a part that is not text, even when it joins to the right config", () => {
+    const items = published("5", 5);
+    // `5` stringifies to exactly the config that was published, so length and hash both
+    // agree. Only the type check tells them apart.
+    expect(decodeRecord({ ...items, [partKey(0)]: 5 })).toEqual({ state: "incomplete" });
+  });
+});
+
+describe("a meta key this build cannot use", () => {
+  const metaOf = (items: Record<string, unknown>) => items[META_KEY] as Record<string, unknown>;
+
+  it("supersedes a record written by an older sync version", () => {
+    // Ours is newer, so publishing over it is right — unlike the newer-version case,
+    // where the other machine knows something this build does not.
+    const items = published("old-shape", 5);
+    const stale = { ...items, [META_KEY]: { ...metaOf(items), v: SYNC_VERSION - 1 } };
+    expect(decodeRecord(stale)).toEqual({ state: "absent" });
+  });
+
+  it.each([
+    ["a fractional part count", 1.5],
+    ["no parts at all", 0],
+    ["a negative part count", -1],
+    ["more parts than the area can hold", MAX_PARTS + 1],
+  ])("waits on %s rather than reading what is there", (_case, parts) => {
+    const items = published("x", 5);
+    expect(decodeRecord({ ...items, [META_KEY]: { ...metaOf(items), parts } })).toEqual({
+      state: "incomplete",
+    });
+  });
+
+  it.each([
+    ["v", "1"],
+    ["parts", "1"],
+    ["len", "1"],
+    ["hash", 1],
+    ["updatedAt", "1"],
+  ])("refuses to overwrite a record whose %s is the wrong type", (field, value) => {
+    const items = published("x", 5);
+    // Unreadable, not absent: absent means push, and a record we cannot parse is still a
+    // record somebody published.
+    expect(decodeRecord({ ...items, [META_KEY]: { ...metaOf(items), [field]: value } })).toEqual({
+      state: "unreadable",
+    });
+  });
+
+  it.each([["a string"], [42], [null], [[]]])("refuses a meta that is not a mapping (%j)", (meta) => {
+    const items = published("x", 5);
+    expect(decodeRecord({ ...items, [META_KEY]: meta })).toEqual({ state: "unreadable" });
   });
 });
 
