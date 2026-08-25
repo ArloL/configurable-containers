@@ -157,7 +157,18 @@ export function wireBackground(opts: WiringOptions): Background {
     markConfigReady();
   }
 
-  async function applyStored(): Promise<ConfigApplyResponse> {
+  // Applies run one at a time. They are not reentrant: `scripts.apply` unregisters what the
+  // previous one registered, so two in flight can interleave into unregister, unregister,
+  // register, register — every snippet registered twice, injected twice, forever. Two are
+  // reachable from a double-clicked Save, or from a Save meeting an adoption.
+  let applying: Promise<ConfigApplyResponse> = Promise.resolve({});
+
+  function applyStored(): Promise<ConfigApplyResponse> {
+    applying = applying.then(applyOnce, applyOnce);
+    return applying;
+  }
+
+  async function applyOnce(): Promise<ConfigApplyResponse> {
     const stored = await port.readStored(CONFIG_STORAGE_KEY);
     // "" as the seed, which `loadConfig` only reads when nothing is stored: by the time
     // anything applies, storage is the truth, and a seed reachable from here would be a

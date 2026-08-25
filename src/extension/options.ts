@@ -227,6 +227,10 @@ saveButton.addEventListener("click", () => {
     await writeStoredConfigYaml(textarea.value, Date.now());
     await clearReplacedConfigYaml();
     statusEl.textContent = "Saving…";
+    // No spinner: an apply is a storage read, a parse and a handful of registrations, so a
+    // spinner would flash rather than inform. The button is what says "in flight", and
+    // disabling it also keeps a second Save from racing the first.
+    saveButton.disabled = true;
 
     // The status reports the background's answer instead of predicting it. The old one said
     // "Saved — reloading" and called runtime.reload(), which on a temporarily installed
@@ -244,6 +248,9 @@ saveButton.addEventListener("click", () => {
         : report.scriptError
           ? `Saved — a script could not be registered: ${report.scriptError}`
           : "Saved";
+
+    // Re-derives the button's disabled state from the text, which is what re-enables Save.
+    validate();
 
     // This page survives its own save now, so what it says about sync and about a replaced
     // config has to be brought up to date rather than rebuilt by a restart.

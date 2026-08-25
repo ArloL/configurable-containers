@@ -104,6 +104,22 @@ describe("applying a stored config without a restart", () => {
     expect(await containerForNavigationTo(browser, "https://work.example/", "d")).toMatch(/^tmp/);
   });
 
+  it("registers each snippet once when two applies overlap", async () => {
+    const browser = aFakeBrowser();
+    const bg = await startTheBackground(browser, aFakeClock(), parseConfig(WORK_YAML));
+    await browser.port.writeStored(
+      CONFIG_STORAGE_KEY,
+      `rules:\n  - match: a.example\n    scripts:\n      - { run: "a();" }\n`,
+    );
+
+    // A double-clicked Save, or a Save meeting an adoption. Unserialised, the two unregister
+    // each other's nothing and then both register: one snippet, injected twice, for the life
+    // of the browser.
+    await Promise.all([bg.applyStored(), bg.applyStored()]);
+
+    expect(browser.registeredScripts.map((s) => s.js[0]!.code)).toEqual(["a();"]);
+  });
+
   it("publishes to sync after a save, and never after an adoption", async () => {
     const browser = aFakeBrowser();
     const published: string[] = [];
