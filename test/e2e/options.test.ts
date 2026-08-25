@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import {
-  launch, navigateToContainerTab, openExtensionPage, ccExtensionUrl, listTabs, type Session,
+  launch, navigateToContainerTab, openExtensionPage, ccExtensionUrl, awaitTab, type Session,
 } from "../../harness/firefox";
 import type { Page } from "../../harness/browser/index";
 import "../../harness/browser/matchers";
@@ -200,9 +200,10 @@ describe("options page (real Firefox, CC + probe)", () => {
       const relay = await navigateToContainerTab(firefox.browser, url);
       expect(relay.name).toMatch(/^tmp/);
 
-      // CC called openOptionsPage() at startup, so the editor is already open.
-      const tabs = await listTabs(relay.page);
-      expect(tabs.some((tab) => tab.url === OPTIONS_URL)).toBe(true);
+      // CC called openOptionsPage() at startup — asynchronously, so this WAITS for the
+      // tab rather than reading the list once. Read once, it is a race between the
+      // extension's startup and the first navigation of the case, and CI lost it.
+      await awaitTab(relay.page, (tab) => tab.url === OPTIONS_URL);
 
       // And it shows the parse error rather than a blank page. The assertion is what
       // waits: the message is written by the validate() that follows the page's async
