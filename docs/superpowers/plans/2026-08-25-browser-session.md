@@ -509,7 +509,10 @@ describe("Locator", () => {
   it("waits for a real box before clicking", async () => {
     const { locator } = locatorOn({
       elements: (n) => [
-        anElement({ getRect: async () => ({ width: n < 2 ? 0 : 40, height: 20, x: 0, y: 0 }) }),
+        anElement({
+          getRect: async () => ({ width: n < 2 ? 0 : 40, height: 20, x: 0, y: 0 }),
+          click: async () => {},
+        }),
       ],
     });
     await expect(locator.click()).resolves.toBeUndefined();
@@ -685,10 +688,10 @@ export class Locator {
     return this.run("innerText", opts, (element) => element.getText());
   }
 
+  // Playwright's textContent answers null for an element without any; Selenium's types
+  // say string, so the null is in the signature rather than in a cast.
   textContent(opts?: WaitOpts): Promise<string | null> {
-    return this.run("textContent", opts, async (element) => {
-      return (await element.getProperty("textContent")) as string | null;
-    });
+    return this.run("textContent", opts, (element) => element.getProperty("textContent"));
   }
 
   // getDomAttribute, not getAttribute: the W3C endpoint rather than the injected atom,
@@ -698,9 +701,7 @@ export class Locator {
   }
 
   inputValue(opts?: WaitOpts): Promise<string> {
-    return this.run("inputValue", opts, async (element) => {
-      return (await element.getProperty("value")) as string;
-    });
+    return this.run("inputValue", opts, (element) => element.getProperty("value"));
   }
 
   // Immediate, as in Playwright: these answer about now, and the waiting belongs in the
