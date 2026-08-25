@@ -38,8 +38,10 @@ The library's actionability checks rest on the claim that *Get Element Rect* and
 
 ```ts
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { By } from "selenium-webdriver";
-import { launch, openExtensionPage, switchToUrl, ccExtensionUrl, type Session } from "../../harness/firefox";
+import {
+  launch, awaitContainerTab, awaitElement, openExtensionPage, switchToUrl, ccExtensionUrl,
+  type Session,
+} from "../../harness/firefox";
 
 const OPTIONS_URL = ccExtensionUrl("options.html");
 
@@ -52,6 +54,16 @@ describe("what a privileged page answers (real Firefox)", () => {
 
   beforeAll(async () => {
     firefox = await launch({ extensions: ["probe", "cc"] });
+    // The probe's command relay is a DOM event injected into http(s) pages only, so the
+    // driver has to be parked on one before anything can ask it to open a page.
+    const port = new URL(firefox.serverUrl).port;
+    const url = `http://work.example:${port}/?cb=privileged-${Date.now()}`;
+    try {
+      await firefox.driver.get(url);
+    } catch {
+      // Reopened into Work, tearing this tab down — expected.
+    }
+    await awaitContainerTab(firefox.driver, url);
     await openExtensionPage(firefox.driver, OPTIONS_URL);
     await switchToUrl(firefox.driver, OPTIONS_URL);
   });
@@ -61,11 +73,9 @@ describe("what a privileged page answers (real Firefox)", () => {
   });
 
   it("answers the commands the locator layer is built on", async () => {
-    const save = await firefox.driver.wait(
-      async () => (await firefox.driver.findElements(By.id("cc-save")))[0],
-      10_000,
-      "the options page never rendered #cc-save",
-    );
+    // Waiting for the element to EXIST before reading it: the page is reachable a beat
+    // before its document is, which is the whole reason harness/browser exists.
+    const save = await awaitElement(firefox.driver, "cc-save");
 
     const rect = await save.getRect();
     expect(rect.width, "Get Element Rect must report a real box").toBeGreaterThan(0);
@@ -76,12 +86,9 @@ describe("what a privileged page answers (real Firefox)", () => {
     expect(await save.getText()).toContain("Save");
   });
 
-  // The other half of the fact: what is refused. If this ever passes, the harness's
-  // avoidance of injected scripts has become unnecessary rather than wrong — check
-  // before relaxing anything.
-  it("still refuses an injected script", async () => {
-    await expect(firefox.driver.executeScript("return 1;")).rejects.toThrow();
-  });
+  // Deliberately NOT asserted here: that an injected script is refused. Measured on
+  // 154.0, `executeScript("return 1;")` on this very page answers 1 — the refusal is
+  // 156.0a1's widened `isPrivilegedContext` check and has not reached release.
 });
 ```
 
