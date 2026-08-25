@@ -103,6 +103,9 @@ export async function startTheBackground(
   browser: MockPort,
   clock: Clock,
   config: Config,
+  // What background.ts passes for the sync publish. Optional because only the cases about
+  // applying a config care which of the two apply paths fired it.
+  opts: { afterApply?: () => void } = {},
 ): Promise<BackgroundSession> {
   const session = aSessionClock(clock);
   const listeners = aSessionPort(browser.port);
@@ -111,6 +114,7 @@ export async function startTheBackground(
     clock: session.clock,
     graceMs: GRACE_MS,
     redirectorDelayMs: REDIRECTOR_DELAY_MS,
+    ...opts,
   });
 
   background.useConfig(config);

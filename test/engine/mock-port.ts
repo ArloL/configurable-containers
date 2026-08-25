@@ -94,6 +94,8 @@ export interface MockPort {
   macAssigns(url: string, value: unknown): void;
   macIsAbsent(on: boolean): void;
   tabCreationFails(on: boolean): void;
+  /** Firefox rejects contentScripts.register — a bad match pattern, a missing permission. */
+  scriptRegistrationFails(message: string | null): void;
   activeTabIs(tab: Tab): void;
   cookieIn(storeId: string, name: string): Cookie | null;
 }
@@ -113,6 +115,7 @@ export function aFakeBrowser(): MockPort {
   let containerId = 0;
   let macThrows = false;
   let createTabThrows = false;
+  let registerScriptThrows: string | null = null;
   // Listeners are LISTS, one per event, because `browser.*.addListener` is additive: Firefox
   // calls every listener, in registration order. The mock held one slot per event until
   // 2026-08-24, and it cost what a "last registration wins" mock would be expected to cost —
@@ -247,6 +250,7 @@ export function aFakeBrowser(): MockPort {
       return cookieStore.get(details.storeId)?.get(details.name) ?? null;
     },
     async registerContentScript(details: RegisterContentScriptDetails): Promise<RegisteredContentScript> {
+      if (registerScriptThrows !== null) throw new Error(registerScriptThrows);
       registeredScripts.push(details);
       // Removed by identity rather than by value: a config may name the same snippet twice,
       // and unregistering one handle must leave the other injecting.
@@ -354,6 +358,7 @@ export function aFakeBrowser(): MockPort {
     macAssigns: (url, value) => void macMap.set(url, value),
     macIsAbsent: (on) => void (macThrows = on),
     tabCreationFails: (on) => void (createTabThrows = on),
+    scriptRegistrationFails: (message) => void (registerScriptThrows = message),
     cookieIn: (storeId, name) => cookieStore.get(storeId)?.get(name) ?? null,
     async receivesMessage(msg, from) {
       if (messageHs.length === 0) throw new Error("no onMessage handler registered");
