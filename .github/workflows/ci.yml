@@ -152,9 +152,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.new_version }}
         run: |
+          # --generate-notes writes the commit/PR summary; --notes is PREPENDED to it,
+          # so the reproduce block stays at the top and BUILD_TIMESTAMP is still the
+          # first match verify-reproducible.ts finds in the body. Both are needed:
+          # --generate-notes alone drops the timestamp nobody can derive, and --notes
+          # alone is what this channel shipped, a release page saying only how to
+          # rebuild it and never what changed.
           gh release create "v${VERSION}" \
             --title "Release v${VERSION}" \
             --prerelease \
+            --generate-notes \
             --notes "Reproduce this build:
           \`\`\`
           npm ci
