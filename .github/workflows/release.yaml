@@ -8,6 +8,7 @@ permissions: {}
 jobs:
   release:
     runs-on: ubuntu-latest
+    environment: mozilla
     permissions:
       contents: write # calver-tag-action pushes a tag; gh release creates a release
     outputs:
