@@ -38,20 +38,22 @@ jobs:
         with:
           persist-credentials: false
 
-      # NO `cache: npm`, unlike every other job in this repo. A job that decides whether a
-      # published artefact is trustworthy must not take its dependencies from a mutable
-      # cache an earlier run could have poisoned: that is how a tampered build gets
-      # certified reproducible. zizmor's cache-poisoning audit is right to pair a release
-      # trigger with caching, and a cold install costs seconds — the price of the answer
-      # meaning anything.
+      # Caching is disabled EXPLICITLY, and omitting `cache:` is not enough to do it:
+      # setup-node's `package-manager-cache` input defaults to **true**, so it caches on
+      # its own as soon as package.json declares `packageManager` or
+      # `devEngines.packageManager`. This repo declares neither today, which means an
+      # unrelated edit to package.json would silently start caching here.
       #
-      # The suppression is for what is left after that: zizmor models setup-node as
-      # caching whatever its inputs say, so it flags the step even with no `cache:` input
-      # at all. Nothing here is cached, and there is nothing published for a poisoned
-      # cache to taint — this job only downloads, rebuilds and compares.
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0 # zizmor: ignore[cache-poisoning]
+      # It must not. A job that decides whether a published artefact is trustworthy cannot
+      # take its own dependencies from a mutable cache an earlier run could have poisoned
+      # — that is how a tampered build gets certified reproducible. zizmor's
+      # cache-poisoning audit flags the release trigger paired with a caching action, and
+      # the fix is this input rather than an ignore: a suppression would go on lying the
+      # day package.json gains that field.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
+          package-manager-cache: false
 
       - run: npm ci
 

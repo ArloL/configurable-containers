@@ -170,10 +170,16 @@ jobs:
         with:
           persist-credentials: false
 
+      # Uncached for the same reason verify-release.yaml is: a verifier must not install
+      # from a mutable cache an earlier run could have poisoned, or a tampered build gets
+      # certified reproducible. `package-manager-cache` defaults to TRUE, so dropping
+      # `cache: npm` is not enough — setup-node would resume caching the day package.json
+      # declares `packageManager`. zizmor only flags the pairing on a release trigger, so
+      # nothing would have reported it here.
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
-          cache: npm
+          package-manager-cache: false
 
       - run: npm ci
 
@@ -182,6 +188,12 @@ jobs:
       # with its own published BUILD_TIMESTAMP, and compares the sha256 with the xpi
       # attached beside it. Nothing else ever checks that promise — AMO repacks uploads,
       # so its copy is not byte-comparable, and the GitHub asset is the only one that is.
+      #
+      # NOT made redundant by verify-release.yaml, which checks each release once as it is
+      # published. This asks the other question: whether a release that reproduced when it
+      # was cut STILL reproduces on today'"'"'s toolchain — a newer Node, a dependency yanked
+      # from the registry, a source archive that stopped installing. Delete it and that
+      # decay goes unnoticed.
       - name: Rebuild the last listed release and compare hashes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

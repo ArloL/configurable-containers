@@ -269,15 +269,17 @@ reasonable-looking change wrong**.
   second comment line and nothing else, silently. Put the prose above and the directive
   immediately over the code.
 - **The workflows have their own two gates — `actionlint` and `zizmor`** (`check-actions.yaml`),
-  and zizmor fails the build on any finding, so a false positive has to be suppressed
-  rather than tolerated. Its ignore is a **trailing comment on the flagged line**
-  (`# zizmor: ignore[rule]`), not a line above like oxlint's — the prose still goes above,
-  the directive stays on the code. One exists: `cache-poisoning` on `verify-release.yaml`'s
-  `setup-node`, which zizmor flags for pairing a release trigger with a caching action
-  even when no `cache:` input is given. The real half of that finding was taken, not
-  suppressed: that job installs **uncached** on purpose, because a verifier that decides
-  whether a published artefact is trustworthy must not take its own dependencies from a
-  cache an earlier run could have poisoned.
+  and zizmor fails the build on any finding. There are **no** zizmor suppressions, and its
+  `cache-poisoning` finding on a release trigger is the reason: the fix is real, not an
+  ignore. **`actions/setup-node` caches BY DEFAULT** — `package-manager-cache` defaults to
+  `true` and turns caching on as soon as `package.json` declares `packageManager` or
+  `devEngines.packageManager` — so omitting `cache:` disables nothing, and a suppression
+  would go on lying the day that field is added. Both verifiers
+  (`verify-release.yaml`, `nightly.yml`'s reproducible-build) therefore pass
+  `package-manager-cache: false`: a job deciding whether a published artefact is
+  trustworthy must not install from a mutable cache an earlier run could have poisoned, or
+  a tampered build gets certified reproducible. zizmor only reports the pairing on a
+  publishing trigger, so the nightly's half was never going to be flagged.
 - **`?? ""` on a `spawnSync().stdout` is not a dead defence**, whatever the types say:
   `@types/node` declares `string` once an encoding is set, and a spawn that never started
   reports null — which is the case `harness/reaper.ts` exists for. Both sites carry a
