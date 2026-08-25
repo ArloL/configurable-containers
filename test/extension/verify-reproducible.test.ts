@@ -6,7 +6,9 @@
 // release either passes vacuously or reports a mismatch that is not one.
 import { describe, it, expect } from "vitest";
 import {
+  RELEASES_PER_PAGE,
   buildTimestampFrom,
+  findLatestListedRelease,
   latestListedRelease,
   planFor,
   versionFromTag,
@@ -51,6 +53,58 @@ describe("choosing the release to reproduce", () => {
 
   it("answers with nothing when only dev builds exist", () => {
     expect(latestListedRelease([release("v2608.0.104", { prerelease: true })])).toBeUndefined();
+  });
+});
+
+// Finding the release at all, which is where this gate spent four weeks green and inert.
+// `latestListedRelease` above was always right about the list it was handed; the list was
+// the newest twenty releases, and the dev channel fills twenty in under a week.
+describe("paging to the newest listed release", () => {
+  const devPage = (n: number) =>
+    Array.from({ length: n }, (_, i) => release(`v2608.0.${900 - i}`, { prerelease: true }));
+
+  // The measured shape on 2026-08-25: v2608.0.112 was the 32nd newest release, behind 31
+  // dev builds, and a single per_page=20 request answered "no listed release yet".
+  it("finds a listed release buried under a full page of dev builds", () => {
+    const asked: number[] = [];
+    const found = findLatestListedRelease((page) => {
+      asked.push(page);
+      return page === 1 ? devPage(RELEASES_PER_PAGE) : [...devPage(3), release("v2608.0.112")];
+    });
+
+    expect(found?.tag_name).toBe("v2608.0.112");
+    expect(asked).toEqual([1, 2]);
+  });
+
+  it("asks for one page only when that page already holds a listed release", () => {
+    const asked: number[] = [];
+    const found = findLatestListedRelease((page) => {
+      asked.push(page);
+      return [...devPage(5), release("v2608.0.112")];
+    });
+
+    expect(found?.tag_name).toBe("v2608.0.112");
+    expect(asked).toEqual([1]);
+  });
+
+  // The one case where "nothing to reproduce" is TRUE: the list ended, and it held no
+  // listed release. A short page is what proves the end was reached.
+  it("answers with nothing once the release list has ended", () => {
+    expect(findLatestListedRelease(() => devPage(7))).toBeUndefined();
+    expect(findLatestListedRelease(() => [])).toBeUndefined();
+  });
+
+  // The whole point of the rewrite. A search that ran out of pages has not answered the
+  // question, and passing the job on it is how a gate goes green while checking nothing.
+  it("throws rather than reporting a search that ran out of pages as nothing to reproduce", () => {
+    let asked = 0;
+    expect(() =>
+      findLatestListedRelease(() => {
+        asked += 1;
+        return devPage(RELEASES_PER_PAGE);
+      }, 3),
+    ).toThrow(/page cap is too small/);
+    expect(asked).toBe(3);
   });
 });
 

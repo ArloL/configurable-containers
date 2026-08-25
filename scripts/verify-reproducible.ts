@@ -41,6 +41,48 @@ export function latestListedRelease(releases: Release[]): Release | undefined {
   return releases.filter((r) => !r.prerelease && !r.draft)[0];
 }
 
+/** GitHub's maximum page size for the releases endpoint, which pages newest-first. */
+export const RELEASES_PER_PAGE = 100;
+/**
+ * A bound so a repo with no listed release still terminates. Running INTO it is never an
+ * answer — see below. 1000 releases is over half a year of this dev channel.
+ */
+export const MAX_RELEASE_PAGES = 10;
+
+/**
+ * The newest listed release, found by paging until one turns up.
+ *
+ * A fixed window cannot do this, and the window is what made this gate inert. The two
+ * channels share one tag sequence and the dev channel publishes several times a day, so a
+ * listed release is buried under prereleases within days of being cut: on 2026-08-25 the
+ * newest listed release, v2608.0.112, was the **32nd** newest release, and the single
+ * `per_page=20` request this used to make never reached it. The job printed "No listed
+ * release yet" and passed — green every night while checking nothing, for the four weeks
+ * since the first listed release went out.
+ *
+ * So `undefined` means the release list was read to its END and holds no listed release,
+ * which is the one case where "nothing to reproduce" is true. Exhausting the page cap is
+ * NOT that answer and throws instead: reporting an inconclusive search as a conclusive
+ * "nothing to check" is exactly the failure being replaced, and a gate that cannot find
+ * its subject has to say so rather than pass.
+ */
+export function findLatestListedRelease(
+  fetchPage: (page: number) => Release[],
+  maxPages: number = MAX_RELEASE_PAGES,
+): Release | undefined {
+  for (let page = 1; page <= maxPages; page++) {
+    const releases = fetchPage(page);
+    const listed = latestListedRelease(releases);
+    if (listed) return listed;
+    // A short page is the end of the list, which is what makes the answer below provable.
+    if (releases.length < RELEASES_PER_PAGE) return undefined;
+  }
+  throw new Error(
+    `no listed release among the newest ${maxPages * RELEASES_PER_PAGE} releases, and the ` +
+      `list did not end — the page cap is too small to answer, so this is not "nothing to reproduce".`,
+  );
+}
+
 /** "v2608.0.101" -> "2608.0.101", which is what the asset names and the packager use. */
 export function versionFromTag(tag: string): string {
   return tag.replace(/^v/, "");
@@ -90,8 +132,9 @@ export function sha256(bytes: Buffer): string {
 
 const OWNER_REPO = "ArloL/configurable-containers";
 
-function fetchReleases(): Release[] {
-  const json = execFileSync("gh", ["api", `repos/${OWNER_REPO}/releases?per_page=20`], { encoding: "utf8" });
+function fetchReleasePage(page: number): Release[] {
+  const query = `per_page=${RELEASES_PER_PAGE}&page=${page}`;
+  const json = execFileSync("gh", ["api", `repos/${OWNER_REPO}/releases?${query}`], { encoding: "utf8" });
   return JSON.parse(json) as Release[];
 }
 
@@ -100,9 +143,9 @@ function run(cmd: string, args: string[], cwd: string): void {
 }
 
 function main(): void {
-  const release = latestListedRelease(fetchReleases());
+  const release = findLatestListedRelease(fetchReleasePage);
   if (!release) {
-    console.log("No listed release yet — nothing to reproduce.");
+    console.log("No listed release in the whole release list — nothing to reproduce.");
     return;
   }
   const plan = planFor(release);

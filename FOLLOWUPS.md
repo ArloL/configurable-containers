@@ -85,27 +85,48 @@ and see whether routing follows. If it does, this entry is a harness limitation 
 deleted. If it does not, it is a shipped bug on ESR and the fix is a config-apply path that
 does not depend on `runtime.reload()`.
 
-## The reproducible-build gate is inert until the first listed release (2026-08-24)
+## The reproducible-build gate has never run in CI (2026-08-25)
 
-`npm run verify:reproducible` rebuilds the last **listed** release from its own source
-archive and compares hashes. Every release this repo has published so far is a
-`prerelease` — the dev channel — so `latestListedRelease` answers `undefined`, the nightly
-job prints "No listed release yet — nothing to reproduce" and passes.
+**Corrects the 2026-08-24 entry, whose premise was wrong.** That entry said the gate was
+inert because the repo had cut no listed release yet, and that the case was pinned and the
+behaviour designed. There were two listed releases — `v2607.0.103` (2026-07-28) and
+`v2608.0.112` (2026-08-08). The gate never saw them: `fetchReleases` asked for
+`releases?per_page=20`, and because both channels share one tag sequence and the dev
+channel publishes several times a day, `v2608.0.112` was the **32nd** newest release by
+2026-08-25. Every night the job printed "No listed release yet — nothing to reproduce" and
+passed in **zero seconds**
+([run 32821114275](https://github.com/ArloL/configurable-containers/actions/runs/32821114275)).
 
-That is the designed behaviour and the case is pinned, but it means the job is green every
-night while checking nothing. Deliberately not made a failure: a repo that has not cut a
-listed release yet would then be red nightly for no fault. **Re-check on the first listed
-release** — that run is the gate's first real execution, and the thing most likely to be
-wrong is the rebuild environment rather than the build (the source archive gets its own
-`npm ci`, and `scripts/package.ts` must produce the same bytes from it).
+Fixed by paging until a listed release turns up, and by making the giving-up case
+*provable*: `undefined` now means the release list was read to its end, while exhausting
+the page cap throws. The old shape reported an inconclusive search as a conclusive
+"nothing to check", which is how a gate stays green for four weeks while checking nothing.
+`test/extension/verify-reproducible.test.ts` owns the paging, including the measured
+32-releases-deep shape.
+
+**`v2608.0.112` reproduces byte for byte** — verified by hand on 2026-08-25, downloading
+its two assets, `npm ci` in the source archive and `BUILD_TIMESTAMP=2026-08-08T19:34:01+00:00
+npm run package -- 2608.0.112`: sha256
+`5aaeab49afb529571e3a4a013887495b5d2489761bf66d27425db382509f2fb9`, identical to the
+published xpi. So the build was never the problem, and the old entry's guess that the
+rebuild environment was the risk is answered too.
+
+**What is still open is one nightly run.** The job has never executed its download-and-
+rebuild half in CI, so that path — `curl`, `unzip`, `npm ci` and `npm run package` on a
+GitHub runner — is unexercised. The next scheduled run is its first real execution; if it
+is green, delete this entry.
+
+The lesson worth keeping: the release *picker* was thoroughly tested and always right
+about the list it was handed. Nothing tested how that list was fetched, and that is where
+the gate died. A gate that cannot find its subject must fail, never pass quietly.
 
 While here: the three jobs added to `nightly.yml` on 2026-08-24 — `flake`,
-`reproducible-build` and `firefox-nightly` — have now had that first scheduled run
-(2026-08-25). All three worked, `latest-nightly` as a `setup-firefox` input included, and
-`firefox-nightly` earned its keep on its first night: Firefox 156.0a1 widened Marionette's
-privileged-context check to cover the extension process, and nine cases that ran a script
-in an extension page went red at once. Fixed by asking through protocol commands instead
-(CLAUDE.md, the e2e section) — months before it reaches a release users are on.
+`reproducible-build` and `firefox-nightly` — have now had their first scheduled run
+(2026-08-25). `firefox-nightly` earned its keep on its first night: Firefox 156.0a1 widened
+Marionette's privileged-context check to cover the extension process, and nine cases that
+ran a script in an extension page went red at once. Fixed by asking through protocol
+commands instead (CLAUDE.md, the e2e section) — months before it reaches a release users
+are on.
 
 ## `harness/selenium-webdriver.d.ts` is only DefinitelyTyped being behind (2026-08-25)
 
