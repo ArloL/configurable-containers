@@ -534,6 +534,20 @@ reasonable-looking change wrong**.
   `dev-updates.js` picks the signed asset by excluding `configurable-containers-<v>.xpi`,
   and its old `.endsWith(".xpi")` would have offered the *unsigned* build to every
   dogfooder — uninstallable, silent, and permanent on an immutable release.
+- **AMO's source requirement follows the BUNDLE, not the channel, so `sign:dev` uploads it
+  too.** It is triggered by shipping code a reviewer cannot read (`background.js` is an
+  esbuild bundle) and unlisted add-ons are "subject to be manually reviewed at any time
+  after submission" — so "nothing complained" only means nobody has looked yet, and what
+  they would find is a dev add-on already installed on dogfooders' profiles. The GitHub
+  asset satisfies none of it; `--upload-source-code` does, and `scripts/sign-dev.ts` builds
+  the archive itself rather than taking a path from the workflow, so no upload path can
+  skip it. It is safe on a path that runs on **every push to main** because attaching
+  source does not delay unlisted signing: in addons-server, source creates a
+  `NeedsHumanReview` only for a version *already pending rejection*
+  (`Version.flag_if_sources_were_provided`), and none of `AutoApprovalSummary`'s checks
+  reads it — it is a reviewer *queue flag*, not an auto-approval blocker. web-ext PATCHes
+  the source on after creating the version, then polls for `public` with a 15-minute
+  timeout, which is the thing that would break if that were ever to change.
 - **What is NOT symmetric is the add-on itself, and it cannot be.** A dev build has its own
   id (so it installs beside the listed one with its own `storage.local`), its own name, and
   the `update_url` AMO rejects on a listed submission. So a dev release's notes publish
