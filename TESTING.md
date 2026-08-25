@@ -325,7 +325,7 @@ mutant no other case catches.
   different question: not "is there logic no test would notice changing" over three
   modules, but "is any of `src/` reached by no deterministic test at all".
 
-  Thresholds sit a point or two under what the suite measures (~94% statements, ~92%
+  Thresholds sit a point or two under what the suite measures (~98% statements, ~97%
   branches), **except** the five modules the mutation gate owns — `src/resolver`,
   `src/matcher`, `src/psl`, `src/config` and `src/overlays` — held at 100, so a new
   uncovered branch in them is caught on the push that adds it rather than that night. Three files are excluded for platform facts rather than

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { createBrowserPort } from "../../src/engine/browser-port";
+import { createBrowserPort, realClock } from "../../src/engine/browser-port";
 import type { WebRequestDetails } from "../../src/engine/port";
 
 // A hand-rolled fake of the browser.* surface the adapter touches. Installed as the
@@ -33,12 +33,27 @@ function fakeBrowser() {
         if (id === 404) throw new Error("no such tab");
         return { id, url: "https://x.test/", cookieStoreId: "firefox-container-2", index: 4, active: true, openerTabId: 9 };
       },
-      create: async (props: Record<string, unknown>) => ({ id: 77, url: props.url, cookieStoreId: props.cookieStoreId, index: props.index ?? 0, active: props.active ?? true, openerTabId: props.openerTabId }),
-      remove: async (_id: number) => {},
-      query: async (info: { cookieStoreId?: string }) =>
-        info.cookieStoreId === "firefox-container-2"
+      create: async (props: Record<string, unknown>) => {
+        f.tabs._created = props;
+        const created: Record<string, unknown> = { id: 77, url: props.url, cookieStoreId: props.cookieStoreId, index: props.index ?? 0, active: props.active ?? true, openerTabId: props.openerTabId };
+        // Firefox answers a create for the default store with no cookieStoreId at all.
+        if (f.tabs._createOmitsStore) delete created.cookieStoreId;
+        return created;
+      },
+      _createOmitsStore: false,
+      _created: {} as Record<string, unknown>,
+      remove: async (id: number) => { f.tabs._removed.push(id); },
+      query: async (info: { cookieStoreId?: string; active?: boolean }) => {
+        // getActiveTab asks by activity, the disposer by container; one fake, two shapes.
+        if (info.active === true) return f.tabs._active;
+        return info.cookieStoreId === "firefox-container-2"
           ? [{ id: 3, url: "https://x.test/", cookieStoreId: "firefox-container-2", index: 4, active: true }]
-          : [],
+          : [];
+      },
+      _active: [
+        { id: 8, url: "https://active.test/", cookieStoreId: "firefox-container-2", index: 0, active: true, windowId: 1 },
+      ] as unknown[],
+      _removed: [] as number[],
       onCreated: {
         addListener: (fn: (t: unknown) => void) => { f.tabs.onCreated_fn = fn; },
         onCreated_fn: null as unknown,
@@ -96,11 +111,35 @@ function fakeBrowser() {
       _throws: false,
     },
     runtime: {
+      onMessage: {
+        addListener: (fn: (msg: unknown, sender: unknown) => unknown) => {
+          f.runtime._onMessage = fn;
+        },
+      },
+      _onMessage: null as ((msg: unknown, sender: unknown) => unknown) | null,
+      getURL: (path: string) => `moz-extension://uuid/${path}`,
       sendMessage: async (ext: string, msg: unknown) => {
         f.runtime._sent.push({ ext, msg });
         return { echoed: msg };
       },
       _sent: [] as { ext: string; msg: unknown }[],
+    },
+    commands: {
+      onCommand: {
+        addListener: (fn: (name: string) => void) => {
+          f.commands._onCommand = fn;
+        },
+      },
+      _onCommand: null as ((name: string) => void) | null,
+    },
+    storage: {
+      local: {
+        get: async (key: string) => (key in f.storage._local ? { [key]: f.storage._local[key] } : {}),
+        set: async (items: Record<string, unknown>) => {
+          Object.assign(f.storage._local, items);
+        },
+      },
+      _local: {} as Record<string, unknown>,
     },
     browserAction: {
       onClicked: {
@@ -200,6 +239,18 @@ describe("createBrowserPort", () => {
     const result = await reg.fn({ requestId: "7", tabId: 2, url: "https://a.test/", type: "main_frame", requestHeaders: [{ name: "Cookie", value: "a=1" }] });
     expect(seen).toMatchObject({ requestId: "7", tabId: 2, url: "https://a.test/", type: "main_frame", requestHeaders: [{ name: "Cookie", value: "a=1" }] });
     expect(result).toEqual({ requestHeaders: [{ name: "Cookie", value: "a=1" }] });
+  });
+
+  // The listener is registered with the "requestHeaders" opt-in, so this is a defence
+  // against losing it: an empty list is a request with no headers, `undefined` is a crash
+  // inside a blocking handler, which is a navigation that never completes.
+  it("reads a request Firefox sent no headers for as an empty header list", async () => {
+    const port = createBrowserPort();
+    let seen: unknown;
+    port.onBeforeSendHeaders(async (d) => { seen = d.requestHeaders; return undefined; });
+    const reg = f.webRequest.onBeforeSendHeaders.onBeforeSendHeaders_last as { fn: (d: unknown) => Promise<unknown> };
+    await reg.fn({ requestId: "1", tabId: 1, url: "https://a.test/", type: "main_frame" });
+    expect(seen).toEqual([]);
   });
 
   it("coerces a void onBeforeSendHeaders result to an empty response", async () => {
@@ -332,5 +383,140 @@ describe("createBrowserPort — disposal methods", () => {
 
     expect(f.browserAction._texts).toEqual([]);
     expect(f.browserAction._colors).toEqual([]);
+  });
+});
+
+// The rest of the adapter: delegations with no decision in them, which is exactly why
+// nothing had reached them (FOLLOWUPS.md, "The impure shells are where coverage stops").
+// What they can still get wrong is the SHAPE — a field dropped in the mapping, an argument
+// forwarded in the wrong position — and that is what these pin.
+describe("createBrowserPort — remaining delegations", () => {
+  it("removeTab, queryIdentities and createIdentity map both ways", async () => {
+    const port = createBrowserPort();
+
+    await port.removeTab(5);
+    expect(f.tabs._removed).toEqual([5]);
+
+    expect(await port.queryIdentities()).toEqual([
+      { cookieStoreId: "firefox-container-2", name: "Work", color: "blue", icon: "circle" },
+    ]);
+
+    expect(await port.createIdentity({ name: "tmp1", color: "toolbar", icon: "circle" })).toEqual({
+      cookieStoreId: "firefox-container-9", name: "tmp1", color: "toolbar", icon: "circle",
+    });
+  });
+
+  // The sender's tab is the ONLY place the choice page's pick may take a tab id from: a
+  // crafted moz-extension://…/choice.html# link is attacker-reachable, and the id it
+  // carries would go on to port.createTab. Dropping it here is what makes that safe.
+  it("onMessage hands on the message with the SENDER's tab id, undefined when there is none", () => {
+    const port = createBrowserPort();
+    const seen: { msg: unknown; sender: unknown }[] = [];
+    port.onMessage((msg, sender) => {
+      seen.push({ msg, sender });
+      return undefined;
+    });
+
+    const fn = f.runtime._onMessage!;
+    fn({ type: "cc-pick" }, { tab: { id: 4 } });
+    fn({ type: "cc-pick" }, {});
+
+    expect(seen).toEqual([
+      { msg: { type: "cc-pick" }, sender: { tabId: 4 } },
+      { msg: { type: "cc-pick" }, sender: { tabId: undefined } },
+    ]);
+  });
+
+  it("onCommand forwards the command name", () => {
+    const port = createBrowserPort();
+    const seen: string[] = [];
+    port.onCommand((name) => void seen.push(name));
+
+    f.commands._onCommand!("cc-reopen");
+
+    expect(seen).toEqual(["cc-reopen"]);
+  });
+
+  it("getActiveTab maps the first result and answers null when there is none", async () => {
+    const port = createBrowserPort();
+    expect(await port.getActiveTab()).toMatchObject({ id: 8, cookieStoreId: "firefox-container-2" });
+
+    // `tabs.query` is typed as a non-empty array nowhere: a window with no tab, or one
+    // whose only tab is closing, answers [].
+    f.tabs._active = [];
+    expect(await port.getActiveTab()).toBeNull();
+  });
+
+  it("getURL delegates to runtime.getURL", () => {
+    expect(createBrowserPort().getURL("choice.html")).toBe("moz-extension://uuid/choice.html");
+  });
+
+  // The seam the disposer's grace is built on: a pending setTimeout dies with the
+  // background context, so emptiness is a STORED fact (F10).
+  it("readStored answers undefined for a key never written, and round-trips one that was", async () => {
+    const port = createBrowserPort();
+    expect(await port.readStored("ccEmptySince")).toBeUndefined();
+
+    await port.writeStored("ccEmptySince", { "firefox-container-9": 1000 });
+
+    expect(await port.readStored("ccEmptySince")).toEqual({ "firefox-container-9": 1000 });
+  });
+
+  // Firefox reports neither on a tab that is still pre-commit, and the engine reads
+  // `about:blank` and the default store as meaningful states rather than as absence.
+  it("maps a tab with no url and no cookieStoreId to the empty url and the default store", () => {
+    const port = createBrowserPort();
+    const seen: { url: string; cookieStoreId: string }[] = [];
+    port.onTabCreated((t) => void seen.push({ url: t.url, cookieStoreId: t.cookieStoreId }));
+
+    (f.tabs.onCreated_fn as (t: unknown) => void)({ id: 5, index: 0, active: true, windowId: 1 });
+
+    expect(seen).toEqual([{ url: "", cookieStoreId: "firefox-default" }]);
+  });
+
+  // `about:newtab` is an "Illegal URL" to tabs.create, so landing there means passing NO
+  // url at all — `url: undefined` is a different request and does not.
+  it("createTab omits the url key entirely when there is none", async () => {
+    const port = createBrowserPort();
+    await port.createTab({ cookieStoreId: "firefox-container-9", index: 2, active: true, windowId: 1 });
+    expect("url" in f.tabs._created).toBe(false);
+  });
+
+  // Firefox answers a create for the default store without naming it. Falling back to
+  // what was ASKED for keeps the caller's own record of where the tab went honest.
+  it("createTab falls back to the requested store when the created tab does not name one", async () => {
+    f.tabs._createOmitsStore = true;
+    const port = createBrowserPort();
+    const t = await port.createTab({ cookieStoreId: "firefox-default", index: 0, active: true, windowId: 1 });
+    expect(t.cookieStoreId).toBe("firefox-default");
+  });
+
+  it("onTabUpdated drops a status Firefox does not define", () => {
+    const port = createBrowserPort();
+    const seen: unknown[] = [];
+    port.onTabUpdated((_tab, info) => void seen.push(info));
+
+    const fn = f.tabs.onUpdated_fn as (id: number, info: unknown, raw: unknown) => void;
+    fn(3, { favIconUrl: "https://a.test/f.ico" }, { id: 3, url: "https://a.test/", cookieStoreId: "firefox-default", index: 0, active: true });
+
+    expect(seen).toEqual([{ status: undefined }]);
+  });
+});
+
+describe("realClock", () => {
+  it("schedules through the platform timer", async () => {
+    let fired = false;
+    realClock.setTimeout(() => { fired = true; }, 0);
+    await new Promise((r) => setTimeout(r, 1));
+    expect(fired).toBe(true);
+  });
+
+  // Wall clock on purpose: a stored deadline is compared against it after a restart a
+  // monotonic counter would not have been running for.
+  it("reads wall-clock time", () => {
+    const before = Date.now();
+    const now = realClock.now();
+    expect(now).toBeGreaterThanOrEqual(before);
+    expect(now).toBeLessThanOrEqual(Date.now());
   });
 });
