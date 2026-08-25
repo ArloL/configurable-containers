@@ -1,9 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import type { WebDriver } from "selenium-webdriver";
 import {
-  launch, awaitContainerTab, openExtensionPage, switchToUrl, ccExtensionUrl, awaitElement,
-  type Session,
+  launch, awaitContainerTab, openExtensionPage, ccExtensionUrl, type Session,
 } from "../../harness/firefox";
+import "../../harness/browser/matchers";
 
 const OPTIONS_URL = ccExtensionUrl("options.html");
 
@@ -63,24 +62,16 @@ function syncCase(
       await awaitContainerTab(firefox.driver, url);
 
       await openExtensionPage(firefox.driver, OPTIONS_URL);
-      await switchToUrl(firefox.driver, OPTIONS_URL);
+      const options = await firefox.browser.pageAt(OPTIONS_URL);
 
-      check(await awaitSyncStatus(firefox.driver, want));
+      // The status is rendered from a live read of storage.sync, so the ASSERTION is what
+      // waits: no element to find first, no poll loop, and a failure that reports the last
+      // text it saw rather than a selector it could not locate.
+      const status = options.locator("#cc-sync");
+      await expect(status).toHaveText(want);
+      check(await status.innerText());
     });
   });
-}
-
-// The status line is rendered from a live read of storage.sync on load and re-rendered on
-// change, so polling it is how a test observes what Firefox actually accepted.
-async function awaitSyncStatus(driver: WebDriver, want: RegExp, timeoutMs = 15_000) {
-  const deadline = Date.now() + timeoutMs;
-  let seen = "";
-  while (Date.now() < deadline) {
-    seen = await (await awaitElement(driver, "cc-sync")).getText();
-    if (want.test(seen)) return seen;
-    await driver.sleep(300);
-  }
-  throw new Error(`sync status never matched ${want}; last saw ${JSON.stringify(seen)}`);
 }
 
 describe("config sync (real Firefox, CC + probe)", () => {
