@@ -19,11 +19,23 @@ export class Locator {
     private readonly page: PageContext,
     readonly selector: string,
     private readonly interval?: number,
+    private readonly index = 0,
   ) {}
+
+  // As in Playwright: nth narrows to one of several matches, all() answers with a locator
+  // per match RIGHT NOW (it does not wait — a list that might still be growing is a
+  // question about a moment, and the caller is the one who knows which moment).
+  nth(index: number): Locator {
+    return new Locator(this.page, this.selector, this.interval, index);
+  }
+
+  async all(): Promise<Locator[]> {
+    return Array.from({ length: await this.count() }, (_, i) => this.nth(i));
+  }
 
   private async first(): Promise<WebElement | undefined> {
     await this.page.switchHere();
-    return (await this.page.driver.findElements(By.css(this.selector)))[0];
+    return (await this.page.driver.findElements(By.css(this.selector)))[this.index];
   }
 
   private run<T>(
@@ -34,7 +46,7 @@ export class Locator {
     return poll(
       {
         timeout: opts?.timeout ?? this.page.defaultTimeout,
-        what: `${what} ${this.selector}`,
+        what: `${what} ${this.describeSelf()}`,
         diagnose: () => this.page.diagnose(),
         ...(this.interval === undefined ? {} : { interval: this.interval }),
       },
@@ -112,7 +124,7 @@ export class Locator {
     await poll(
       {
         timeout: opts?.timeout ?? this.page.defaultTimeout,
-        what: `waitFor(${state}) ${this.selector}`,
+        what: `waitFor(${state}) ${this.describeSelf()}`,
         diagnose: () => this.page.diagnose(),
         ...(this.interval === undefined ? {} : { interval: this.interval }),
       },
@@ -121,6 +133,10 @@ export class Locator {
         return (await this.meets(state, element)) ? undefined : RETRY;
       },
     );
+  }
+
+  private describeSelf(): string {
+    return this.index === 0 ? this.selector : `${this.selector} [${this.index}]`;
   }
 
   private async meets(state: LocatorState, element: WebElement | undefined): Promise<boolean> {

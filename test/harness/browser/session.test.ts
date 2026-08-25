@@ -26,10 +26,13 @@ describe("BrowserSession", () => {
     );
   });
 
-  it("opens a fresh tab and returns it", async () => {
+  // The driver can be left with no current window — the extension discards the tab it was
+  // on — and `newWindow` needs a context to run in. Anchoring first is what stops opening a
+  // tab from depending on where the driver happened to be.
+  it("anchors on a surviving window before opening a fresh tab", async () => {
     const { driver, calls } = fakeDriver({ elements: () => [], handles: ["w1"] });
     const page = await new BrowserSession(driver).newPage();
-    expect(calls).toContain("newWindow");
+    expect(calls).toEqual(["switchTo(w1)", "newWindow"]);
     expect(page.handle).toBe("w2");
   });
 });

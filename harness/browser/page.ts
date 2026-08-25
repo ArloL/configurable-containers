@@ -2,8 +2,8 @@
 // is what turns Selenium's hidden "current window" into something a caller can rely on.
 import { By, type WebDriver } from "selenium-webdriver";
 import { Locator } from "./locator";
-import { DEFAULT_TIMEOUT_MS } from "./retry";
-import type { PageContext, PageReport } from "./types";
+import { DEFAULT_TIMEOUT_MS, RETRY, poll } from "./retry";
+import type { PageContext, PageReport, WaitOpts } from "./types";
 
 export class Page implements PageContext {
   constructor(
@@ -40,6 +40,24 @@ export class Page implements PageContext {
     return this.driver.getCurrentUrl();
   }
 
+  // Playwright's page.waitForURL. Here it is also how a test waits out a navigation that
+  // stays in the SAME tab — a POST CC declined to reopen, say — without polling by hand.
+  async waitForURL(urlPrefix: string, opts?: WaitOpts): Promise<void> {
+    let seen = "";
+    await poll(
+      {
+        timeout: opts?.timeout ?? this.defaultTimeout,
+        what: `waitForURL(${urlPrefix})`,
+        diagnose: async () => `  last url: ${seen}`,
+        ...(this.interval === undefined ? {} : { interval: this.interval }),
+      },
+      async () => {
+        seen = await this.url();
+        return seen.startsWith(urlPrefix) ? undefined : RETRY;
+      },
+    );
+  }
+
   async title(): Promise<string> {
     await this.switchHere();
     return this.driver.getTitle();
@@ -48,6 +66,12 @@ export class Page implements PageContext {
   async close(): Promise<void> {
     await this.switchHere();
     await this.driver.close();
+    // Closing the ACTIVE tab leaves the driver with no current window, and the next
+    // command fails with NoSuchWindow wherever it happens to be — miles from the close
+    // that caused it. Re-attach to whatever survives, so a page's lifetime is its own
+    // business and closing one is not a trap for the next read.
+    const [survivor] = await this.driver.getAllWindowHandles();
+    if (survivor !== undefined) await this.driver.switchTo().window(survivor);
   }
 
   async describe(): Promise<PageReport> {

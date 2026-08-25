@@ -48,6 +48,25 @@ describe("retrying matchers", () => {
     });
   });
 
+  // A textarea's content is its value, not its text: toContainText reads innerText and
+  // sees "" there, which is how the migration found this.
+  it("matches a value by regular expression", async () => {
+    await expect(
+      locatorOn({ elements: () => [anElement({ getProperty: async () => "version: 2\nrules:\n" })] }),
+    ).toHaveValue(/version: 2/, { timeout: 0 });
+  });
+
+  it("waits for an attribute to take a value", async () => {
+    let polls = 0;
+    const locator = locatorOn({
+      elements: () => {
+        polls++;
+        return [anElement({ getDomAttribute: async () => (polls < 3 ? "false" : "true") })];
+      },
+    });
+    await expect(locator).toHaveAttribute("data-cc-armed", "true", { timeout: 500 });
+  });
+
   it("waits for a value, a count, visibility and enabledness", async () => {
     await expect(
       locatorOn({ elements: () => [anElement({ getProperty: async () => "rules:\n" })] }),
