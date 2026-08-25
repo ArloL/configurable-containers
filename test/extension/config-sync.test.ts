@@ -280,7 +280,7 @@ describe("an encoding failure that is not a size limit", () => {
 });
 
 // ---------------------------------------------------------------------------
-// browserSyncPorts() — the shell the module's own comment calls "the only part of this
+// browserSyncPorts(anApplier) — the shell the module's own comment calls "the only part of this
 // module that cannot run under a fake". It can, against a fake `browser.storage`; what it
 // cannot do is answer the questions above, which is why the two halves are tested apart
 // (FOLLOWUPS.md, "The impure shells are where coverage stops").
@@ -291,9 +291,15 @@ describe("an encoding failure that is not a size limit", () => {
 
 describe("browserSyncPorts", () => {
   let f: FakeBrowser;
+  // What background.ts hands in: the wiring's applyStored. Counted, because putting the
+  // adopted text into effect is the half of an adoption storage cannot show — it used to be
+  // a runtime.reload() and is now an in-process apply.
+  let applies: number;
+  const anApplier = async () => void (applies += 1);
 
   beforeEach(() => {
     f = installFakeBrowser();
+    applies = 0;
   });
   afterEach(() => {
     uninstallFakeBrowser();
@@ -303,7 +309,7 @@ describe("browserSyncPorts", () => {
     f.local[CONFIG_STORAGE_KEY] = "rules: []";
     f.local[CONFIG_UPDATED_AT_KEY] = 4242;
 
-    expect(await browserSyncPorts().readLocal()).toEqual({ text: "rules: []", updatedAt: 4242 });
+    expect(await browserSyncPorts(anApplier).readLocal()).toEqual({ text: "rules: []", updatedAt: 4242 });
     expect(f.localSets).toEqual([]);
   });
 
@@ -313,7 +319,7 @@ describe("browserSyncPorts", () => {
   it("backfills an untouched seed as UNEDITED, and persists the backfill", async () => {
     f.local[CONFIG_STORAGE_KEY] = SEED_CONFIG_YAML;
 
-    expect(await browserSyncPorts().readLocal()).toEqual({
+    expect(await browserSyncPorts(anApplier).readLocal()).toEqual({
       text: SEED_CONFIG_YAML,
       updatedAt: UNEDITED,
     });
@@ -328,7 +334,7 @@ describe("browserSyncPorts", () => {
   it("backfills a config that differs from the seed as PRE_SYNC_EDIT", async () => {
     f.local[CONFIG_STORAGE_KEY] = "rules: []";
 
-    expect(await browserSyncPorts().readLocal()).toEqual({
+    expect(await browserSyncPorts(anApplier).readLocal()).toEqual({
       text: "rules: []",
       updatedAt: PRE_SYNC_EDIT,
     });
@@ -336,16 +342,16 @@ describe("browserSyncPorts", () => {
   });
 
   it("reads an absent config as the empty string", async () => {
-    expect(await browserSyncPorts().readLocal()).toEqual({ text: "", updatedAt: PRE_SYNC_EDIT });
+    expect(await browserSyncPorts(anApplier).readLocal()).toEqual({ text: "", updatedAt: PRE_SYNC_EDIT });
   });
 
-  // One `set`, then the reload: an adoption is applied by restarting, exactly as a Save is,
-  // and there is deliberately no second apply path.
-  it("adopts a remote config, keeping what it overwrote, then reloads", async () => {
+  // One `set`, then the apply: an adoption goes through the same path a Save takes, and
+  // there is deliberately no second one.
+  it("adopts a remote config, keeping what it overwrote, then applies it", async () => {
     f.local[CONFIG_STORAGE_KEY] = "mine";
     f.local[CONFIG_UPDATED_AT_KEY] = 10;
 
-    await browserSyncPorts().adopt("theirs", 20);
+    await browserSyncPorts(anApplier).adopt("theirs", 20);
 
     expect(f.localSets).toEqual([
       {
@@ -356,17 +362,17 @@ describe("browserSyncPorts", () => {
         [CONFIG_REPLACED_KEY]: "mine",
       },
     ]);
-    expect(f.reloads).toBe(1);
+    expect(applies).toBe(1);
   });
 
   it("keeps no backup when there was no config to overwrite", async () => {
-    await browserSyncPorts().adopt("theirs", 20);
+    await browserSyncPorts(anApplier).adopt("theirs", 20);
 
     expect(f.localSets).toEqual([
       { [CONFIG_STORAGE_KEY]: "theirs", [CONFIG_UPDATED_AT_KEY]: 20 },
     ]);
     expect(f.local[CONFIG_REPLACED_KEY]).toBeUndefined();
-    expect(f.reloads).toBe(1);
+    expect(applies).toBe(1);
   });
 
   // reconcile() never adopts text equal to the local text, so this is a second line of
@@ -375,13 +381,13 @@ describe("browserSyncPorts", () => {
   it("keeps no backup when the adopted text is what is already stored", async () => {
     f.local[CONFIG_STORAGE_KEY] = "same";
 
-    await browserSyncPorts().adopt("same", 20);
+    await browserSyncPorts(anApplier).adopt("same", 20);
 
     expect(f.local[CONFIG_REPLACED_KEY]).toBeUndefined();
   });
 
   it("delegates the sync area, and the change signal, to the storage module", async () => {
-    const ports = browserSyncPorts();
+    const ports = browserSyncPorts(anApplier);
     let fired = 0;
     ports.onSyncChanged(() => {
       fired += 1;
@@ -402,7 +408,7 @@ describe("browserSyncPorts", () => {
     const original = console.warn;
     console.warn = (...args: unknown[]) => void seen.push(args);
     try {
-      const ports = browserSyncPorts();
+      const ports = browserSyncPorts(anApplier);
       ports.warn("could not read storage.sync", new Error("no account"));
       ports.warn("config too large");
     } finally {
