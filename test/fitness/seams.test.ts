@@ -82,3 +82,17 @@ describe("fitness — the browser seam", () => {
     expect(filesMatching(sourceFiles("src/overlays", "src/config"), /\bbrowser\./)).toEqual([]);
   });
 });
+
+describe("fitness — a config is applied, never restarted into", () => {
+  it("calls runtime.reload() nowhere in src/", () => {
+    // A save and a sync adoption both apply the config in place (2026-08-25 spec). A reload
+    // reintroduced here would take back the one step of an apply that nothing can observe:
+    // on a temporarily installed extension on 140.14.0esr it does not bring the background
+    // back at all, so the old config goes on routing while the editor reports success. That
+    // is measured (FOLLOWUPS.md's deleted ESR entry), and it is invisible to every level of
+    // the pyramid except a real browser on that channel.
+    //
+    // Named in comments all over this codebase, which is why the check reads stripped code.
+    expect(filesMatching(sourceFiles("src"), /\bruntime\.reload\b/)).toEqual([]);
+  });
+});

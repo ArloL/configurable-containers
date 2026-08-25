@@ -15,13 +15,13 @@ export interface DisposerOptions {
 }
 
 // The grace is a STORED FACT ("tmp3 has been empty since T"), not a pending timer, and that
-// is the whole design. A timer dies with the background context, and options.ts calls
-// runtime.reload() on every config save — so the timer version lost every pending grace on
-// Save, and its startup sweep, which reclaimed orphans at grace 0, then removed the
-// container on the spot: saving your config destroyed live throwaways (F10). Storing the
-// timestamp lets a restart re-derive the grace that is LEFT, and makes every sweep
-// idempotent — the answer depends on the browser's state plus the stored map, never on what
-// this session remembers.
+// is the whole design. A timer dies with the background context — every browser restart, and
+// back when a config save reloaded the extension, every Save. The timer version lost each
+// pending grace that way, and its startup sweep, which reclaimed orphans at grace 0, then
+// removed the container on the spot: saving your config destroyed live throwaways (F10).
+// Storing the timestamp lets a restart re-derive the grace that is LEFT, and makes every
+// sweep idempotent — the answer depends on the browser's state plus the stored map, never on
+// what this session remembers.
 //
 // Timers survive as an optimisation, making disposal punctual while the page is alive.
 // Losing one now costs lateness, never early removal, and any later sweep corrects it.
