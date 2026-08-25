@@ -50,15 +50,35 @@ export interface ParseResult {
 // does not know, and the two things a caller learns from the walk.
 interface Ctx {
   lenient: boolean;
+  declaredVersion: number;
   requiredVersion: number;
   warnings: ConfigWarning[];
 }
 
-// A key this build has no entry for. Strict by default: a config that does not announce
-// itself as newer than this build has no way to hold a feature we have never heard of, so
-// the key is a typo, and a typo silently ignored is a rule that means something else.
-function unknownKey(path: string, message: string): void {
-  throw new ConfigError(message, { path });
+// A key this build has no entry for. Strict unless the document announces itself as newer
+// than this build: a config that claims no future version cannot be holding a feature we
+// have never heard of, so the key is a typo — and a typo silently ignored is a rule that
+// means something else.
+function unknownKey(ctx: Ctx, path: string, message: string): void {
+  if (!ctx.lenient) throw new ConfigError(message, { path });
+  warn(ctx, path, `${message} — ignored`);
+}
+
+// A rule or group this build cannot parse at all, which is what a feature that changed the
+// SHAPE of a value looks like from here. Dropping the one rule costs the sites it names a
+// throwaway; refusing the document costs every site one, so leniency stops at the rule.
+function skipped(ctx: Ctx, path: string, e: unknown): void {
+  if (!ctx.lenient || !(e instanceof ConfigError)) throw e;
+  warn(ctx, path, `${path} skipped — ${e.message}`);
+}
+
+function warn(ctx: Ctx, path: string, message: string): void {
+  ctx.warnings.push({
+    message:
+      `${message}; this config declares version ${ctx.declaredVersion} ` +
+      `and this build understands ${CONFIG_VERSION}`,
+    path,
+  });
 }
 
 function use(ctx: Ctx, version: number): void {
@@ -116,7 +136,7 @@ function toMatcher(entry: unknown, path: string, ctx: Ctx): Matcher {
   if (isMapping(entry)) {
     for (const k of Object.keys(entry)) {
       if (!Object.hasOwn(MATCH_MAPPING_KEYS, k)) {
-        unknownKey(path, `unknown key "${k}" in ${path} (a regex match is { regex: "…" })`);
+        unknownKey(ctx, path, `unknown key "${k}" in ${path} (a regex match is { regex: "…" })`);
       }
     }
     if (typeof entry.regex !== "string") {
@@ -215,7 +235,7 @@ function parseCookie(raw: unknown, path: string, ctx: Ctx): CookieSpec {
   if (!isMapping(raw)) throw new ConfigError(`${path} must be a mapping`, { path });
   for (const k of Object.keys(raw)) {
     if (Object.hasOwn(COOKIE_KEYS, k)) use(ctx, COOKIE_KEYS[k]!);
-    else unknownKey(path, `unknown key "${k}" in ${path}`);
+    else unknownKey(ctx, path, `unknown key "${k}" in ${path}`);
   }
 
   const spec = {} as CookieSpec;
@@ -279,7 +299,7 @@ function parseScript(raw: unknown, path: string, ctx: Ctx): ScriptSpec {
   if (!isMapping(raw)) throw new ConfigError(`${path} must be a mapping`, { path });
   for (const k of Object.keys(raw)) {
     if (Object.hasOwn(SCRIPT_KEYS, k)) use(ctx, SCRIPT_KEYS[k]!);
-    else unknownKey(path, `unknown key "${k}" in ${path}`);
+    else unknownKey(ctx, path, `unknown key "${k}" in ${path}`);
   }
 
   const spec = {} as ScriptSpec;
@@ -323,7 +343,7 @@ function parseRule(raw: unknown, i: number, ctx: Ctx): Rule {
       use(ctx, RULE_KEYS[k]!);
       fields[k] = v;
     } else {
-      unknownKey(path, `unknown key "${k}" in ${path}`);
+      unknownKey(ctx, path, `unknown key "${k}" in ${path}`);
     }
   }
   if (!("match" in fields)) throw new ConfigError(`${path} is missing "match"`, { path });
@@ -425,7 +445,7 @@ export function parseConfig(yamlText: string): Config {
 }
 
 export function parseConfigDetailed(yamlText: string): ParseResult {
-  const ctx: Ctx = { lenient: false, requiredVersion: 1, warnings: [] };
+  const ctx: Ctx = { lenient: false, declaredVersion: 1, requiredVersion: 1, warnings: [] };
   let doc: unknown;
   try {
     doc = parse(yamlText);
@@ -458,6 +478,7 @@ export function parseConfigDetailed(yamlText: string): ParseResult {
   // read. A version this build cannot understand is not a reason to refuse the config —
   // it is the reason to be lenient with the parts of it we have never heard of.
   const declaredVersion = readVersion(doc);
+  ctx.declaredVersion = declaredVersion;
   ctx.lenient = declaredVersion > CONFIG_VERSION;
 
   const rawRules = doc.rules ?? [];
@@ -465,8 +486,22 @@ export function parseConfigDetailed(yamlText: string): ParseResult {
   const rawGroups = doc.groups ?? [];
   if (!Array.isArray(rawGroups)) throw new ConfigError("`groups` must be a list", { path: "groups" });
 
-  const rules = rawRules.map((r, i) => parseRule(r, i, ctx));
-  const groups = rawGroups.map((g, i) => parseGroup(g, i, ctx));
+  const rules: Rule[] = [];
+  rawRules.forEach((raw, i) => {
+    try {
+      rules.push(parseRule(raw, i, ctx));
+    } catch (e) {
+      skipped(ctx, `rules[${i}]`, e);
+    }
+  });
+  const groups: Group[] = [];
+  rawGroups.forEach((raw, i) => {
+    try {
+      groups.push(parseGroup(raw, i, ctx));
+    } catch (e) {
+      skipped(ctx, `groups[${i}]`, e);
+    }
+  });
   return {
     config: { rules, groups },
     requiredVersion: ctx.requiredVersion,
