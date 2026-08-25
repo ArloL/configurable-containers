@@ -112,6 +112,11 @@ jobs:
       # build is only reproducible against a known instant, and the source archive has no
       # .git for anyone to derive one from. `sign:dev` packages before it signs, so this
       # stamps the reproducible xpi that step leaves in dist/dev/.
+      #
+      # It also builds the source archive and hands it to AMO with --upload-source-code,
+      # exactly as release.yaml does for the listed channel: the requirement is the
+      # reviewer's, not the channel's, and an unlisted add-on can be reviewed at any time
+      # after submission. The archive it leaves behind is the one published below.
       - name: Build and sign the unlisted dev build
         env:
           WEB_EXT_API_KEY: ${{ secrets.WEB_EXT_API_KEY }}
@@ -122,15 +127,6 @@ jobs:
           export BUILD_TIMESTAMP
           echo "BUILD_TIMESTAMP=$BUILD_TIMESTAMP" | tee -a "$GITHUB_ENV"
           npm run sign:dev
-
-      # The same archive release.yaml builds, from the same command. Without it the dev
-      # channel publishes bytes nobody can check against a source they can read.
-      - name: Build the source archive
-        env:
-          VERSION: ${{ steps.version.outputs.new_version }}
-        run: |
-          git archive --format=zip \
-            --output "dist/dev/configurable-containers-src-${VERSION}.zip" HEAD
 
       # --prerelease is what tells a dev build from a listed one
       # scripts/dev-updates.js filters on it

@@ -128,7 +128,10 @@ Two ways around that:
   an immutable `v<version>` GitHub **prerelease**. Install the newest one by hand once;
   Firefox picks up every later build on its own (about:addons → gear → Check for Updates
   forces a poll). Locally it is `npm run sign:dev -- <version>`, which needs
-  `WEB_EXT_API_KEY` and `WEB_EXT_API_SECRET`.
+  `WEB_EXT_API_KEY` and `WEB_EXT_API_SECRET`. Like a listed submission it uploads a
+  source archive, because AMO's requirement follows the esbuild bundle rather than the
+  channel — and that archive is built from **HEAD**, so commit before signing or AMO gets
+  source that does not rebuild what you signed (the script warns).
 
 The dev build is a **separate add-on** (`configurable-containers-dev@k5d.de`), which is
 the point twice over: its uploads land on their own AMO record and cannot disturb a listed
