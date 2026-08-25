@@ -326,6 +326,17 @@ reasonable-looking change wrong**.
   `__CC_NOTIFY_ECHO_TO__` already shows the cost (no test build is byte-equivalent to a
   packaged one), and arming by name would make the shipped extension capable of starting
   up with routing disabled.
+- **The options page is REACHABLE a beat before it is POPULATED.** It fills `#cc-config`
+  from `storage.local` after it renders, and `switchToUrl` returns on the url alone, so a
+  single read can land in the gap — measured on 140 ESR, one first read in twelve came
+  back empty and hydrated 13ms later. `#cc-error` has the same window, being written by
+  the `validate()` that follows the fill. Wait for the text; never read once. The gap used
+  to be absorbed by `getAttribute` being a script Selenium injects, and replacing it with a
+  protocol command turned a standing race into a red `main` — a slower call is not a
+  synchronisation primitive. Typing has the same exposure from the other side: a fill
+  landing after `clear()` + `sendKeys()` overwrites what was just typed, and that reads as
+  the editor ignoring input. Note the race is **load-dependent** — 40 rounds on an idle
+  machine, with and without CPU pressure, reproduced it zero times.
 - **An options-page e2e must read tab ids BEFORE parking on the options page.** The
   probe's relay is a DOM event injected into http(s) pages only, so from
   `moz-extension://` every probe command goes unanswered and reads as a timeout.
