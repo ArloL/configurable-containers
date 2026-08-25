@@ -196,7 +196,10 @@ reasonable-looking change wrong**.
   there with the version it arrives in; version 2 is the two non-hostname match forms,
   which are shapes rather than keys and are priced under `matchForm`. Warnings ride
   `parseConfigDetailed` only — `loadConfig` drops them, and the options page is the one
-  surface that shows them.
+  surface that shows them. The **top level is strict too**, with one escape: a key starting
+  with `x-` is the user's and is ignored in silence, because a YAML anchor needs a node to
+  attach to and every node this grammar defines is spoken for. Don't extend `x-` inside a
+  rule — a comment already annotates a rule, and the anchor case is top-level by nature.
 - **The `version:` line is DERIVED, written by Save, and a build in LENIENT mode must never
   rewrite it** (`stampVersion`, `src/config/stamp.ts`). Restamping there computes a version
   from the keys this build happens to know, strips the marker, and disarms leniency on

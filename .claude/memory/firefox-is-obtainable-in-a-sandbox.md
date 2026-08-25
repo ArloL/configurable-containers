@@ -22,6 +22,11 @@ FIREFOX_BIN=.firefox/esr/firefox npm test
 
 The full suite is ~150s per channel.
 
+**On the user's own macOS machine there is nothing to download**: Firefox is installed, and
+`FIREFOX_BIN=/Applications/Firefox.app/Contents/MacOS/firefox npm test` runs every level
+(measured 2026-08-25, 817 passing in ~120s). `get-firefox.sh` fetches linux64 only, so that
+path is for CI and sandboxes.
+
 **What made this look impossible, and why it was wrong:**
 
 - `ftp.mozilla.org` returns 403 through the agent proxy. It is a legacy alias, and a

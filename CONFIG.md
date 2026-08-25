@@ -15,7 +15,18 @@ exports.
   isolation-continuity sets (see [Groups](#groups-isolation-continuity)). A rule may also
   carry the optional overlay keys `cookies` and `scripts` (see
   [Overlays](#overlays-cookies--scripts)). There is no container-definition block:
-  containers are named by the rules that target them.
+  containers are named by the rules that target them. Any other top-level key is refused as
+  a typo — `rulez:` would otherwise leave nothing matching anything, sending every site to a
+  throwaway with the editor reporting no problem at all. One exception: a key starting with
+  **`x-`** is yours, ignored without comment. That is where a YAML anchor lives, since an
+  anchor needs a node to attach to and every node here is spoken for:
+
+  ```yaml
+  x-shared: &work Work
+  rules:
+    - match: example.com
+      open: *work
+  ```
 - **Routing-first, not a container manifest.** The job is mapping sites to containers, not
   owning container lifecycle. A container is created on demand the first time a rule
   routes to its name; one no rule mentions is never managed and never deleted. **A
