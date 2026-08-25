@@ -24,17 +24,83 @@ export class ConfigError extends Error {
   }
 }
 
+// The lowest config version this build understands in full. Bumped whenever the grammar
+// grows a feature, so that a config using it can say so and older builds can tell a
+// feature they have never heard of from a typo. Version 2 is the two non-hostname match
+// forms (patterns and regexes), which arrived after the first release.
+export const CONFIG_VERSION = 2;
+
+export interface ConfigWarning {
+  message: string;
+  readonly path?: string | undefined;
+}
+
+export interface ParseResult {
+  config: Config;
+  // The lowest CONFIG_VERSION that understands every feature the document uses, derived
+  // from the document rather than read off it.
+  requiredVersion: number;
+  // What the document CLAIMS to need. 1 when it says nothing, which is every config
+  // written before the marker existed.
+  declaredVersion: number;
+  warnings: ConfigWarning[];
+}
+
+// Everything a parse carries besides the document: what to do with a feature this build
+// does not know, and the two things a caller learns from the walk.
+interface Ctx {
+  lenient: boolean;
+  requiredVersion: number;
+  warnings: ConfigWarning[];
+}
+
+// A key this build has no entry for. Strict by default: a config that does not announce
+// itself as newer than this build has no way to hold a feature we have never heard of, so
+// the key is a typo, and a typo silently ignored is a rule that means something else.
+function unknownKey(path: string, message: string): void {
+  throw new ConfigError(message, { path });
+}
+
+function use(ctx: Ctx, version: number): void {
+  if (version > ctx.requiredVersion) ctx.requiredVersion = version;
+}
+
+// Every feature of the grammar against the version that introduced it. These are the
+// allow-lists as well: a key absent from the table is a key this build does not know, and
+// the version beside a key is what `requiredVersion` is made of, so a future feature gets
+// its marker written for free rather than by whoever remembers.
 const ACTION_KEYS = ["open", "inherit", "ignore", "redirector"] as const;
-const ALLOWED_RULE_KEYS = new Set([
-  "match", "open", "default", "inherit", "ignore", "redirector", "cookies", "scripts",
-]);
-const ALLOWED_COOKIE_KEYS = new Set([
-  "name", "url", "value", "domain", "path", "secure", "httpOnly",
-  "sameSite", "expirationDate", "firstPartyDomain", "partitionKey",
-]);
+interface FeatureVersions {
+  rule: Record<string, number>;
+  cookie: Record<string, number>;
+  script: Record<string, number>;
+  matchMapping: Record<string, number>;
+  // The three forms that are a shape rather than a key, so no key table can carry them.
+  matchForm: { host: number; pattern: number; regex: number };
+}
+
+export const FEATURE_VERSIONS: FeatureVersions = {
+  rule: {
+    match: 1, open: 1, default: 1, inherit: 1, ignore: 1, redirector: 1, cookies: 1, scripts: 1,
+  },
+  cookie: {
+    name: 1, url: 1, value: 1, domain: 1, path: 1, secure: 1, httpOnly: 1,
+    sameSite: 1, expirationDate: 1, firstPartyDomain: 1, partitionKey: 1,
+  },
+  script: { at: 1, run: 1 },
+  matchMapping: { regex: 2 },
+  matchForm: { host: 1, pattern: 2, regex: 2 },
+};
+
+const {
+  rule: RULE_KEYS,
+  cookie: COOKIE_KEYS,
+  script: SCRIPT_KEYS,
+  matchMapping: MATCH_MAPPING_KEYS,
+  matchForm: MATCH_FORM_VERSIONS,
+} = FEATURE_VERSIONS;
 const SAME_SITE = new Set(["no_restriction", "lax", "strict"]);
 const RUN_AT = new Set(["document_start", "document_end", "document_idle"]);
-const ALLOWED_SCRIPT_KEYS = new Set(["at", "run"]);
 
 function isMapping(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -46,14 +112,17 @@ function isMapping(v: unknown): v is Record<string, unknown> {
 const GLOB_META = /[*?[]/;
 const PATTERN_SEP = "://";
 
-function toMatcher(entry: unknown, path: string): Matcher {
+function toMatcher(entry: unknown, path: string, ctx: Ctx): Matcher {
   if (isMapping(entry)) {
     for (const k of Object.keys(entry)) {
-      if (k !== "regex") throw new ConfigError(`unknown key "${k}" in ${path} (a regex match is { regex: "…" })`, { path });
+      if (!Object.hasOwn(MATCH_MAPPING_KEYS, k)) {
+        unknownKey(path, `unknown key "${k}" in ${path} (a regex match is { regex: "…" })`);
+      }
     }
     if (typeof entry.regex !== "string") {
       throw new ConfigError(`${path}.regex must be a string`, { path: `${path}.regex` });
     }
+    use(ctx, MATCH_FORM_VERSIONS.regex);
     try {
       return regexMatcher(entry.regex);
     } catch (e) {
@@ -64,6 +133,7 @@ function toMatcher(entry: unknown, path: string): Matcher {
     throw new ConfigError(`${path}: a match entry is a hostname, a match pattern, or { regex: "…" }`, { path });
   }
   if (entry.includes(PATTERN_SEP)) {
+    use(ctx, MATCH_FORM_VERSIONS.pattern);
     try {
       return patternMatcher(entry);
     } catch (e) {
@@ -75,6 +145,7 @@ function toMatcher(entry: unknown, path: string): Matcher {
   if (GLOB_META.test(entry)) {
     throw new ConfigError(`${path}: "${entry}" is not a bare hostname — a wildcard needs the full pattern form, as in "*://*.example.com/*"`, { path });
   }
+  use(ctx, MATCH_FORM_VERSIONS.host);
   try {
     return hostMatcher(entry);
   } catch (e) {
@@ -85,12 +156,12 @@ function toMatcher(entry: unknown, path: string): Matcher {
 // `firstHost` is what an action-less rule auto-names its container after. Null unless the
 // FIRST entry is a bare hostname: a pattern has no one host to take a name from
 // (`*://*.example.com/*` could mean three), and a regex none at all, so those need `open:`.
-function parseMatch(raw: unknown, path: string): { matchers: Matcher[]; firstHost: string | null } {
+function parseMatch(raw: unknown, path: string, ctx: Ctx): { matchers: Matcher[]; firstHost: string | null } {
   const list = Array.isArray(raw) ? raw : [raw];
   if (list.length === 0) {
     throw new ConfigError(`${path}.match must not be empty`, { path: `${path}.match` });
   }
-  const matchers = list.map((e, j) => toMatcher(e, `${path}.match[${j}]`));
+  const matchers = list.map((e, j) => toMatcher(e, `${path}.match[${j}]`, ctx));
   const first = matchers[0];
   // Stryker disable next-line OptionalChaining: the emptiness check above is what makes
   // `matchers[0]` present; the chain is what says so to the compiler.
@@ -140,10 +211,11 @@ function parseOpen(raw: Record<string, unknown>, path: string): Action {
   return { kind: "open", containers };
 }
 
-function parseCookie(raw: unknown, path: string): CookieSpec {
+function parseCookie(raw: unknown, path: string, ctx: Ctx): CookieSpec {
   if (!isMapping(raw)) throw new ConfigError(`${path} must be a mapping`, { path });
   for (const k of Object.keys(raw)) {
-    if (!ALLOWED_COOKIE_KEYS.has(k)) throw new ConfigError(`unknown key "${k}" in ${path}`, { path });
+    if (Object.hasOwn(COOKIE_KEYS, k)) use(ctx, COOKIE_KEYS[k]!);
+    else unknownKey(path, `unknown key "${k}" in ${path}`);
   }
 
   const spec = {} as CookieSpec;
@@ -198,15 +270,16 @@ function parseCookie(raw: unknown, path: string): CookieSpec {
   return spec;
 }
 
-function parseCookies(raw: unknown, path: string): CookieSpec[] {
+function parseCookies(raw: unknown, path: string, ctx: Ctx): CookieSpec[] {
   if (!Array.isArray(raw)) throw new ConfigError(`${path}.cookies must be a list`, { path: `${path}.cookies` });
-  return raw.map((entry, j) => parseCookie(entry, `${path}.cookies[${j}]`));
+  return raw.map((entry, j) => parseCookie(entry, `${path}.cookies[${j}]`, ctx));
 }
 
-function parseScript(raw: unknown, path: string): ScriptSpec {
+function parseScript(raw: unknown, path: string, ctx: Ctx): ScriptSpec {
   if (!isMapping(raw)) throw new ConfigError(`${path} must be a mapping`, { path });
   for (const k of Object.keys(raw)) {
-    if (!ALLOWED_SCRIPT_KEYS.has(k)) throw new ConfigError(`unknown key "${k}" in ${path}`, { path });
+    if (Object.hasOwn(SCRIPT_KEYS, k)) use(ctx, SCRIPT_KEYS[k]!);
+    else unknownKey(path, `unknown key "${k}" in ${path}`);
   }
 
   const spec = {} as ScriptSpec;
@@ -233,22 +306,30 @@ function parseScript(raw: unknown, path: string): ScriptSpec {
   return spec;
 }
 
-function parseScripts(raw: unknown, path: string): ScriptSpec[] {
+function parseScripts(raw: unknown, path: string, ctx: Ctx): ScriptSpec[] {
   if (!Array.isArray(raw)) throw new ConfigError(`${path}.scripts must be a list`, { path: `${path}.scripts` });
-  return raw.map((entry, j) => parseScript(entry, `${path}.scripts[${j}]`));
+  return raw.map((entry, j) => parseScript(entry, `${path}.scripts[${j}]`, ctx));
 }
 
-function parseRule(raw: unknown, i: number): Rule {
+function parseRule(raw: unknown, i: number, ctx: Ctx): Rule {
   const path = `rules[${i}]`;
   if (!isMapping(raw)) throw new ConfigError(`${path} must be a mapping`, { path });
 
-  for (const k of Object.keys(raw)) {
-    if (!ALLOWED_RULE_KEYS.has(k)) throw new ConfigError(`unknown key "${k}" in ${path}`, { path });
+  // Only the keys this build knows go on: in lenient mode `unknownKey` returns, and what
+  // it lets through must not reach the action count or `parseOpen`.
+  const fields: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (Object.hasOwn(RULE_KEYS, k)) {
+      use(ctx, RULE_KEYS[k]!);
+      fields[k] = v;
+    } else {
+      unknownKey(path, `unknown key "${k}" in ${path}`);
+    }
   }
-  if (!("match" in raw)) throw new ConfigError(`${path} is missing "match"`, { path });
-  const { matchers, firstHost } = parseMatch(raw.match, path);
+  if (!("match" in fields)) throw new ConfigError(`${path} is missing "match"`, { path });
+  const { matchers, firstHost } = parseMatch(fields.match, path, ctx);
 
-  const present = ACTION_KEYS.filter((k) => k in raw);
+  const present = ACTION_KEYS.filter((k) => k in fields);
   if (present.length > 1) {
     throw new ConfigError(`${path} has more than one action (${present.join(", ")}); a rule has at most one action`, { path });
   }
@@ -265,28 +346,28 @@ function parseRule(raw: unknown, i: number): Rule {
   } else {
     switch (chosen) {
       case "inherit":
-        if (raw.inherit !== true) throw new ConfigError(`${path}.inherit must be true`, { path });
+        if (fields.inherit !== true) throw new ConfigError(`${path}.inherit must be true`, { path });
         action = { kind: "inherit" };
         break;
       case "ignore":
-        if (raw.ignore !== true) throw new ConfigError(`${path}.ignore must be true`, { path });
+        if (fields.ignore !== true) throw new ConfigError(`${path}.ignore must be true`, { path });
         action = { kind: "ignore" };
         break;
       case "redirector":
-        if (raw.redirector !== true) throw new ConfigError(`${path}.redirector must be true`, { path });
+        if (fields.redirector !== true) throw new ConfigError(`${path}.redirector must be true`, { path });
         action = { kind: "redirector" };
         break;
       case "open":
-        action = parseOpen(raw, path);
+        action = parseOpen(fields, path);
         break;
     }
   }
 
-  if ("default" in raw) {
+  if ("default" in fields) {
     if (action.kind !== "open" || action.containers.length < 2) {
       throw new ConfigError(`${path}.default is only valid with a multi-value "open"`, { path: `${path}.default` });
     }
-    const def = raw.default;
+    const def = fields.default;
     if (typeof def !== "string") {
       throw new ConfigError(`${path}.default must be a container name`, { path: `${path}.default` });
     }
@@ -298,14 +379,14 @@ function parseRule(raw: unknown, i: number): Rule {
 
   const out: Rule = { match: matchers, action };
 
-  if ("cookies" in raw) {
+  if ("cookies" in fields) {
     if (action.kind === "ignore") {
       throw new ConfigError(`${path}.cookies is not allowed on an "ignore" rule`, { path: `${path}.cookies` });
     }
-    out.cookies = parseCookies(raw.cookies, path);
+    out.cookies = parseCookies(fields.cookies, path, ctx);
   }
 
-  if ("scripts" in raw) {
+  if ("scripts" in fields) {
     if (action.kind === "ignore") {
       throw new ConfigError(`${path}.scripts is not allowed on an "ignore" rule`, { path: `${path}.scripts` });
     }
@@ -316,21 +397,35 @@ function parseRule(raw: unknown, i: number): Rule {
     if (matchers.some((m) => m.kind === "regex")) {
       throw new ConfigError(`${path}.scripts is not allowed on a rule with a regex match (a content script registers by URL pattern, which a regex has none of); give the script's hosts a rule of their own`, { path: `${path}.scripts` });
     }
-    out.scripts = parseScripts(raw.scripts, path);
+    out.scripts = parseScripts(fields.scripts, path, ctx);
   }
 
   return out;
 }
 
-function parseGroup(raw: unknown, i: number): Group {
+function parseGroup(raw: unknown, i: number, ctx: Ctx): Group {
   const path = `groups[${i}]`;
   if (!Array.isArray(raw)) throw new ConfigError(`${path} must be a list of matchers`, { path });
   if (raw.length === 0) throw new ConfigError(`${path} must not be empty`, { path });
-  const match = raw.map((e, j) => toMatcher(e, `${path}[${j}]`));
+  const match = raw.map((e, j) => toMatcher(e, `${path}[${j}]`, ctx));
   return { match };
 }
 
+function readVersion(doc: Record<string, unknown>): number {
+  if (!("version" in doc)) return 1;
+  const v = doc.version;
+  if (typeof v !== "number" || !Number.isInteger(v) || v < 1) {
+    throw new ConfigError("`version` must be a positive integer", { path: "version" });
+  }
+  return v;
+}
+
 export function parseConfig(yamlText: string): Config {
+  return parseConfigDetailed(yamlText).config;
+}
+
+export function parseConfigDetailed(yamlText: string): ParseResult {
+  const ctx: Ctx = { lenient: false, requiredVersion: 1, warnings: [] };
   let doc: unknown;
   try {
     doc = parse(yamlText);
@@ -354,15 +449,28 @@ export function parseConfig(yamlText: string): Config {
   // Stryker disable next-line ConditionalExpression: `parse` answers null for an empty
   // document, a comment-only one and an explicit `null`, and never undefined for a string
   // input. The second half is the contract of the value, not a case that reaches here.
-  if (doc === null || doc === undefined) return { rules: [], groups: [] };
+  if (doc === null || doc === undefined) {
+    return { config: { rules: [], groups: [] }, requiredVersion: 1, declaredVersion: 1, warnings: [] };
+  }
   if (!isMapping(doc)) throw new ConfigError("config must be a mapping with `rules` and/or `groups`");
+
+  // The one key read before anything else: it decides how the rest of the document is
+  // read. A version this build cannot understand is not a reason to refuse the config —
+  // it is the reason to be lenient with the parts of it we have never heard of.
+  const declaredVersion = readVersion(doc);
+  ctx.lenient = declaredVersion > CONFIG_VERSION;
 
   const rawRules = doc.rules ?? [];
   if (!Array.isArray(rawRules)) throw new ConfigError("`rules` must be a list", { path: "rules" });
   const rawGroups = doc.groups ?? [];
   if (!Array.isArray(rawGroups)) throw new ConfigError("`groups` must be a list", { path: "groups" });
 
-  const rules = rawRules.map((r, i) => parseRule(r, i));
-  const groups = rawGroups.map((g, i) => parseGroup(g, i));
-  return { rules, groups };
+  const rules = rawRules.map((r, i) => parseRule(r, i, ctx));
+  const groups = rawGroups.map((g, i) => parseGroup(g, i, ctx));
+  return {
+    config: { rules, groups },
+    requiredVersion: ctx.requiredVersion,
+    declaredVersion,
+    warnings: ctx.warnings,
+  };
 }

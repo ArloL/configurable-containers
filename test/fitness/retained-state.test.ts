@@ -39,12 +39,12 @@ interface Retained {
 
 // One row per collection in `src/`. The `bound` column is the whole point of the file.
 const DECLARED: Retained[] = [
-  // --- constants: fixed at module load, one entry per key the grammar allows ----------
-  { where: "src/config/parse.ts", name: "ALLOWED_RULE_KEYS", lifetime: "session", bound: "literal" },
-  { where: "src/config/parse.ts", name: "ALLOWED_COOKIE_KEYS", lifetime: "session", bound: "literal" },
+  // --- constants: fixed at module load, one entry per value the grammar allows --------
+  // The parser's key allow-lists are no longer here: they are the FEATURE_VERSIONS tables,
+  // plain object literals, which this file's Set/Map scan does not see and which
+  // test/config/parse.version.test.ts pins by value instead.
   { where: "src/config/parse.ts", name: "SAME_SITE", lifetime: "session", bound: "literal" },
   { where: "src/config/parse.ts", name: "RUN_AT", lifetime: "session", bound: "literal" },
-  { where: "src/config/parse.ts", name: "ALLOWED_SCRIPT_KEYS", lifetime: "session", bound: "literal" },
 
   // --- per-call working sets ----------------------------------------------------------
   { where: "src/engine/disposer.ts", name: "occupied", lifetime: "call", bound: "one sweep" },
