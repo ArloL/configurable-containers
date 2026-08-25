@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import {
-  launch, navigateToContainerTab, openExtensionPage, ccExtensionUrl, awaitTab, type Session,
+  launch, navigateToContainerTab, openExtensionPage, ccExtensionUrl, type Session,
 } from "../../harness/firefox";
 import type { Page } from "../../harness/browser/index";
 import "../../harness/browser/matchers";
@@ -196,21 +196,31 @@ describe("options page (real Firefox, CC + probe)", () => {
     it("opens the editor itself and routes everything to a temporary container", async () => {
       // Every http URL is unmatched under the empty config, so this tab is reopened
       // into a throwaway; that is also what parks us on a probe-reported page.
+      // CC called openOptionsPage() at startup. Wait for that tab FIRST, and through
+      // window handles rather than the probe — because BOTH of the other orders are
+      // races, measured rather than guessed:
+      //
+      //  - `openOptionsPage()` can land in a BLANK TAB that already exists, so a tab this
+      //    case opens for itself may be the one the editor lands in. Navigating it then
+      //    has CC reopen it, and the editor goes with it: the probe's tab log shows the
+      //    options tab REMOVED 16ms after the routed tab appears, windowClosing=false.
+      //    Once that happens no wait, however long, will find it.
+      //  - asking the PROBE costs a relay round-trip per poll, which under load stacks up
+      //    past any sensible budget (measured: 13.8s, 13.7s, 22.4s to notice a tab that
+      //    had been open all along). `pageAt` reads window handles and needs no page of
+      //    its own at all.
+      const editor = await firefox.browser.pageAt(OPTIONS_URL, { timeout: 20_000 });
+
+      // It shows the parse error rather than a blank page. The assertion is what waits:
+      // the message is written by the validate() that follows the page's async fill, so
+      // reading once can catch the page a beat early — and an empty #cc-error is also
+      // what a genuinely broken page would show.
+      await expect(editor.locator("#cc-error")).not.toHaveText("", { timeout: 10_000 });
+
+      // Every http url is unmatched under the empty config, so this lands in a throwaway.
       const url = `http://work.example:${serverPort}/?cb=broken-${Date.now()}`;
       const relay = await navigateToContainerTab(firefox.browser, url);
       expect(relay.name).toMatch(/^tmp/);
-
-      // CC called openOptionsPage() at startup — asynchronously, so this WAITS for the
-      // tab rather than reading the list once. Read once, it is a race between the
-      // extension's startup and the first navigation of the case, and CI lost it.
-      await awaitTab(relay.page, (tab) => tab.url === OPTIONS_URL);
-
-      // And it shows the parse error rather than a blank page. The assertion is what
-      // waits: the message is written by the validate() that follows the page's async
-      // fill, so reading once can catch the page a beat early — and an empty #cc-error is
-      // also what a genuinely broken page would show.
-      const editor = await firefox.browser.pageAt(OPTIONS_URL);
-      await expect(editor.locator("#cc-error")).not.toHaveText("", { timeout: 10_000 });
     });
   });
 });
