@@ -57,34 +57,6 @@ The decline is deliberately shaped so this stays a change to *how the engine exe
 unchanged decision*: `resolve()` still answers `reopen`, and only the engine's ability to
 carry it out is in question.
 
-## Does a config save reach ESR users at all? (2026-08-24)
-
-`runtime.reload()` does not bring a **temporarily installed** extension back on
-140.14.0esr. Measured against 154.0 for comparison: after the options page saves and
-reloads, the OLD background is still running the OLD config — `work.example`, which the
-edit stops matching, still lands in `Work` — and CC's own pages stop resolving at their
-`moz-extension` uuid. On 154.0 the same steps apply the new config. The one case that
-observes this skips below 154 (`test/e2e/options.test.ts`), which is the only case the
-ESR leg of `ci.yml` cannot run.
-
-**What is not known is whether this reaches real users**, and the gap matters: if a
-permanently installed CC behaves the same way on ESR, then **saving a config never takes
-effect there** and nothing says so — the editor reports "Saved — reloading" either way.
-That is a silent wrong answer of the kind this whole suite exists to prevent, on the one
-action every user performs.
-
-The harness cannot settle it. An unsigned xpi loads on release Firefox only by temporary
-install (`installAddon(xpiPath, true)` in `harness/firefox.ts`), which is also what grants
-`webRequestBlocking`; only a permanent install needs signing, and a signed add-on takes a
-different path through the add-on manager. So the two cases the measurement cannot
-separate are exactly the two that differ.
-
-**What would settle it, and it is a manual step:** install a *signed* dev build — the xpi
-`npm run sign:dev` produces — permanently in a real ESR profile, edit the config, save,
-and see whether routing follows. If it does, this entry is a harness limitation and can be
-deleted. If it does not, it is a shipped bug on ESR and the fix is a config-apply path that
-does not depend on `runtime.reload()`.
-
 ## `harness/selenium-webdriver.d.ts` is only DefinitelyTyped being behind (2026-08-25)
 
 That file declares two methods — `getDomAttribute` and `getProperty` — that

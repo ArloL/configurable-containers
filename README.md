@@ -65,8 +65,8 @@ the handful of hosts where isolating would break something: SSO and identity pro
 stay in whichever container started the login, known link shims aren't isolated and close
 themselves, and Firefox's own add-on and account pages are left alone. Commented examples
 below them show the syntax. Edit the config in the add-on's preferences (about:addons →
-Configurable Containers → Preferences), which opens a full-tab text editor. Saving reloads
-the extension.
+Configurable Containers → Preferences), which opens a full-tab text editor. Saving applies
+the config straight away.
 
 The config follows your Firefox Account: an edit on one machine reaches every other
 machine signed into the same account, with nothing to turn on and no file to copy. The

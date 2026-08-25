@@ -8,7 +8,7 @@
 #
 # Full reference: https://github.com/ArloL/configurable-containers/blob/main/CONFIG.md
 #
-# Saving reloads the extension.
+# Saving applies the config straight away.
 
 rules:
 

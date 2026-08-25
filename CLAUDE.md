@@ -192,19 +192,20 @@ reasonable-looking change wrong**.
 - **The gate covers the engine only** — `gatedPort` goes to `createEngine`, every other
   sibling gets the raw port, so the cookie-seeder can fire against the empty config. The
   script-injector reads config eagerly and is deferred to `injectScripts()`.
-- **`storage.sync` is a MIRROR and the background is its only writer.** Nothing in the
-  engine, wiring, `loadConfig` or resolver knows sync exists, which keeps it out of the
-  synchronous-listener contract. It runs **last** in the async tail, being the only step
-  that can end in `runtime.reload()`; two writers would race a dying options page against
-  a starting background.
+- **`storage.sync` is a MIRROR and the background is its only writer.** `loadConfig` and the
+  resolver know nothing about it; the wiring knows only that a Save publishes (`afterApply`,
+  handed in by `background.ts`, which builds `createConfigSync` **before** `wireBackground`
+  so the two can reach each other without a mutable slot). It starts **last** in the async
+  tail, being the only step that can adopt another machine's config mid-startup. Two writers
+  would race the options page against the background.
 - **`decodeRecord` must distinguish `incomplete` from `absent`.** `absent` means *push*,
   so reading a half-arrived record as absent publishes your older config over the update
   still landing — and the sender adopts the rollback. The integrity check is a hash, not a
   length.
 - **Both convergence properties in `reconcile` fail as a loop, not a wrong answer**: equal
-  text never returns `adopt` (adoption reloads, so two machines restart each other
-  forever), and the equal-stamp tie-break compares **texts** so exactly one side
-  publishes. The tie is the *normal* first startup — pre-existing configs backfill to
+  text never returns `adopt` (an adoption is itself a change the other machine hears, so a
+  converged pair would adopt each other's identical config forever), and the equal-stamp
+  tie-break compares **texts** so exactly one side publishes. The tie is the *normal* first startup — pre-existing configs backfill to
   `PRE_SYNC_EDIT`.
 - **The background is the pause state's ONLY writer; the options page only reads.** Arming
   by a write from the page would race the background's row-appends and lose one of the two
@@ -216,9 +217,30 @@ reasonable-looking change wrong**.
   stays synchronous; only the handler's body waits. `wireBackground` exposes that
   readiness as `ready` **for the restart harness** — a case that observes half-hydrated
   pause state passes for the wrong reason.
-- **Saving is a full extension restart, so every in-memory structure dies** — `handled`,
-  `reopenedNav`, warned hosts, the `tmpSuffix` counter (hence `highestTmpSuffix`, or every
-  save reissues `tmp1` beside a live `tmp1`). Don't add a cache expecting it to survive.
+- **Saving APPLIES the config in place; it does not restart anything** (`applyStored` in
+  `wiring.ts`, reached by `cc-config-apply` from the editor and called directly by
+  config-sync's `adopt`). It re-reads storage through `port.readStored`, fills the one
+  `config` object in place — every sibling reads it at event time, so nothing else has to be
+  told — and hands the new config to the script-injector, which **unregisters its previous
+  registrations** and registers the new set. That is why the injector holds its handles.
+  Order is deliberate: the swap first, the registrations second, and a registration failure
+  comes back in the reply rather than rolling the swap back. Storage is the truth and memory
+  follows it; the other order leaves the two disagreeing until the browser restarts, which is
+  the silent divergence this replaced.
+
+  The reason it is not `runtime.reload()` any more: that is the only step of a save nothing
+  can observe, and on a **temporarily installed** extension on 140.14.0esr it never comes
+  back — the old background goes on routing by the old config while the editor says "Saved".
+  `test/fitness/seams.test.ts` pins the call out of `src/`, and `test/e2e/options.test.ts`
+  now observes a save on **both** channels. Don't reintroduce a reload to "make sure
+  everything re-reads": nothing needs telling, and the reload is the part that fails.
+
+  Consequence for state: `handled`, `reopenedNav`, warned hosts and the `tmpSuffix` counter
+  now survive a save and die only with the browser. That is a fix (a save mid-reopen no
+  longer costs an extra reopen) and a caution — `test/fitness/retained-state.test.ts` prices
+  what nothing empties, and "the next save clears it" is no longer an argument.
+  `highestTmpSuffix` stays: a browser restart still leaves `tmp<N>` containers behind with
+  the counter at zero.
 - **A throwaway is `tmp` PLUS A NUMBER, and the digits are load-bearing**
   (`isThrowawayName`, `src/engine/registry.ts`). Identity derives from the name because
   the name is all that survives a restart, so the shape must separate ours from the user's
@@ -229,10 +251,10 @@ reasonable-looking change wrong**.
   in step, and mint only through `TMP_PREFIX + <counter>`.
 - **The disposer's grace is a STORED FACT** (`cookieStoreId -> emptySince`, remaining
   grace re-derived per sweep), because a pending `setTimeout` dies with the background
-  context and every save reloads. The timer version lost each pending grace on Save and
-  its startup sweep then reclaimed at grace 0, so saving your config destroyed live
-  throwaways (F10). Timers now only make disposal punctual: losing one costs lateness,
-  never earliness. Deliberate consequence: a `tmp` container with no stored note starts
+  context — with the browser now, and with every config save back when saving reloaded. The
+  timer version lost each pending grace on Save and its startup sweep then reclaimed at
+  grace 0, so saving your config destroyed live throwaways (F10). Timers now only make
+  disposal punctual: losing one costs lateness, never earliness. Deliberate consequence: a `tmp` container with no stored note starts
   its grace *now*, since emptiness never written down is indistinguishable from a live
   grace.
 - **A `scripts:` snippet in the seed config is the one place nothing type-checks or
@@ -387,14 +409,16 @@ reasonable-looking change wrong**.
   isolates what the reaper adds.
 - **Config-sync adoption has no L4 test and cannot have one** (no Firefox Account in a
   test profile, no `moz-extension:` navigation, the probe has its own sync namespace). The
-  e2e cases observe the **startup push and save nothing** — a Save means observing after
-  `runtime.reload()`, which parks the driver on a torn-down page and hangs `afterAll`.
+  e2e cases observe the **startup push** only.
 
 ## e2e: what the driver cannot do, and what the probe does instead
 
 - **A machine with no Firefox can get one: `./scripts/get-firefox.sh`.** It fetches both
   channels into `.firefox/`, and then `FIREFOX_BIN=.firefox/esr/firefox npm test` runs the
-  suite exactly as `ci.yml`'s `latest-esr` leg does. **geckodriver needs no setup** —
+  suite exactly as `ci.yml`'s `latest-esr` leg does. It fetches **linux64 only**, which is
+  what CI runs; on macOS take the dmg from
+  `download.mozilla.org/?product=firefox-esr-latest-ssl&os=osx` and point `FIREFOX_BIN` at
+  `Firefox.app/Contents/MacOS/firefox` inside it. **geckodriver needs no setup** —
   Selenium Manager ships inside `selenium-webdriver` and fetches it the first time a driver
   is built, so nothing looks for one on PATH. The other prerequisite is a `mac/` checkout
   (`git clone --depth 1 https://github.com/mozilla/multi-account-containers.git mac`),
@@ -409,11 +433,12 @@ reasonable-looking change wrong**.
   `ftp.mozilla.org`, and the failure reads `Unable to obtain browser driver` — which looks
   like a geckodriver problem and is not.
 - **`runtime.reload()` does not bring a TEMPORARILY installed extension back on 140 ESR.**
-  Measured 2026-08-24 against 154.0: after a config save the OLD background is still
-  running the OLD config, and CC's own pages stop resolving at their `moz-extension` uuid.
-  Nothing about a config save is observable there, so `options.test.ts` skips that one case
-  below 154 — the only case the ESR leg cannot run. The harness cannot tell whether real
-  ESR users are affected, because it cannot install permanently without signing.
+  Measured 2026-08-24 against 154.0: the OLD background keeps running, and CC's own pages
+  stop resolving at their `moz-extension` uuid. CC no longer calls it — a save applies its
+  config in place — which is what let `options.test.ts` drop its `< 154` skip and made the
+  config-save case observable on the ESR leg (re-measured 2026-08-25 on 140.14.0esr, red
+  with the reload restored). Keep the Firefox fact in mind before reaching for `reload()`
+  for anything else.
 - **Unsigned CC loads on *release* Firefox by TEMPORARY install** (`installAddon(xpi,
   true)`), which grants `webRequestBlocking`. Don't reach for Developer Edition, Nightly
   or signing to fix a load failure — `xpinstall.signatures.required=false` is ignored on

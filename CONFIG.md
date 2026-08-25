@@ -453,7 +453,7 @@ that is what containers exist to prevent. Consequences:
 
 The config follows you. CC mirrors it into `browser.storage.sync`, so editing it on one
 machine publishes it to every other machine signed into the same Firefox Account, where it
-is picked up and applied by the same reload a Save does locally. Nothing to turn on, no
+is picked up and applied the same way a Save applies one locally. Nothing to turn on, no
 file to copy.
 
 What travels is the config text and nothing else. Container *contents* — cookies, logins,
