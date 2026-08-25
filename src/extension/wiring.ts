@@ -9,6 +9,9 @@ import { createPause, type Pause } from "../engine/pause";
 import { matchRule, matchGroup } from "../matcher/matcher";
 import { sameSite } from "../psl/same-site";
 import { highestTmpSuffix } from "../engine/registry";
+import { loadConfig } from "../config/load";
+import { CONFIG_STORAGE_KEY } from "./config";
+import { CONFIG_APPLY, type ConfigApplyResponse } from "./config-protocol";
 import type { BrowserPort, Clock } from "../engine/port";
 import type { Config } from "../resolver/types";
 
@@ -17,6 +20,9 @@ export interface WiringOptions {
   clock: Clock;
   graceMs: number;
   redirectorDelayMs: number;
+  // Fired after a SAVE has been applied, never after an adoption: adoption runs inside the
+  // sync queue this publishes through, and re-entering it would deadlock the chain.
+  afterApply?: () => void;
 }
 
 export interface Background {
@@ -29,6 +35,10 @@ export interface Background {
   resumeTmpSuffix(): Promise<void>;
   // The one sibling that reads the config eagerly, so it runs after useConfig.
   injectScripts(): Promise<void>;
+  // Re-reads the stored config and puts it into effect, with no restart: the swap plus the
+  // script registrations. Never rejects — what went wrong comes back in the reply — and
+  // never fires `afterApply`, which belongs to the Save path alone.
+  applyStored(): Promise<ConfigApplyResponse>;
   engine: Engine;
   pause: Pause;
   // Resolves when the gate opens: config published AND pause state hydrated. background.ts
@@ -116,6 +126,7 @@ export function wireBackground(opts: WiringOptions): Background {
   port.onMessage((msg, sender) => {
     const type = (msg as { type?: unknown } | null | undefined)?.type;
     if (type === "cc-pick") return picker.handleMessage(msg, sender);
+    if (type === CONFIG_APPLY) return saveApplied();
     if (typeof type === "string" && type.startsWith("cc-pause-")) return pause.handleMessage(msg);
     return undefined;
   });
@@ -132,14 +143,53 @@ export function wireBackground(opts: WiringOptions): Background {
   // across every apply; constructing it registers nothing, so the no-await rule above holds.
   const scripts = createScriptInjector({ port });
 
+  function useConfig(loaded: Config): void {
+    // Into the EXISTING object: every sibling holds this one, and handing them a freshly
+    // parsed one would leave them reading the empty config forever. Spelled out key by key
+    // so a key added to Config later fails to compile here instead of silently keeping
+    // whatever the previous config left behind.
+    //
+    // A parse failure arrives here as the empty config: nothing matches, so every site opens
+    // in a fresh throwaway. It can never route a site into the WRONG permanent container.
+    const total: Required<Config> = { rules: loaded.rules, groups: loaded.groups };
+    Object.assign(config, total);
+    markConfigReady();
+  }
+
+  async function applyStored(): Promise<ConfigApplyResponse> {
+    const stored = await port.readStored(CONFIG_STORAGE_KEY);
+    // "" as the seed, which `loadConfig` only reads when nothing is stored: by the time
+    // anything applies, storage is the truth, and a seed reachable from here would be a
+    // second answer to what the config is.
+    const loaded = loadConfig(typeof stored === "string" ? stored : undefined, "");
+    const report: ConfigApplyResponse = {};
+    if (loaded.error) report.configError = loaded.error.message;
+
+    // Swap first, register second. Storage is the truth and memory follows it; registering
+    // first and swapping only on success would leave the two disagreeing until the browser
+    // restarts, which is the silent divergence applying in place exists to remove.
+    useConfig(loaded.config);
+    try {
+      await scripts.apply(config);
+    } catch (e) {
+      report.scriptError = e instanceof Error ? e.message : String(e);
+    }
+    return report;
+  }
+
+  // The Save path: apply, then publish. The publish used to ride the restart — a fresh
+  // background's tail reconciled on the way up — so without this a saved config would reach
+  // no other machine until something else restarted this one.
+  async function saveApplied(): Promise<ConfigApplyResponse> {
+    const report = await applyStored();
+    opts.afterApply?.();
+    return report;
+  }
+
   return {
     config,
-    useConfig(loaded) {
-      // A parse failure leaves the object empty: nothing matches, so every site opens in a
-      // fresh throwaway. It can never route a site into the WRONG permanent container.
-      Object.assign(config, loaded);
-      markConfigReady();
-    },
+    useConfig,
+    applyStored,
     async resumeTmpSuffix() {
       n = Math.max(n, highestTmpSuffix((await port.queryIdentities()).map((c) => c.name)));
     },
