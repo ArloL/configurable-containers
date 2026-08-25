@@ -85,29 +85,6 @@ and see whether routing follows. If it does, this entry is a harness limitation 
 deleted. If it does not, it is a shipped bug on ESR and the fix is a config-apply path that
 does not depend on `runtime.reload()`.
 
-## The nightly jobs added on 2026-08-24 (2026-08-25)
-
-Kept only as the record of what their first runs found; nothing here needs a re-check.
-
-`firefox-nightly` earned its keep on its first night: Firefox 156.0a1 widened Marionette's
-privileged-context check to cover the extension process, and nine cases that ran a script
-in an extension page went red at once. Fixed by asking through protocol commands instead
-(CLAUDE.md, the e2e section) — months before it reaches a release users are on.
-
-`reproducible-build` was green and inert for four weeks and nobody noticed, because it
-announced "No listed release yet — nothing to reproduce" and passed in **zero seconds**.
-There were two listed releases; it asked for `releases?per_page=20` and the dev channel had
-buried the newest one 32 releases down. Now fixed and executed end to end on a runner
-([run 32826637798](https://github.com/ArloL/configurable-containers/actions/runs/32826637798)):
-`v2608.0.112 reproduces byte for byte`, sha256
-`5aaeab49afb529571e3a4a013887495b5d2489761bf66d27425db382509f2fb9`.
-
-The lesson, which is why this paragraph survives: the release *picker* was thoroughly
-tested and always right about the list it was handed. Nothing tested how that list was
-fetched, and that is where the gate died. **A gate that cannot find its subject must fail,
-never pass quietly** — hence `findLatestListedRelease` throwing when it runs out of pages
-rather than answering "nothing to check".
-
 ## Does the dev channel owe AMO a source archive too? (2026-08-25)
 
 `release.yaml` submits the listed build with `--upload-source-code`, because AMO requires
