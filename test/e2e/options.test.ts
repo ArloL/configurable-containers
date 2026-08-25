@@ -54,19 +54,23 @@ describe("options page (real Firefox, CC + probe)", () => {
       await switchToUrl(firefox.driver, OPTIONS_URL);
     }
 
-    // Set the textarea and fire `input` — assigning .value alone does not, so
-    // validation would never run.
+    // Clear and TYPE, rather than assigning .value and dispatching a synthetic `input`:
+    // Selenium's executeScript is a script injected into the page, and Firefox refuses to
+    // run one in an extension page (harness/firefox.ts, on operating an extension page).
+    // Element Clear and Element Send Keys are protocol commands rather than injected
+    // script, and they fire the real `input` the editor validates on — which assigning
+    // .value alone never did either, hence the dispatch this replaces.
     async function typeConfig(text: string) {
-      await firefox.driver.executeScript(
-        "const t = document.getElementById('cc-config');" +
-        `t.value = ${JSON.stringify(text)};` +
-        "t.dispatchEvent(new Event('input'));"
-      );
+      const field = firefox.driver.findElement(By.id("cc-config"));
+      await field.clear();
+      await field.sendKeys(text);
     }
 
     it("shows the seeded config on first run", async () => {
       await openEditor("seed");
-      const value = await firefox.driver.findElement(By.id("cc-config")).getAttribute("value");
+      // getProperty, not getAttribute: a textarea's text is a property, and Selenium
+      // implements getAttribute as an injected script this page will not run.
+      const value = await firefox.driver.findElement(By.id("cc-config")).getProperty("value");
       // The bundled test config was written to storage at first run.
       expect(value).toContain("work.example");
       expect(value).toContain("redirect.example");

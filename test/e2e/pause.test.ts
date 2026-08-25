@@ -69,8 +69,10 @@ describe("pause & record (real Firefox, CC + probe)", () => {
     const armButton = By.css(`button[data-cc-arm="${container}"]`);
     await firefox.driver.wait(async () => (await firefox.driver.findElements(armButton)).length > 0, 10_000);
     await firefox.driver.findElement(armButton).click();
+    // getDomAttribute: Selenium implements getAttribute as an injected script, which an
+    // extension page will not run (harness/firefox.ts, on operating an extension page).
     await firefox.driver.wait(
-      async () => (await firefox.driver.findElement(armButton).getAttribute("data-cc-armed")) === "true",
+      async () => (await firefox.driver.findElement(armButton).getDomAttribute("data-cc-armed")) === "true",
       10_000,
     );
 

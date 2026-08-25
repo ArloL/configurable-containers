@@ -100,9 +100,12 @@ wrong is the rebuild environment rather than the build (the source archive gets 
 `npm ci`, and `scripts/package.ts` must produce the same bytes from it).
 
 While here: the three jobs added to `nightly.yml` on 2026-08-24 — `flake`,
-`reproducible-build` and `firefox-nightly` — have not run once between them. The first
-scheduled run is their first execution, and `latest-nightly` as a `setup-firefox` input is
-unverified (its `latest-esr` sibling was, and worked).
+`reproducible-build` and `firefox-nightly` — have now had that first scheduled run
+(2026-08-25). All three worked, `latest-nightly` as a `setup-firefox` input included, and
+`firefox-nightly` earned its keep on its first night: Firefox 156.0a1 widened Marionette's
+privileged-context check to cover the extension process, and nine cases that ran a script
+in an extension page went red at once. Fixed by asking through protocol commands instead
+(CLAUDE.md, the e2e section) — months before it reaches a release users are on.
 
 ## The impure shells are where coverage stops (2026-08-24)
 

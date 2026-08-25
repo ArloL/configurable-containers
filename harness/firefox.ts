@@ -535,6 +535,25 @@ export function openViewSource(
 // Open a URL in a new tab via the probe. The only way a test reaches a moz-extension:// page:
 // WebDriver refuses that scheme, while an extension may open another extension's pages. The
 // driver must already be on a probe-reported http(s) page for the relay to exist.
+//
+// ONCE THERE, NOTHING MAY RUN A SCRIPT IN THAT PAGE. An extension page lives in the extension
+// process, which Firefox counts as a PRIVILEGED browsing context, and Marionette refuses
+// ExecuteScript and ExecuteAsyncScript in one unless the browser was started with
+// `--remote-allow-system-access` (`isPrivilegedContext`, BrowsingContextUtils.sys.mjs;
+// measured on 156.0a1, where it broke nine cases at once). That rules out `driver.executeScript`
+// AND `WebElement.getAttribute`, which Selenium implements as an injected atom rather than a
+// protocol command — the trap, because it is the same call every http(s) case makes.
+//
+// Everything an extension page needs is a real protocol command and keeps working:
+// `getDomAttribute` (a data-* attribute), `getProperty` (a textarea's value), `getText`,
+// `isEnabled`, `click`, `clear`, `sendKeys` and `switchTo().activeElement()`. The harness's
+// own read helpers below stay on executeScript on purpose: every one of them reads a
+// probe-written attribute on an http(s) page, which is ordinary web content.
+//
+// The flag is not the fix. It re-grants privileged access to the whole session — including
+// the chrome-scope reach these cases have no business having — to keep one convenience call
+// working, and it would make the suite depend on a Firefox that permits what a shipped
+// extension's users never will.
 export function openExtensionPage(
   driver: WebDriver,
   url: string,

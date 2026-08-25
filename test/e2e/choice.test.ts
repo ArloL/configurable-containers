@@ -41,11 +41,14 @@ describe("choice screen + reopen picker (real Firefox, CC + probe)", () => {
     throw new Error("choice page did not appear");
   }
 
+  // getDomAttribute, never getAttribute, on every element of this page: see harness/firefox.ts
+  // on operating an extension page — Selenium implements getAttribute as an injected script,
+  // and Firefox refuses to run one here.
   async function optionKeyFor(container: string): Promise<string> {
     const opts = await firefox.driver.findElements(By.css("[data-cc-option]"));
     for (const o of opts) {
-      if ((await o.getAttribute("data-container")) === container) {
-        const key = await o.getAttribute("data-key");
+      if ((await o.getDomAttribute("data-container")) === container) {
+        const key = await o.getDomAttribute("data-key");
         if (key) return key;
       }
     }
@@ -59,7 +62,7 @@ describe("choice screen + reopen picker (real Firefox, CC + probe)", () => {
 
     // The page rendered both options.
     const opts = await firefox.driver.findElements(By.css("[data-cc-option]"));
-    const containers = await Promise.all(opts.map((o) => o.getAttribute("data-container")));
+    const containers = await Promise.all(opts.map((o) => o.getDomAttribute("data-container")));
     expect(containers.sort((a, b) => String(a).localeCompare(String(b)))).toEqual(["Personal", "Work"]);
 
     // Keyboard selection (the non-negotiable path).
@@ -72,15 +75,19 @@ describe("choice screen + reopen picker (real Firefox, CC + probe)", () => {
 
   // The container name of the option the page has focused, or null for none. The
   // highlight is where Enter goes, so this is the page's whole keyboard state.
+  //
+  // Asked through switchTo().activeElement() rather than a one-line executeScript reading
+  // document.activeElement, for the same reason as getDomAttribute above. With nothing
+  // focused the answer is <body>, which carries no data-container and so reads as null —
+  // which is the distinction this case exists to make.
   async function focusedOption(): Promise<string | null> {
-    return firefox.driver.executeScript<string | null>(
-      "return document.activeElement && document.activeElement.getAttribute('data-container')",
-    );
+    const active = await firefox.driver.switchTo().activeElement();
+    return active.getDomAttribute("data-container");
   }
 
   async function optionOrder(): Promise<string[]> {
     const opts = await firefox.driver.findElements(By.css("[data-cc-option]"));
-    return Promise.all(opts.map(async (o) => (await o.getAttribute("data-container")) ?? ""));
+    return Promise.all(opts.map(async (o) => (await o.getDomAttribute("data-container")) ?? ""));
   }
 
   it("lands with an option already focused, so arrows and Enter are enough to choose", async () => {
@@ -110,7 +117,7 @@ describe("choice screen + reopen picker (real Firefox, CC + probe)", () => {
     // "w" for Work, beside the positional "2": the accelerator you remember when the same
     // site is open in two containers every day.
     const opts = await firefox.driver.findElements(By.css("[data-cc-option][data-mnemonic='w']"));
-    expect(await opts[0]?.getAttribute("data-container")).toBe("Work");
+    expect(await opts[0]?.getDomAttribute("data-container")).toBe("Work");
 
     await firefox.driver.actions().sendKeys("w").perform();
     const { name: containerName } = await awaitContainerTab(firefox.driver, url);
@@ -232,7 +239,7 @@ describe("choice screen + reopen picker (real Firefox, CC + probe)", () => {
 
     // The picker is restricted to the rule's open list.
     const opts = await firefox.driver.findElements(By.css("[data-cc-option]"));
-    const containers = await Promise.all(opts.map((o) => o.getAttribute("data-container")));
+    const containers = await Promise.all(opts.map((o) => o.getDomAttribute("data-container")));
     expect(containers.sort((a, b) => String(a).localeCompare(String(b)))).toEqual(["Personal", "Temporary"]);
 
     const personalKey = await optionKeyFor("Personal");
