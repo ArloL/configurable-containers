@@ -1,4 +1,4 @@
-import { Builder, type WebDriver } from "selenium-webdriver";
+import { Builder, By, type WebDriver, type WebElement } from "selenium-webdriver";
 import firefox from "selenium-webdriver/firefox.js";
 import { fileURLToPath } from "node:url";
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -564,6 +564,31 @@ export function openExtensionPage(
 // Switch the driver to the first window handle whose URL starts with `urlPrefix`. Opening a
 // tab does not move the driver, and an extension page is not addressable by navigation, so
 // this is how a test starts operating one.
+// `switchToUrl` answers on the tab's COMMITTED url, which precedes its document — so a read
+// of an extension page immediately afterwards races the parse, and `findElement` reports a
+// document that is not there yet as `NoSuchElementError`. That throw escapes a loop written
+// to poll for an element's TEXT, so the case fails outright instead of polling again. Wait
+// for the element, then read it.
+//
+// Built on `findElements`, which answers with an empty list rather than throwing, so the
+// waiting is in one place instead of a catch at every call site.
+export async function awaitElement(
+  driver: WebDriver,
+  id: string,
+  timeoutMs = 10_000,
+): Promise<WebElement> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const found = await driver.findElements(By.id(id));
+    const element = found[0];
+    if (element !== undefined) return element;
+    if (Date.now() >= deadline) {
+      throw new Error(`no #${id} at ${await driver.getCurrentUrl()} within ${timeoutMs}ms`);
+    }
+    await driver.sleep(100);
+  }
+}
+
 export async function switchToUrl(
   driver: WebDriver,
   urlPrefix: string,

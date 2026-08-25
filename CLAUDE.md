@@ -391,6 +391,14 @@ reasonable-looking change wrong**.
   navigate to — once `work.example` is unmatched, `driver.get` on the tab the driver is
   already parked on has its navigation cancelled and never returns. That reads as the case
   timing out with no assertion having run, not as a routing failure.
+- **Before that, the page is REACHABLE a beat before its document EXISTS.** `switchToUrl`
+  answers on the tab's committed url, so a read can find no element at all — and
+  `findElement` reports that as a throw, which escapes a loop polling for an element's text
+  and fails the case outright (CI 2026-08-25: `NoSuchElementError: *[id="cc-sync"]`, latest
+  leg only, ESR and every local run green). `awaitElement` (`harness/firefox.ts`, on
+  `findElements`, which answers empty instead of throwing) is the wait for existence, and
+  the wait for the text comes after it. Two windows, both real; closing the second one does
+  nothing about the first.
 - **The options page is REACHABLE a beat before it is POPULATED.** It fills `#cc-config`
   from `storage.local` after it renders, and `switchToUrl` returns on the url alone, so a
   single read can land in the gap — measured on 140 ESR, one first read in twelve came

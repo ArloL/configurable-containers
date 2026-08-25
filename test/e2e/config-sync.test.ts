@@ -1,8 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { By } from "selenium-webdriver";
 import type { WebDriver } from "selenium-webdriver";
 import {
-  launch, awaitContainerTab, openExtensionPage, switchToUrl, ccExtensionUrl,
+  launch, awaitContainerTab, openExtensionPage, switchToUrl, ccExtensionUrl, awaitElement,
   type Session,
 } from "../../harness/firefox";
 
@@ -77,7 +76,7 @@ async function awaitSyncStatus(driver: WebDriver, want: RegExp, timeoutMs = 15_0
   const deadline = Date.now() + timeoutMs;
   let seen = "";
   while (Date.now() < deadline) {
-    seen = await driver.findElement(By.id("cc-sync")).getText();
+    seen = await (await awaitElement(driver, "cc-sync")).getText();
     if (want.test(seen)) return seen;
     await driver.sleep(300);
   }
