@@ -1,5 +1,6 @@
 import { Builder, By, type WebDriver, type WebElement } from "selenium-webdriver";
 import firefox from "selenium-webdriver/firefox.js";
+import { BrowserSession } from "./browser/index";
 import { fileURLToPath } from "node:url";
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -49,6 +50,9 @@ const DEFAULT_LOCAL_DOMAINS = [
 
 export interface Session {
   driver: WebDriver;
+  // The same browser through the auto-waiting API. `driver` stays for now: the harness's
+  // own internals use it, and the e2e files move over one at a time.
+  browser: BrowserSession;
   serverUrl: string;
   // The profile directory this browser was launched into: the token the reaper identifies
   // its processes by. Exposed so a test can assert nothing is left running under it.
@@ -281,6 +285,7 @@ export async function launch(opts: LaunchOptions = {}): Promise<Session> {
   let closed = false;
   return {
     driver,
+    browser: new BrowserSession(driver),
     serverUrl: server.url,
     profileDir,
     async close() {
