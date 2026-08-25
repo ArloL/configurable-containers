@@ -19,9 +19,9 @@ describe("cookies overlay (real Firefox, CC + probe)", () => {
   // Open a fresh firefox-default tab and navigate it; CC cancels + reopens into Work,
   // tearing down the original tab mid-nav — tolerate that.
   async function navFreshTab(url: string) {
-    await firefox.driver.switchTo().newWindow("tab");
+    const tab = await firefox.browser.newPage();
     try {
-      await firefox.driver.get(url);
+      await tab.goto(url);
     } catch {
       // CC reopened the tab away — expected.
     }
@@ -31,15 +31,16 @@ describe("cookies overlay (real Firefox, CC + probe)", () => {
     const url = `http://work.example:${serverPort}/`;
     await navFreshTab(url);
 
-    // The routed Work tab (awaitContainerTab leaves the driver focused on it).
-    const { name: containerName } = await awaitContainerTab(firefox.driver, url);
+    // The routed Work tab, named rather than assumed: every read below says which
+    // page it is reading.
+    const { page, name: containerName } = await awaitContainerTab(firefox.browser, url);
     expect(containerName).toBe("Work");
 
     // F11 boundary: present in this container's store for this URL, absent from default.
-    expect(await readCookieNamesHere(firefox.driver)).toContain("seed");
-    expect(await readCookieNamesDefault(firefox.driver)).not.toContain("seed");
+    expect(await readCookieNamesHere(page)).toContain("seed");
+    expect(await readCookieNamesDefault(page)).not.toContain("seed");
 
     // F12 wire side: the very first request into the Work container already carried it.
-    expect(await readSeenCookie(firefox.driver)).toContain("seed=1");
+    expect(await readSeenCookie(page)).toContain("seed=1");
   });
 });

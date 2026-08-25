@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import {
-  launch, awaitContainerTab, openExtensionPage, ccExtensionUrl, type Session,
+  launch, navigateToContainerTab, openExtensionPage, ccExtensionUrl, type Session,
 } from "../../harness/firefox";
 import "../../harness/browser/matchers";
 
@@ -53,15 +53,12 @@ function syncCase(
     it(behaviour, async () => {
       // Park on a probe-reported page so the cc-probe-cmd relay exists; the cache-buster
       // forces a fresh probe report.
-      const url = `http://work.example:${serverPort}/?cb=sync-${Date.now()}`;
-      try {
-        await firefox.driver.get(url);
-      } catch {
-        // First visit reopens the tab into Work, tearing this one down — expected.
-      }
-      await awaitContainerTab(firefox.driver, url);
+      const relay = await navigateToContainerTab(
+        firefox.browser,
+        `http://work.example:${serverPort}/?cb=sync-${Date.now()}`,
+      );
 
-      await openExtensionPage(firefox.driver, OPTIONS_URL);
+      await openExtensionPage(relay.page, OPTIONS_URL);
       const options = await firefox.browser.pageAt(OPTIONS_URL);
 
       // The status is rendered from a live read of storage.sync, so the ASSERTION is what

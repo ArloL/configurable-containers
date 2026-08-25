@@ -19,9 +19,9 @@ describe("redirector auto-close (real Firefox, CC + probe)", () => {
     // live context ("Browsing context has been discarded") — re-anchor first.
     const handles = await firefox.driver.getAllWindowHandles();
     await firefox.driver.switchTo().window(handles[handles.length - 1]!);
-    await firefox.driver.switchTo().newWindow("tab");
+    const tab = await firefox.browser.newPage();
     try {
-      await firefox.driver.get(url);
+      await tab.goto(url);
     } catch {
       // CC may reopen the tab away — expected for non-redirector hosts.
     }
@@ -64,7 +64,7 @@ describe("redirector auto-close (real Firefox, CC + probe)", () => {
     await navFreshTab(url);
     // work.example routes to the Work container — awaitContainerTab leaves the driver
     // focused on the reopened Work tab.
-    const { name: containerName } = await awaitContainerTab(firefox.driver, url);
+    const { name: containerName } = await awaitContainerTab(firefox.browser, url);
     expect(containerName).toBe("Work");
     // Wait well past the redirector delay; the Work tab must survive.
     await firefox.driver.sleep(1000);

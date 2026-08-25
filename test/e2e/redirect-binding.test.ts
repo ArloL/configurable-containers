@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { By } from "selenium-webdriver";
 import {
   launch,
   awaitContainerTab,
@@ -30,24 +29,24 @@ describe("redirect binding — an OAuth code flow (real Firefox, CC + probe)", (
     // navigation the reopen guard already owns — no container switch, nothing proven.
     const authorize = `http://nomatch.example:${serverPort}/authorize`;
     const article = `http://nomatch.example:${serverPort}/?same=1&link=${encodeURIComponent(authorize)}`;
-    await firefox.driver.switchTo().newWindow("tab");
+    const tab = await firefox.browser.newPage();
     try {
-      await firefox.driver.get(article);
+      await tab.goto(article);
     } catch {
       // CC reopened the blank tab away — expected.
     }
-    const { name: from } = await awaitContainerTab(firefox.driver, article);
-    expect(from).toMatch(/^tmp/);
+    const from = await awaitContainerTab(firefox.browser, article);
+    expect(from.name).toMatch(/^tmp/);
 
     // Same-site link, so no reopen and no guard: the 302 out of it is the first
     // navigation CC gets to route, and work.example belongs in Work.
-    await firefox.driver.findElement(By.id("go")).click();
+    await from.page.locator("#go").click();
 
     const callback = `http://work.example:${serverPort}/callback`;
-    const { name: landed } = await awaitContainerTab(firefox.driver, callback);
-    expect(landed).toBe("Work");
+    const landedTab = await awaitContainerTab(firefox.browser, callback);
+    expect(landedTab.name).toBe("Work");
 
-    const opened = (await listTabs(firefox.driver)).find((tab) => tab.url.startsWith(callback));
+    const opened = (await listTabs(landedTab.page)).find((tab) => tab.url.startsWith(callback));
     expect(opened, "the callback must have opened in its container").toBeDefined();
     expect(opened!.url).toContain(`code=${OAUTH_CODE}`);
   });
@@ -69,14 +68,14 @@ describe("redirect binding — a SAML POST binding (real Firefox, CC + probe)", 
   it("keeps the assertion, keeps the container, and says so", async () => {
     const idp = `http://nomatch.example:${serverPort}/saml`;
     const article = `http://nomatch.example:${serverPort}/?same=1&link=${encodeURIComponent(idp)}`;
-    await firefox.driver.switchTo().newWindow("tab");
+    const tab = await firefox.browser.newPage();
     try {
-      await firefox.driver.get(article);
+      await tab.goto(article);
     } catch {
       // CC reopened the blank tab away — expected.
     }
-    const { name: from } = await awaitContainerTab(firefox.driver, article);
-    expect(from).toMatch(/^tmp/);
+    const start = await awaitContainerTab(firefox.browser, article);
+    expect(start.name).toMatch(/^tmp/);
 
     // Same-site hop to the IdP, whose form then POSTs itself to work.example — a host
     // CC's rules put in Work. Reopening that POST would turn it into a GET.
@@ -86,30 +85,26 @@ describe("redirect binding — a SAML POST binding (real Firefox, CC + probe)", 
     // timeout rather than a named assertion. That timeout IS the regression signature
     // here, not flake — verified by backing the guard out. Nothing test-side can
     // improve it; a cancelled navigation never returns to WebDriver.
-    await firefox.driver.findElement(By.id("go")).click();
+    await start.page.locator("#go").click();
 
     // Let the POST settle before touching the probe: its command relay lives in the
     // page's document, so a request issued mid-navigation loses its reply and times out.
     const acs = `http://work.example:${serverPort}/acs`;
-    const deadline = Date.now() + 20_000;
-    while (Date.now() < deadline && !(await firefox.driver.getCurrentUrl()).startsWith(acs)) {
-      await firefox.driver.sleep(300);
-    }
-    expect(await firefox.driver.getCurrentUrl()).toMatch(acs);
+    await start.page.waitForURL(acs, { timeout: 20_000 });
 
-    // The tab was never reopened, so the driver is still on it: the POST completed in
+    // The tab was never reopened — it is the same page throughout: the POST completed in
     // place, with its body, in the container it started in.
-    expect(await readSeenPost(firefox.driver)).toContain(SAML_ASSERTION);
-    expect(await readContainerName(firefox.driver)).toBe(from);
+    expect(await readSeenPost(start.page)).toContain(SAML_ASSERTION);
+    expect(await readContainerName(start.page)).toBe(start.name);
 
     // And it is the only tab at the destination — no reopened twin sitting in Work.
-    const landed = (await listTabs(firefox.driver)).filter((tab) => tab.url.startsWith(acs));
+    const landed = (await listTabs(start.page)).filter((tab) => tab.url.startsWith(acs));
     expect(landed).toHaveLength(1);
-    expect(landed[0]!.container).toBe(from);
+    expect(landed[0]!.container).toBe(start.name);
 
-    const note = await readNotifications(firefox.driver, (n) => n.message.includes("work.example"));
+    const note = await readNotifications(start.page, (n) => n.message.includes("work.example"));
     expect(note.title).toBe("Configurable Containers");
-    expect(note.message).toContain(`stayed in ${from}`);
+    expect(note.message).toContain(`stayed in ${start.name}`);
     expect(note.message).toContain("instead of Work");
   });
 });

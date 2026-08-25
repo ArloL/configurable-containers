@@ -17,9 +17,9 @@ describe("scripts overlay (real Firefox, CC + probe)", () => {
   });
 
   async function navFreshTab(url: string) {
-    await firefox.driver.switchTo().newWindow("tab");
+    const tab = await firefox.browser.newPage();
     try {
-      await firefox.driver.get(url);
+      await tab.goto(url);
     } catch {
       // CC reopened the tab away — expected.
     }
@@ -29,18 +29,19 @@ describe("scripts overlay (real Firefox, CC + probe)", () => {
     const url = `http://work.example:${serverPort}/`;
     await navFreshTab(url);
 
-    // The routed Work tab (awaitContainerTab leaves the driver focused on it).
-    const { name: containerName } = await awaitContainerTab(firefox.driver, url);
+    // The routed Work tab, named rather than assumed: every read below says which
+    // page it is reading.
+    const { page, name: containerName } = await awaitContainerTab(firefox.browser, url);
     expect(containerName).toBe("Work");
 
     // The cookie overlay (already shipped) still seeds alongside the new script overlay.
-    expect(await readCookieNamesHere(firefox.driver)).toContain("seed");
+    expect(await readCookieNamesHere(page)).toContain("seed");
 
     // F12 timing: the page's own first script saw cc_script ALREADY set — proving CC's
     // document_start content script ran before the page's <script>s.
-    expect(await readScriptAtStart(firefox.driver)).toBe("1");
+    expect(await readScriptAtStart(page)).toBe("1");
 
     // The script's effect is visible in localStorage (the Work container's partition).
-    expect(await readLocalStorage(firefox.driver, "cc_script")).toBe("1");
+    expect(await readLocalStorage(page, "cc_script")).toBe("1");
   });
 });

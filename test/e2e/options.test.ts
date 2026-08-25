@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { By } from "selenium-webdriver";
 import {
-  launch, awaitContainerTab, openExtensionPage, switchToUrl, ccExtensionUrl, listTabs,
-  readContainerName, awaitElement, type Session,
+  launch, navigateToContainerTab, openExtensionPage, ccExtensionUrl, listTabs, type Session,
 } from "../../harness/firefox";
+import type { Page } from "../../harness/browser/index";
+import "../../harness/browser/matchers";
 
 const OPTIONS_URL = ccExtensionUrl("options.html");
 
@@ -59,19 +59,14 @@ describe("options page (real Firefox, CC + probe)", () => {
     // has saved a config of its own, work.example may be unmatched — and a reopen CANCELS
     // the navigation of a tab that is already on a page, which never returns to WebDriver.
     // That reads as the case timing out with no assertion having run.
-    async function parkOnProbePage(tag: string) {
+    async function parkOnProbePage(tag: string): Promise<Page> {
       const url = `http://work.example:${serverPort}/?cb=${tag}-${Date.now()}`;
-      await firefox.driver.switchTo().newWindow("tab");
-      try {
-        await firefox.driver.get(url);
-      } catch {
-        // Reopened into a container, tearing this tab down — expected.
-      }
-      await awaitContainerTab(firefox.driver, url);
+      return (await navigateToContainerTab(firefox.browser, url)).page;
     }
 
-    // The page fills #cc-config from `storage.local` AFTER it renders, and switchToUrl
-    // returns on the url alone — so the editor is reachable a beat before it is populated.
+    // The page fills #cc-config from `storage.local` AFTER it renders, and a tab is
+    // reachable by url before its document exists — so the editor is reachable a beat
+    // before it is populated, and a beat before that it is not there at all.
     // Measured on 140 ESR: one first read in twelve came back empty, hydrating 13ms later.
     // It is not a slow machine's problem either. `getAttribute` used to absorb the gap by
     // accident, being a script Selenium injects rather than a protocol command, and the
@@ -80,18 +75,14 @@ describe("options page (real Firefox, CC + probe)", () => {
     // So every case waits for the text before touching the editor, typeConfig included:
     // an async fill landing after clear() + sendKeys() would overwrite the config just
     // typed, and that failure would read as the editor ignoring input.
-    async function openEditor(tag: string) {
-      await parkOnProbePage(tag);
-      await openExtensionPage(firefox.driver, OPTIONS_URL);
-      await switchToUrl(firefox.driver, OPTIONS_URL);
-      // The url commits before the document exists, so this waits for the editor to BE
-      // there before waiting for it to be filled. Two separate windows, both real.
-      await awaitElement(firefox.driver, "cc-config");
-      await firefox.driver.wait(
-        async () => (await firefox.driver.findElement(By.id("cc-config")).getProperty("value")) !== "",
-        10_000,
-        "the options page never hydrated #cc-config from storage",
-      );
+    async function openEditor(tag: string): Promise<Page> {
+      const relay = await parkOnProbePage(tag);
+      await openExtensionPage(relay, OPTIONS_URL);
+      const editor = await firefox.browser.pageAt(OPTIONS_URL);
+      // The url commits before the document exists, and the document renders before the
+      // fill lands. Two windows, both real — and both are now waits rather than races.
+      await expect(editor.locator("#cc-config")).not.toHaveValue("", { timeout: 10_000 });
+      return editor;
     }
 
     // Clear and TYPE, rather than assigning .value and dispatching a synthetic `input`:
@@ -100,35 +91,29 @@ describe("options page (real Firefox, CC + probe)", () => {
     // Element Clear and Element Send Keys are protocol commands rather than injected
     // script, and they fire the real `input` the editor validates on — which assigning
     // .value alone never did either, hence the dispatch this replaces.
-    async function typeConfig(text: string) {
-      const field = firefox.driver.findElement(By.id("cc-config"));
-      await field.clear();
-      await field.sendKeys(text);
+    async function typeConfig(editor: Page, text: string) {
+      await editor.locator("#cc-config").fill(text);
     }
 
     it("shows the seeded config on first run", async () => {
-      await openEditor("seed");
-      // getProperty, not getAttribute: a textarea's text is a property, and Selenium
-      // implements getAttribute as an injected script this page will not run. Safe to read
-      // once here — openEditor has already waited for the fill.
-      const value = await firefox.driver.findElement(By.id("cc-config")).getProperty("value");
+      const editor = await openEditor("seed");
       // The bundled test config was written to storage at first run.
+      const value = await editor.locator("#cc-config").inputValue();
       expect(value).toContain("work.example");
       expect(value).toContain("redirect.example");
     });
 
     it("refuses to save a config that does not parse", async () => {
-      await openEditor("invalid");
-      await typeConfig("rules:\n  - match: 123\n    open: Nope\n");
+      const editor = await openEditor("invalid");
+      await typeConfig(editor, "rules:\n  - match: 123\n    open: Nope\n");
 
-      const error = await firefox.driver.findElement(By.id("cc-error")).getText();
-      expect(error).not.toBe("");
-      expect(await firefox.driver.findElement(By.id("cc-save")).isEnabled()).toBe(false);
+      await expect(editor.locator("#cc-error")).not.toHaveText("");
+      expect(await editor.locator("#cc-save").isEnabled()).toBe(false);
 
       // …and recovers when the text becomes valid again.
-      await typeConfig(EDITED_CONFIG);
-      expect(await firefox.driver.findElement(By.id("cc-error")).getText()).toBe("");
-      expect(await firefox.driver.findElement(By.id("cc-save")).isEnabled()).toBe(true);
+      await typeConfig(editor, EDITED_CONFIG);
+      await expect(editor.locator("#cc-error")).toHaveText("");
+      await expect(editor.locator("#cc-save")).toBeEnabled();
     });
 
     it("routes by the saved config once the editor reports it applied", async () => {
@@ -138,90 +123,60 @@ describe("options page (real Firefox, CC + probe)", () => {
       // reported success. That was the only case the ESR leg could not observe, and the
       // whole reason a save now applies its config in place.
 
-      await openEditor("save");
-      await typeConfig(EDITED_CONFIG);
-      await firefox.driver.findElement(By.id("cc-save")).click();
+      const editor = await openEditor("save");
+      await typeConfig(editor, EDITED_CONFIG);
+      await editor.locator("#cc-save").click();
 
       // The status is written when the background answers, so this is a real
       // synchronisation point rather than a guess at how long a restart takes. It is also
       // the assertion the old path could not make: "Saved" used to be printed before
       // anything had been applied.
-      await firefox.driver.wait(
-        async () => (await firefox.driver.findElement(By.id("cc-status")).getText()) === "Saved",
-        10_000,
-        "the editor never reported the config applied",
-      );
-
-      // This page survives its own save now; get off it before driving navigations.
-      const handles = await firefox.driver.getAllWindowHandles();
-      await firefox.driver.switchTo().window(handles[0]!);
+      await expect(editor.locator("#cc-status")).toHaveText("Saved", { timeout: 10_000 });
 
       // nomatch.example matched no rule before this edit; it must now land in Editor.
-      //
       // Still polled: the status says the config is live, and what is asserted below is the
-      // routing that follows from it, one navigation later.
-      //
-      // Each attempt is a FRESH tab: CC keeps a tab that is already on a page and only
-      // cancels its navigation, and a cancelled navigation never returns to the driver.
+      // routing that follows from it, one navigation later. Each attempt is a FRESH tab,
+      // which navigateToContainerTab guarantees.
       const deadline = Date.now() + 20_000;
       let container = "";
-      while (Date.now() < deadline) {
+      while (Date.now() < deadline && container !== "Editor") {
         const url = `http://nomatch.example:${serverPort}/?cb=edited-${Date.now()}`;
-        await firefox.driver.switchTo().newWindow("tab");
-        try {
-          await firefox.driver.get(url);
-        } catch {
-          // CC reopens the blank tab into Editor, tearing this one down — expected.
-        }
-        await awaitContainerTab(firefox.driver, url);
-        container = await readContainerName(firefox.driver);
-        if (container === "Editor") break;
-        await firefox.driver.sleep(500);
+        container = (await navigateToContainerTab(firefox.browser, url)).name;
       }
       expect(container, "the saved config never took effect").toBe("Editor");
     });
 
     it("stamps the version a saved config earns", async () => {
-      await openEditor("stamp");
-      await typeConfig(PATTERN_CONFIG);
-      await firefox.driver.findElement(By.id("cc-save")).click();
-      await firefox.driver.wait(
-        async () => (await firefox.driver.findElement(By.id("cc-status")).getText()) === "Saved",
-        10_000,
-        "the editor never reported the config applied",
-      );
+      const editor = await openEditor("stamp");
+      await typeConfig(editor, PATTERN_CONFIG);
+      await editor.locator("#cc-save").click();
+      await expect(editor.locator("#cc-status")).toHaveText("Saved", { timeout: 10_000 });
 
       // Back in the editor, because the stored text and the text on screen must be the
       // same text — the line is derived, and a user who never learns the number still gets
       // the benefit of it on their other machines.
-      const value = await firefox.driver.findElement(By.id("cc-config")).getProperty("value");
-      expect(value).toContain("version: 2");
+      await expect(editor.locator("#cc-config")).toHaveValue(/version: 2/);
     });
 
     it("edits and saves a config written by a newer build without losing what it cannot read", async () => {
-      await openEditor("future");
-      await typeConfig(FUTURE_CONFIG);
+      const editor = await openEditor("future");
+      await typeConfig(editor, FUTURE_CONFIG);
 
       // Not an error: the whole point is that this build keeps running a config it only
       // partly understands, and keeps letting this machine edit and re-publish it.
-      expect(await firefox.driver.findElement(By.id("cc-error")).getText()).toBe("");
-      expect(await firefox.driver.findElement(By.id("cc-save")).isEnabled()).toBe(true);
-      const warnings = await firefox.driver.findElement(By.id("cc-warnings")).getText();
-      expect(warnings).toContain("sandbox");
+      await expect(editor.locator("#cc-error")).toHaveText("");
+      await expect(editor.locator("#cc-save")).toBeEnabled();
+      await expect(editor.locator("#cc-warnings")).toContainText("sandbox");
 
-      await firefox.driver.findElement(By.id("cc-save")).click();
-      await firefox.driver.wait(
-        async () => (await firefox.driver.findElement(By.id("cc-status")).getText()) === "Saved",
-        10_000,
-        "the editor never reported the config applied",
-      );
+      await editor.locator("#cc-save").click();
+      await expect(editor.locator("#cc-status")).toHaveText("Saved", { timeout: 10_000 });
 
       // The marker survives the save. Restamping here would compute a version from the keys
       // THIS build knows, strip the line, and disarm leniency on every other older machine
       // while the key it was hiding sat right there in the text.
-      const value = await firefox.driver.findElement(By.id("cc-config")).getProperty("value");
-      expect(value).toContain("version: 99");
-      expect(value).toContain("sandbox: true");
+      const saved = editor.locator("#cc-config");
+      await expect(saved).toHaveValue(/version: 99/);
+      await expect(saved).toHaveValue(/sandbox: true/);
     });
   });
 
@@ -242,29 +197,19 @@ describe("options page (real Firefox, CC + probe)", () => {
       // Every http URL is unmatched under the empty config, so this tab is reopened
       // into a throwaway; that is also what parks us on a probe-reported page.
       const url = `http://work.example:${serverPort}/?cb=broken-${Date.now()}`;
-      try {
-        await firefox.driver.get(url);
-      } catch {
-        // Reopened into a tmp container — expected.
-      }
-      await awaitContainerTab(firefox.driver, url);
-      expect(await readContainerName(firefox.driver)).toMatch(/^tmp/);
+      const relay = await navigateToContainerTab(firefox.browser, url);
+      expect(relay.name).toMatch(/^tmp/);
 
       // CC called openOptionsPage() at startup, so the editor is already open.
-      const tabs = await listTabs(firefox.driver);
+      const tabs = await listTabs(relay.page);
       expect(tabs.some((tab) => tab.url === OPTIONS_URL)).toBe(true);
 
-      // And it shows the parse error rather than a blank page. Polled for the same reason
-      // openEditor waits: the message is written by the validate() that follows the page's
-      // async fill, so reading once can catch the page a beat early — and an empty #cc-error
-      // is also what a genuinely broken page would show.
-      await switchToUrl(firefox.driver, OPTIONS_URL);
-      await awaitElement(firefox.driver, "cc-error");
-      await firefox.driver.wait(
-        async () => (await firefox.driver.findElement(By.id("cc-error")).getText()) !== "",
-        10_000,
-        "the editor never reported the seed's parse error",
-      );
+      // And it shows the parse error rather than a blank page. The assertion is what
+      // waits: the message is written by the validate() that follows the page's async
+      // fill, so reading once can catch the page a beat early — and an empty #cc-error is
+      // also what a genuinely broken page would show.
+      const editor = await firefox.browser.pageAt(OPTIONS_URL);
+      await expect(editor.locator("#cc-error")).not.toHaveText("", { timeout: 10_000 });
     });
   });
 });

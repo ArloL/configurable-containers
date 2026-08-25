@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import type { Page } from "../../harness/browser/index";
 import {
-  launch, listTabs, navigateTab, openRealNewTab, awaitContainerTab, type ProbeTab, type Session,
+  launch, listTabs, navigateTab, openRealNewTab, awaitContainerTab, awaitTab,
+  navigateToContainerTab, type ProbeTab, type Session,
 } from "../../harness/firefox";
 
 // These tests must NOT reach auto-temp through an http navigation. Any unmatched
@@ -11,6 +13,9 @@ import {
 describe("auto-temp (real Firefox, CC + probe)", () => {
   let firefox: Session;
   let serverPort: string;
+  // The page every probe command is asked through. A reply is written into the relaying
+  // document, so it must be a page nothing here navigates.
+  let relay: Page;
 
   beforeAll(async () => {
     firefox = await launch({ extensions: ["probe", "cc"] });
@@ -31,27 +36,23 @@ describe("auto-temp (real Firefox, CC + probe)", () => {
     } catch {
       // First visit reopens the tab into Work, tearing this one down — expected.
     }
-    await awaitContainerTab(firefox.driver, url);
+    relay = (await awaitContainerTab(firefox.browser, url)).page;
   }
 
-  // Poll until the new-tab page tab reports a container, so we don't race the
+  // Wait until the new-tab page tab reports a container, so we don't race the
   // create/remove pair auto-temp performs.
-  async function awaitNewTabPageTab(timeoutMs = 10_000): Promise<ProbeTab> {
-    const deadline = Date.now() + timeoutMs;
-    let last: ProbeTab[] = [];
-    while (Date.now() < deadline) {
-      last = await listTabs(firefox.driver);
-      const hit = last.find((tab) => tab.url === "about:newtab" && tab.cookieStoreId !== "firefox-default");
-      if (hit) return hit;
-      await firefox.driver.sleep(300);
-    }
-    throw new Error(`no containerized about:newtab tab; saw ${JSON.stringify(last)}`);
+  function awaitNewTabPageTab(timeoutMs = 10_000): Promise<ProbeTab> {
+    return awaitTab(
+      relay,
+      (tab) => tab.url === "about:newtab" && tab.cookieStoreId !== "firefox-default",
+      timeoutMs,
+    );
   }
 
   it("containerizes a real new tab into a temporary container, before any navigation", async () => {
     await parkOnProbePage("one");
 
-    const created = await openRealNewTab(firefox.driver);
+    const created = await openRealNewTab(relay);
     // `tabs.create({})` answers with a snapshot taken before the new-tab page's url
     // commits. Firefox 154 has already put "about:newtab" in it; 140 ESR still says
     // "about:blank". That lag is not incidental to this case — it is why auto-temp
@@ -69,7 +70,7 @@ describe("auto-temp (real Firefox, CC + probe)", () => {
     expect(tab.container).toMatch(/^tmp/);
 
     // The original default-container tab is gone, not merely duplicated.
-    const tabs = await listTabs(firefox.driver);
+    const tabs = await listTabs(relay);
     expect(tabs.find((tab) => tab.id === created.id)).toBeUndefined();
   });
 
@@ -77,19 +78,14 @@ describe("auto-temp (real Firefox, CC + probe)", () => {
     await parkOnProbePage("two");
     const first = await awaitNewTabPageTab();
 
-    await openRealNewTab(firefox.driver);
-    const deadline = Date.now() + 10_000;
-    let second: ProbeTab | undefined;
-    while (Date.now() < deadline && !second) {
-      second = (await listTabs(firefox.driver)).find(
-        (t) => t.url === "about:newtab" && t.container.startsWith("tmp") && t.id !== first.id,
-      );
-      if (!second) await firefox.driver.sleep(300);
-    }
-
-    expect(second).toBeDefined();
-    expect(second!.container).toMatch(/^tmp/);
-    expect(second!.cookieStoreId).not.toBe(first.cookieStoreId);
+    await openRealNewTab(relay);
+    const second = await awaitTab(
+      relay,
+      (t) => t.url === "about:newtab" && t.container.startsWith("tmp") && t.id !== first.id,
+      10_000,
+    );
+    expect(second.container).toMatch(/^tmp/);
+    expect(second.cookieStoreId).not.toBe(first.cookieStoreId);
   });
 
   // The manual-testing flow: get a tmp tab, type a URL, expect to still be in it.
@@ -98,17 +94,11 @@ describe("auto-temp (real Firefox, CC + probe)", () => {
     const before = await awaitNewTabPageTab();
 
     const url = `http://nomatch.example:${serverPort}/?typed=${Date.now()}`;
-    await navigateTab(firefox.driver, before.id, url);
+    await navigateTab(relay, before.id, url);
 
-    const deadline = Date.now() + 10_000;
-    let landed: ProbeTab | undefined;
-    while (Date.now() < deadline && !landed) {
-      landed = (await listTabs(firefox.driver)).find((tab) => tab.url === url);
-      if (!landed) await firefox.driver.sleep(300);
-    }
-    expect(landed, "navigated tab never appeared").toBeDefined();
+    const landed = await awaitTab(relay, (tab) => tab.url === url, 10_000);
     // Not merely "some tmp" — reopening into a fresh tmp2 was the bug.
-    expect(landed!.container).toBe(before.container);
+    expect(landed.container).toBe(before.container);
   });
 
   it("routes a matched host opened from an auto-temp tab to its permanent container", async () => {
@@ -116,12 +106,7 @@ describe("auto-temp (real Firefox, CC + probe)", () => {
     await awaitNewTabPageTab(); // an auto-temp tab exists
 
     const url = `http://work.example:${serverPort}/?from=autotemp-${Date.now()}`;
-    try {
-      await firefox.driver.get(url);
-    } catch {
-      // CC may reopen the tab away — expected.
-    }
-    const { name: containerName } = await awaitContainerTab(firefox.driver, url);
+    const { name: containerName } = await navigateToContainerTab(firefox.browser, url);
     expect(containerName).toBe("Work");
   });
 });
@@ -143,28 +128,18 @@ describe("auto-temp startup sweep (real Firefox)", () => {
     // Observe from a tab of our own: navigating an existing handle would consume the
     // very tab the sweep containerized. newWindow makes an about:blank tab, which
     // auto-temp ignores by design, so this adds no tmp container of its own.
+    // The sweep discarded the tab the driver started on. Nothing has to be re-anchored
+    // for it: newPage() opens a window of its own, and every page acts through its own
+    // handle rather than through whichever one the driver was left on.
     const url = `http://work.example:${new URL(firefox.serverUrl).port}/?cb=sweep-${Date.now()}`;
-    // The sweep discarded the tab the driver started on, leaving it with no context —
-    // re-anchor on a surviving handle before opening anything.
-    const handles = await firefox.driver.getAllWindowHandles();
-    await firefox.driver.switchTo().window(handles[handles.length - 1]!);
-    await firefox.driver.switchTo().newWindow("tab");
-    try {
-      await firefox.driver.get(url);
-    } catch {
-      // CC reopens it into Work, tearing this tab down — expected.
-    }
-    await awaitContainerTab(firefox.driver, url);
+    const observer = await navigateToContainerTab(firefox.browser, url);
 
-    const deadline = Date.now() + 10_000;
-    let swept: ProbeTab | undefined;
-    let last: ProbeTab[] = [];
-    while (Date.now() < deadline && !swept) {
-      last = await listTabs(firefox.driver);
-      swept = last.find((tab) => tab.url === "about:newtab" && tab.container.startsWith("tmp"));
-      if (!swept) await firefox.driver.sleep(300);
-    }
-    expect(swept, `saw ${JSON.stringify(last)}`).toBeDefined();
+    await awaitTab(
+      observer.page,
+      (tab) => tab.url === "about:newtab" && tab.container.startsWith("tmp"),
+      10_000,
+    );
+    const last = await listTabs(observer.page);
     expect(last.some((tab) => tab.url === "about:newtab" && tab.cookieStoreId === "firefox-default")).toBe(false);
   });
 });

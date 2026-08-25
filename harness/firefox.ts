@@ -1,6 +1,7 @@
-import { Builder, By, type WebDriver, type WebElement } from "selenium-webdriver";
+import { Builder, type WebDriver } from "selenium-webdriver";
 import firefox from "selenium-webdriver/firefox.js";
-import { BrowserSession } from "./browser/index";
+import { BrowserSession, type Page } from "./browser/index";
+import { RETRY, poll } from "./browser/retry";
 import { fileURLToPath } from "node:url";
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -319,31 +320,38 @@ async function quit(driver: WebDriver): Promise<void> {
 
 const QUIT_TIMEOUT_MS = 20_000;
 
-// Poll the CURRENT window's title until the probe has written "CSID:<store>".
-export async function readCookieStoreId(driver: WebDriver, timeoutMs = 5000): Promise<string> {
-  const deadline = Date.now() + timeoutMs;
-  let lastTitle = "";
-  while (Date.now() < deadline) {
-    lastTitle = await driver.getTitle();
-    const m = lastTitle.match(/^CSID:(.+)$/);
-    if (m) return m[1]!;
-    await driver.sleep(100);
-  }
-  throw new Error(`Timed out waiting for probe report; last title: ${JSON.stringify(lastTitle)}`);
+// Everything the probe reports, it reports as an attribute on a page. Reading one means
+// naming WHICH page: these used to read whatever tab the driver happened to be on, which
+// is the hidden current window this layer exists to make explicit.
+async function attribute(page: Page, selector: string, name: string): Promise<string> {
+  return (await page.locator(selector).getAttribute(name)) ?? "";
 }
 
-export async function readContainerName(driver: WebDriver): Promise<string> {
-  return (await driver.executeScript(
-    "return document.documentElement.getAttribute('data-cc-container') || '';"
-  )) as string;
+const commaList = (raw: string): string[] => (raw ? raw.split(",") : []);
+
+// Poll the page's title until the probe has written "CSID:<store>".
+export function readCookieStoreId(page: Page, timeoutMs = 5000): Promise<string> {
+  let lastTitle = "";
+  return poll(
+    {
+      timeout: timeoutMs,
+      what: "a probe title (CSID:…)",
+      diagnose: async () => `  last title: ${JSON.stringify(lastTitle)}`,
+    },
+    async () => {
+      lastTitle = await page.title();
+      return lastTitle.match(/^CSID:(.+)$/)?.[1] ?? RETRY;
+    },
+  );
+}
+
+export function readContainerName(page: Page): Promise<string> {
+  return attribute(page, "html", "data-cc-container");
 }
 
 // A SNAPSHOT, written when the document loaded — see listContainers for the live answer.
-export async function readContainerList(driver: WebDriver): Promise<string[]> {
-  const raw = (await driver.executeScript(
-    "return document.documentElement.getAttribute('data-cc-containers') || '';"
-  )) as string;
-  return raw ? raw.split(",") : [];
+export async function readContainerList(page: Page): Promise<string[]> {
+  return commaList(await attribute(page, "html", "data-cc-containers"));
 }
 
 // Block until the probe has reported on the document the driver is CURRENTLY on.
@@ -357,61 +365,49 @@ export async function readContainerList(driver: WebDriver): Promise<string[]> {
 // `awaitContainerTab` covers almost every case free, since the probe writes the title in the
 // same injected script. This is for the case with no reopen to wait for: a same-site
 // navigation CC leaves alone.
-export async function awaitProbeReport(driver: WebDriver, timeoutMs = 10_000): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const reported = await driver.executeScript(
-      "return document.documentElement.hasAttribute('data-cc-cookies-here');"
-    );
-    if (reported === true) return;
-    await driver.sleep(100);
-  }
-  throw new Error(`probe never reported on ${await driver.getCurrentUrl()}`);
+export async function awaitProbeReport(page: Page, timeoutMs = 10_000): Promise<void> {
+  await poll(
+    { timeout: timeoutMs, what: "a probe report", diagnose: () => page.diagnose() },
+    async () => {
+      const reported = await page.locator("html").getAttribute("data-cc-cookies-here");
+      return reported === null ? RETRY : undefined;
+    },
+  );
 }
 
 // The Cookie header the server received (F12 wire side), reflected into the body.
-export async function readSeenCookie(driver: WebDriver): Promise<string> {
-  return (await driver.executeScript(
-    "return document.body.getAttribute('data-seen-cookie') || '';"
-  )) as string;
+export function readSeenCookie(page: Page): Promise<string> {
+  return attribute(page, "body", "data-seen-cookie");
 }
 
 // Cookie names visible in the tab's OWN store for its URL (probe getAll).
-export async function readCookieNamesHere(driver: WebDriver): Promise<string[]> {
-  const raw = (await driver.executeScript(
-    "return document.documentElement.getAttribute('data-cc-cookies-here') || '';"
-  )) as string;
-  return raw ? raw.split(",") : [];
+export async function readCookieNamesHere(page: Page): Promise<string[]> {
+  return commaList(await attribute(page, "html", "data-cc-cookies-here"));
 }
 
 // Cookie names visible in the DEFAULT store for the tab's URL: the F11 counter-check.
-export async function readCookieNamesDefault(driver: WebDriver): Promise<string[]> {
-  const raw = (await driver.executeScript(
-    "return document.documentElement.getAttribute('data-cc-cookies-default') || '';"
-  )) as string;
-  return raw ? raw.split(",") : [];
+export async function readCookieNamesDefault(page: Page): Promise<string[]> {
+  return commaList(await attribute(page, "html", "data-cc-cookies-default"));
 }
 
 // The localStorage.cc_script value the page's first script saw: "1" iff CC's document_start
 // script ran before the page's own (F12 timing proof).
-export async function readScriptAtStart(driver: WebDriver): Promise<string> {
-  return (await driver.executeScript(
-    "return document.documentElement.getAttribute('data-cc-script-at-start') || '';"
-  )) as string;
+export function readScriptAtStart(page: Page): Promise<string> {
+  return attribute(page, "html", "data-cc-script-at-start");
 }
 
 // The POST body the server saw, empty for a GET. Proves an assertion arrived intact rather
 // than being lost to a reopen's GET (F9).
-export async function readSeenPost(driver: WebDriver): Promise<string> {
-  return (await driver.executeScript(
-    "return document.body.getAttribute('data-seen-post') || '';"
-  )) as string;
+export function readSeenPost(page: Page): Promise<string> {
+  return attribute(page, "body", "data-seen-post");
 }
 
-// Generic localStorage read in the current tab — containers partition localStorage, so this
-// reads that tab's own partition.
-export async function readLocalStorage(driver: WebDriver, key: string): Promise<string | null> {
-  return (await driver.executeScript(
+// Generic localStorage read in a tab — containers partition localStorage, so this reads that
+// tab's own partition. The one reader still on an injected script: localStorage has no
+// protocol command, and every caller is an http(s) page where scripts are allowed.
+export async function readLocalStorage(page: Page, key: string): Promise<string | null> {
+  await page.switchHere();
+  return (await page.driver.executeScript(
     `return localStorage.getItem(${JSON.stringify(key)});`
   )) as string | null;
 }
@@ -440,32 +436,35 @@ export interface ProbeTab {
 // `nav` of this very tab) loses its own answer: the poll then reads a fresh document with no
 // attribute and gives up as a timeout. `navigateTab` carries the guard.
 export async function probeCommand<T>(
-  driver: WebDriver,
+  page: Page,
   cmd: string,
   params: Record<string, unknown> = {},
   timeoutMs = 8000,
 ): Promise<T> {
   const detail = JSON.stringify({ cmd, ...params });
-  await driver.executeScript(
+  await page.switchHere();
+  // The dispatch stays an injected script: firing a CustomEvent has no protocol command,
+  // and the relay only exists on http(s) pages, where scripts are allowed.
+  await page.driver.executeScript(
     "document.documentElement.removeAttribute('data-cc-result');" +
     `document.dispatchEvent(new CustomEvent('cc-probe-cmd', { detail: ${detail} }));`
   );
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const raw = (await driver.executeScript(
-      "return document.documentElement.getAttribute('data-cc-result');"
-    )) as string | null;
-    if (raw) return JSON.parse(raw) as T;
-    await driver.sleep(100);
-  }
-  throw new Error(`probe command ${JSON.stringify(cmd)} timed out after ${timeoutMs}ms`);
+  const raw = await poll<string>(
+    {
+      timeout: timeoutMs,
+      what: `probe command ${JSON.stringify(cmd)}`,
+      diagnose: () => page.diagnose(),
+    },
+    async () => (await page.locator("html").getAttribute("data-cc-result")) ?? RETRY,
+  );
+  return JSON.parse(raw) as T;
 }
 
 // Live from browser.contextualIdentities.query. Watching a container be REMOVED through
 // readContainerList's snapshot would mean navigating a tab on every poll; this asks the
 // browser each time, from a tab the test never touches.
-export function listContainers(driver: WebDriver): Promise<string[]> {
-  return probeCommand(driver, "containers");
+export function listContainers(page: Page): Promise<string[]> {
+  return probeCommand(page, "containers");
 }
 
 export interface ProbeNotification {
@@ -477,33 +476,106 @@ export interface ProbeNotification {
 // load the driver is parked on; a desktop notification is in no DOM, so this relay is the
 // only way L4 can observe one.
 export async function readNotifications(
-  driver: WebDriver,
+  page: Page,
   match: (n: ProbeNotification) => boolean,
   timeoutMs = 15_000,
 ): Promise<ProbeNotification> {
-  const deadline = Date.now() + timeoutMs;
   let seen: ProbeNotification[] = [];
-  while (Date.now() < deadline) {
-    seen = await probeCommand<ProbeNotification[]>(driver, "notifications");
-    const hit = seen.find(match);
-    if (hit) return hit;
-    await driver.sleep(300);
-  }
-  throw new Error(`no matching notification; saw ${JSON.stringify(seen)}`);
+  return poll(
+    {
+      timeout: timeoutMs,
+      what: "a matching notification",
+      diagnose: async () => `  saw ${JSON.stringify(seen)}`,
+      interval: 300,
+    },
+    async () => {
+      seen = await probeCommand<ProbeNotification[]>(page, "notifications");
+      return seen.find(match) ?? RETRY;
+    },
+  );
 }
 
 // A REAL new tab — `browser.tabs.create({})`, what Ctrl/Cmd+T does: about:newtab in the
 // default container. WebDriver's switchTo().newWindow("tab") makes an about:blank tab, which
 // auto-temp ignores by design, and WebDriver cannot navigate to about:newtab either.
-export function openRealNewTab(driver: WebDriver): Promise<{ id: number; url: string; cookieStoreId: string }> {
-  return probeCommand(driver, "newTab");
+export function openRealNewTab(page: Page): Promise<{ id: number; url: string; cookieStoreId: string }> {
+  return probeCommand(page, "newTab");
 }
 
 // Every tab's id/url/cookieStoreId/container name, from browser.tabs.query. Needed because
 // about: pages take no content script, so the probe's usual reporting cannot see a new-tab
 // page's container.
-export function listTabs(driver: WebDriver): Promise<ProbeTab[]> {
-  return probeCommand(driver, "tabs");
+export function listTabs(page: Page): Promise<ProbeTab[]> {
+  return probeCommand(page, "tabs");
+}
+
+// Poll browser.tabs until one matches, asking through `relay` — the page whose document
+// carries the probe's answers. It must be a page nothing is navigating: a reply is written
+// into the relaying document, and a navigation destroys it before the poll can read it.
+export async function awaitTab(
+  relay: Page,
+  match: (tab: ProbeTab) => boolean,
+  timeoutMs = 15_000,
+): Promise<ProbeTab> {
+  let tabs: ProbeTab[] = [];
+  return poll(
+    {
+      timeout: timeoutMs,
+      what: "a matching tab",
+      interval: 300,
+      diagnose: async () =>
+        `  saw ${JSON.stringify(tabs.map((t) => ({ url: t.url, container: t.container })))}`,
+    },
+    async () => {
+      tabs = await listTabs(relay);
+      return tabs.find(match) ?? RETRY;
+    },
+  );
+}
+
+// Poll the LIVE container list (contextualIdentities.query, via `relay`) until it satisfies
+// `holds` — how a test watches a throwaway be reclaimed without navigating anything, since a
+// navigation is exactly what would hurry the disposer along.
+export async function awaitContainers(
+  relay: Page,
+  holds: (names: string[]) => boolean,
+  timeoutMs = 15_000,
+): Promise<string[]> {
+  let names: string[] = [];
+  return poll(
+    {
+      timeout: timeoutMs,
+      what: "the container list to settle",
+      interval: 300,
+      diagnose: async () => `  saw ${JSON.stringify(names)}`,
+    },
+    async () => {
+      names = await listContainers(relay);
+      return holds(names) ? names : RETRY;
+    },
+  );
+}
+
+// Poll browser.tabs until the whole list satisfies `holds` — for the questions awaitTab
+// cannot ask, which are the ones about a tab being GONE.
+export async function awaitTabs(
+  relay: Page,
+  holds: (tabs: ProbeTab[]) => boolean,
+  timeoutMs = 15_000,
+): Promise<ProbeTab[]> {
+  let tabs: ProbeTab[] = [];
+  return poll(
+    {
+      timeout: timeoutMs,
+      what: "the tab list to settle",
+      interval: 300,
+      diagnose: async () => `  saw ${JSON.stringify(tabs.map((t) => t.url))}`,
+    },
+    async () => {
+      tabs = await listTabs(relay);
+      return holds(tabs) ? tabs : RETRY;
+    },
+  );
 }
 
 // Navigate a specific tab by its browser.tabs id — what typing a URL into its address bar
@@ -513,8 +585,8 @@ export function listTabs(driver: WebDriver): Promise<ProbeTab[]> {
 // The tab navigated must NOT be the one the driver is parked on: the reply is written into
 // the relaying document (see probeCommand) and this navigation destroys it. The probe refuses
 // that rather than letting it race — park on another probe-reported page first.
-export async function navigateTab(driver: WebDriver, tabId: number, url: string): Promise<{ ok: boolean }> {
-  const reply = await probeCommand<{ ok: boolean; error?: string }>(driver, "nav", { id: tabId, url });
+export async function navigateTab(page: Page, tabId: number, url: string): Promise<{ ok: boolean }> {
+  const reply = await probeCommand<{ ok: boolean; error?: string }>(page, "nav", { id: tabId, url });
   if (!reply.ok) throw new Error(`navigateTab(${tabId}, ${url}): ${reply.error}`);
   return reply;
 }
@@ -522,19 +594,19 @@ export async function navigateTab(driver: WebDriver, tabId: number, url: string)
 // Open a URL in a NEW tab via the probe, leaving the driver where it is. That matters twice:
 // a navigation CC cancels never returns to WebDriver, so `driver.get` from a committed page
 // hangs until the test times out, and the driver's own tab is often the relay a test needs.
-export function openTab(driver: WebDriver, url: string): Promise<{ id: number; url: string }> {
-  return probeCommand(driver, "open", { url });
+export function openTab(page: Page, url: string): Promise<{ id: number; url: string }> {
+  return probeCommand(page, "open", { url });
 }
 
 // What "View Page Source" does: open `view-source:<url>` in a new tab, in the container of
 // the page it was invoked on. The keystroke is chrome-level and WebDriver refuses the scheme,
 // so the probe is the only route — but the load itself is the browser's, which is the point.
 export function openViewSource(
-  driver: WebDriver,
+  page: Page,
   url: string,
   cookieStoreId: string,
 ): Promise<{ id: number; url: string; cookieStoreId: string }> {
-  return probeCommand(driver, "viewSource", { url, cookieStoreId });
+  return probeCommand(page, "viewSource", { url, cookieStoreId });
 }
 
 // Open a URL in a new tab via the probe. The only way a test reaches a moz-extension:// page:
@@ -559,95 +631,77 @@ export function openViewSource(
 // the chrome-scope reach these cases have no business having — to keep one convenience call
 // working, and it would make the suite depend on a Firefox that permits what a shipped
 // extension's users never will.
-export function openExtensionPage(
-  driver: WebDriver,
-  url: string,
-): Promise<{ id: number; url: string }> {
-  return openTab(driver, url);
+export function openExtensionPage(page: Page, url: string): Promise<{ id: number; url: string }> {
+  return openTab(page, url);
 }
 
 // Switch the driver to the first window handle whose URL starts with `urlPrefix`. Opening a
 // tab does not move the driver, and an extension page is not addressable by navigation, so
 // this is how a test starts operating one.
-// `switchToUrl` answers on the tab's COMMITTED url, which precedes its document — so a read
-// of an extension page immediately afterwards races the parse, and `findElement` reports a
-// document that is not there yet as `NoSuchElementError`. That throw escapes a loop written
-// to poll for an element's TEXT, so the case fails outright instead of polling again. Wait
-// for the element, then read it.
+// Drive a navigation CC may cancel, and answer with the container tab it produced.
 //
-// Built on `findElements`, which answers with an empty list rather than throwing, so the
-// waiting is in one place instead of a catch at every call site.
-export async function awaitElement(
-  driver: WebDriver,
-  id: string,
-  timeoutMs = 10_000,
-): Promise<WebElement> {
-  const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    const found = await driver.findElements(By.id(id));
-    const element = found[0];
-    if (element !== undefined) return element;
-    if (Date.now() >= deadline) {
-      throw new Error(`no #${id} at ${await driver.getCurrentUrl()} within ${timeoutMs}ms`);
-    }
-    await driver.sleep(100);
+// From a FRESH tab every time: a reopen cancels the navigation of a tab that is already on
+// a page, and a cancelled navigation never returns to WebDriver — `goto` then hangs until
+// the case times out with no assertion having run. The throw is the tab being torn down
+// underneath us, which is the success path, not an error.
+export async function navigateToContainerTab(
+  session: BrowserSession,
+  url: string,
+  timeoutMs = 15_000,
+): Promise<{ page: Page; store: string; name: string }> {
+  const tab = await session.newPage();
+  try {
+    await tab.goto(url);
+  } catch {
+    // Reopened into a container, tearing this tab down — expected.
   }
-}
-
-export async function switchToUrl(
-  driver: WebDriver,
-  urlPrefix: string,
-  timeoutMs = 10_000,
-): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  let seen: string[] = [];
-  while (Date.now() < deadline) {
-    seen = [];
-    for (const handle of await driver.getAllWindowHandles()) {
-      try {
-        await driver.switchTo().window(handle);
-        const current = await driver.getCurrentUrl();
-        seen.push(current);
-        if (current.startsWith(urlPrefix)) return;
-      } catch {
-        // Tab vanished mid-poll (CC reopens tear tabs down) — keep looking.
-      }
-    }
-    await driver.sleep(200);
-  }
-  throw new Error(`no window at ${urlPrefix}; saw ${JSON.stringify(seen)}`);
+  return awaitContainerTab(session, url, timeoutMs);
 }
 
 // Poll window handles, without re-navigating them (CC does the reopening), until a tab shows
 // `url` in a non-default container; return its store and reported name.
 export async function awaitContainerTab(
-  driver: WebDriver,
+  session: BrowserSession,
   url: string,
   timeoutMs = 15_000,
-): Promise<{ store: string; name: string }> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    for (const handle of await driver.getAllWindowHandles()) {
-      try {
-        await driver.switchTo().window(handle);
-        const m = (await driver.getTitle()).match(/^CSID:(.+)$/);
-        if (m && /^firefox-container-\d+$/.test(m[1]!) && (await driver.getCurrentUrl()).startsWith(url)) {
-          return { store: m[1]!, name: await readContainerName(driver) };
+): Promise<{ page: Page; store: string; name: string }> {
+  let seen: string[] = [];
+  return poll(
+    {
+      timeout: timeoutMs,
+      what: `a container tab for ${url}`,
+      diagnose: async () => `  saw ${JSON.stringify(seen)}`,
+      interval: 300,
+    },
+    async () => {
+      seen = [];
+      for (const page of await session.pages()) {
+        // A handle may close mid-loop — CC closes one per reopen.
+        try {
+          const title = await page.title();
+          seen.push(`${await page.url()} ${title}`);
+          const store = title.match(/^CSID:(.+)$/)?.[1];
+          if (
+            store !== undefined &&
+            /^firefox-container-\d+$/.test(store) &&
+            (await page.url()).startsWith(url)
+          ) {
+            return { page, store, name: await readContainerName(page) };
+          }
+        } catch {
+          continue;
         }
-      } catch {
-        // A handle may have closed mid-loop; skip it this round.
       }
-    }
-    await driver.sleep(300);
-  }
-  throw new Error(`no container tab for ${url} within ${timeoutMs}ms`);
+      return RETRY;
+    },
+  );
 }
 
 // Navigate every window handle to `url`, triggering a probe report on each, and collect
 // their cookieStoreIds. Retries until a container store appears or the deadline passes, so
 // the probe's own container tab may arrive late.
 export async function collectStoresUntilContainer(
-  driver: WebDriver,
+  session: BrowserSession,
   url: string,
   timeoutMs = 15_000,
 ): Promise<string[]> {
@@ -655,18 +709,16 @@ export async function collectStoresUntilContainer(
   let stores: string[] = [];
   while (Date.now() < deadline) {
     stores = [];
-    const handles = await driver.getAllWindowHandles();
-    for (const handle of handles) {
+    for (const page of await session.pages()) {
       try {
-        await driver.switchTo().window(handle);
-        await driver.get(url);
-        stores.push(await readCookieStoreId(driver, 2000));
+        await page.goto(url);
+        stores.push(await readCookieStoreId(page, 2000));
       } catch {
         // A handle may have closed mid-loop; skip it this round.
       }
     }
     if (stores.some((s) => /^firefox-container-\d+$/.test(s))) return stores;
-    await driver.sleep(500);
+    await new Promise((resolve) => setTimeout(resolve, 500));
   }
   return stores;
 }

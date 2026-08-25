@@ -24,9 +24,9 @@ describe("cookie boundary (real Firefox, CC + probe)", () => {
   // Open a fresh firefox-default tab and navigate it; CC cancels + reopens into a
   // throwaway, tearing down the original tab mid-nav — tolerate that.
   async function navFreshTab(url: string) {
-    await firefox.driver.switchTo().newWindow("tab");
+    const tab = await firefox.browser.newPage();
     try {
-      await firefox.driver.get(url);
+      await tab.goto(url);
     } catch {
       // CC reopened the tab away — expected.
     }
@@ -41,32 +41,33 @@ describe("cookie boundary (real Firefox, CC + probe)", () => {
 
     // GIVEN an unmatched site routed into a throwaway, holding a cookie.
     await navFreshTab(firstThrowawayUrl);
-    const a = await awaitContainerTab(firefox.driver, firstThrowawayUrl);
+    const a = await awaitContainerTab(firefox.browser, firstThrowawayUrl);
     expect(a.name).toMatch(/^tmp/);
+    await a.page.switchHere();
     await firefox.driver.executeScript("document.cookie = 'f11=secret; path=/';");
 
     // Control arm — without it a vacuous "cookie absent" green proves nothing, which
     // is exactly how this suite has shipped false greens before. Same site, so the
     // throwaway is kept (continuity) and the server itself must see the cookie: the
     // boundary is being tested on the wire, not just in document.cookie.
-    await firefox.driver.get(again);
-    expect(await readSeenCookie(firefox.driver)).toContain("f11=secret");
+    await a.page.goto(again);
+    expect(await readSeenCookie(a.page)).toContain("f11=secret");
     // Nothing was reopened here — same site, so CC keeps the tab — which means there is
     // no awaitContainerTab to have waited out the probe's async report. Wait for it
     // explicitly, or an unanswered probe reads as a cookie that is not there.
-    await awaitProbeReport(firefox.driver);
-    expect(await readCookieNamesHere(firefox.driver)).toContain("f11");
+    await awaitProbeReport(a.page);
+    expect(await readCookieNamesHere(a.page)).toContain("f11");
 
     // WHEN the same site is visited afresh, it lands in a DIFFERENT throwaway.
     await navFreshTab(secondThrowawayUrl);
-    const b = await awaitContainerTab(firefox.driver, secondThrowawayUrl);
+    const b = await awaitContainerTab(firefox.browser, secondThrowawayUrl);
     expect(b.name).toMatch(/^tmp/);
     expect(b.store).not.toBe(a.store);
 
     // THEN the cookie did not cross: not on the request, not in this container's jar,
     // and never deposited in the default store on the way through.
-    expect(await readSeenCookie(firefox.driver)).not.toContain("f11");
-    expect(await readCookieNamesHere(firefox.driver)).not.toContain("f11");
-    expect(await readCookieNamesDefault(firefox.driver)).not.toContain("f11");
+    expect(await readSeenCookie(b.page)).not.toContain("f11");
+    expect(await readCookieNamesHere(b.page)).not.toContain("f11");
+    expect(await readCookieNamesDefault(b.page)).not.toContain("f11");
   });
 });

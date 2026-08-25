@@ -1,11 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { By } from "selenium-webdriver";
 import {
   launch,
   awaitContainerTab,
+  awaitTab,
   listTabs,
   navigateTab,
-  type ProbeTab,
   type Session,
 } from "../../harness/firefox";
 
@@ -52,63 +51,45 @@ describe("inherit — a tab whose opener is in another container (real Firefox, 
     await firefox?.close();
   });
 
-  // Poll browser.tabs until one matches. The driver stays parked on the chat tab
-  // throughout — it is the command relay, and nothing here navigates it.
-  async function awaitTab(match: (t: ProbeTab) => boolean, timeoutMs = 15_000): Promise<ProbeTab> {
-    const deadline = Date.now() + timeoutMs;
-    let tabs: ProbeTab[] = [];
-    while (Date.now() < deadline) {
-      tabs = await listTabs(firefox.driver);
-      const hit = tabs.find(match);
-      if (hit) return hit;
-      await firefox.driver.sleep(300);
-    }
-    throw new Error(
-      `no matching tab within ${timeoutMs}ms; saw ${JSON.stringify(
-        tabs.map((t) => ({ url: t.url, container: t.container })),
-      )}`,
-    );
-  }
-
   it("stays in the container it is in, instead of bouncing back to the opener's", async () => {
     const portalUrl = `http://portal.example:${serverPort}/`;
     const chatUrl = `http://chat.example:${serverPort}/?link=${encodeURIComponent(portalUrl)}`;
     const ssoUrl = `http://sso.example:${serverPort}/login`;
 
-    await firefox.driver.switchTo().newWindow("tab");
+    const tab = await firefox.browser.newPage();
     try {
-      await firefox.driver.get(chatUrl);
+      await tab.goto(chatUrl);
     } catch {
       // CC reopened the blank tab away — expected.
     }
-    const chat = await awaitContainerTab(firefox.driver, chatUrl);
+    const chat = await awaitContainerTab(firefox.browser, chatUrl);
     expect(chat.name).toBe("Chat");
-    const chatTab = (await listTabs(firefox.driver)).find((t) => t.url === chatUrl)!;
+    const chatTab = (await listTabs(chat.page)).find((t) => t.url === chatUrl)!;
 
     // A real target=_blank click, the way the report starts: Firefox opens a pre-commit
     // tab that inherits Chat and points back at this one, and CC reopens it into Portal
     // — carrying the opener across, because a reopened tab keeps the lineage of the tab
     // it replaced.
-    await firefox.driver.findElement(By.id("go")).click();
-    const portalTab = await awaitTab((t) => t.url.startsWith(portalUrl));
+    await chat.page.locator("#go").click();
+    const portalTab = await awaitTab(chat.page, (t) => t.url.startsWith(portalUrl));
     expect(portalTab.container).toBe("Portal");
     // The precondition, measured rather than assumed: the tab really is in Portal while
     // still pointing at a tab in Chat. Everything below is only a test while this holds.
     expect(portalTab.openerTabId).toBe(chatTab.id);
 
-    const tabIdsBefore = (await listTabs(firefox.driver)).map((t) => t.id).sort((a, b) => a - b);
+    const tabIdsBefore = (await listTabs(chat.page)).map((t) => t.id).sort((a, b) => a - b);
 
     // The SSO hop, from the portal page the way a login redirect does — by tab id,
     // since the driver must stay on the chat tab to keep relaying.
-    await navigateTab(firefox.driver, portalTab.id, ssoUrl);
+    await navigateTab(chat.page, portalTab.id, ssoUrl);
 
     // Whichever way CC decided, some tab ends up showing the SSO url: this one, having
     // been left alone, or a new one opened in Chat by a reopen the opener asked for.
-    const landed = await awaitTab((t) => t.url.startsWith(ssoUrl));
+    const landed = await awaitTab(chat.page, (t) => t.url.startsWith(ssoUrl));
     expect(landed.id).toBe(portalTab.id);
     expect(landed.container).toBe("Portal");
     // And the session it belongs to is the only one open: no tab was bought for it, in
     // Chat or anywhere else.
-    expect((await listTabs(firefox.driver)).map((t) => t.id).sort((a, b) => a - b)).toEqual(tabIdsBefore);
+    expect((await listTabs(chat.page)).map((t) => t.id).sort((a, b) => a - b)).toEqual(tabIdsBefore);
   }, 60_000);
 });

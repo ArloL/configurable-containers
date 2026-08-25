@@ -18,12 +18,13 @@ describe("harness plumbing", () => {
   });
 
   it("reads the default cookieStoreId end-to-end", async () => {
-    await firefox.driver.get(firefox.serverUrl);
-    expect(await readCookieStoreId(firefox.driver)).toBe("firefox-default");
+    const page = await firefox.browser.newPage();
+    await page.goto(firefox.serverUrl);
+    expect(await readCookieStoreId(page)).toBe("firefox-default");
   });
 
   it("observes a non-default container store", async () => {
-    const stores = await collectStoresUntilContainer(firefox.driver, firefox.serverUrl);
+    const stores = await collectStoresUntilContainer(firefox.browser, firefox.serverUrl);
     expect(stores).toContain("firefox-default");
     expect(stores.some((s) => /^firefox-container-\d+$/.test(s))).toBe(true);
   });
