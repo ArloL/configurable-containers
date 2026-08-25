@@ -68,14 +68,28 @@ expect.extend({
     );
   },
 
-  async toHaveValue(locator: Locator, expected: string, opts?: WaitOpts) {
+  // string | RegExp, as Playwright's toHaveValue is. A textarea's content is its VALUE and
+  // not its text, so this — not toContainText — is what asks about one.
+  async toHaveValue(locator: Locator, expected: string | RegExp, opts?: WaitOpts) {
     return settle(
       locator,
       "toHaveValue",
       opts,
       () => locator.inputValue({ timeout: 0 }),
-      (seen) => seen === expected,
-      (seen) => `expected ${JSON.stringify(expected)}, last saw ${JSON.stringify(seen)}`,
+      (seen) => (expected instanceof RegExp ? expected.test(seen) : seen === expected),
+      (seen) => `expected ${String(expected)}, last saw ${JSON.stringify(seen)}`,
+    );
+  },
+
+  async toHaveAttribute(locator: Locator, name: string, expected: string | RegExp, opts?: WaitOpts) {
+    return settle(
+      locator,
+      `toHaveAttribute(${name})`,
+      opts,
+      () => locator.getAttribute(name, { timeout: 0 }),
+      (seen) =>
+        seen !== null && (expected instanceof RegExp ? expected.test(seen) : seen === expected),
+      (seen) => `expected ${String(expected)}, last saw ${JSON.stringify(seen)}`,
     );
   },
 
@@ -120,7 +134,8 @@ declare module "vitest" {
   interface Matchers<T = any> {
     toHaveText(expected: string | RegExp, opts?: WaitOpts): Promise<T>;
     toContainText(expected: string, opts?: WaitOpts): Promise<T>;
-    toHaveValue(expected: string, opts?: WaitOpts): Promise<T>;
+    toHaveValue(expected: string | RegExp, opts?: WaitOpts): Promise<T>;
+    toHaveAttribute(name: string, expected: string | RegExp, opts?: WaitOpts): Promise<T>;
     toHaveCount(expected: number, opts?: WaitOpts): Promise<T>;
     toBeVisible(opts?: WaitOpts): Promise<T>;
     toBeEnabled(opts?: WaitOpts): Promise<T>;

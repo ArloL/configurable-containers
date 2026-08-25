@@ -170,6 +170,20 @@ describe("Locator", () => {
     ).resolves.toBeUndefined();
   });
 
+  it("narrows to the nth match, and hands out one locator per match", async () => {
+    const { locator } = locatorOn({
+      elements: () => [
+        anElement({ getText: async () => "Personal" }),
+        anElement({ getText: async () => "Work" }),
+      ],
+    });
+    expect(await locator.nth(1).innerText()).toBe("Work");
+    expect(await Promise.all((await locator.all()).map((l) => l.innerText()))).toEqual([
+      "Personal",
+      "Work",
+    ]);
+  });
+
   it("names the selector and the page when it gives up", async () => {
     const { locator } = locatorOn({ elements: () => [] });
     await expect(locator.innerText()).rejects.toThrow(/innerText #cc-save.*ids=\[cc-config\]/s);

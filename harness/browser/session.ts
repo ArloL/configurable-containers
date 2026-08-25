@@ -52,6 +52,11 @@ export class BrowserSession {
   }
 
   async newPage(): Promise<Page> {
+    // The driver may have no current window at all: the extension can discard the tab it
+    // was left on, and `newWindow` still has to run in SOME context. Anchor on a survivor
+    // first, so opening a tab does not depend on where the driver happened to be.
+    const [survivor] = await this.driver.getAllWindowHandles();
+    if (survivor !== undefined) await this.driver.switchTo().window(survivor);
     await this.driver.switchTo().newWindow("tab");
     return this.page(await this.driver.getWindowHandle());
   }
