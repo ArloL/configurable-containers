@@ -57,7 +57,7 @@ Copied from the spec and `CLAUDE.md`. Every task's requirements implicitly inclu
 **Interfaces:**
 - Produces: `browser.registeredScripts` reflects live registrations only.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `test/engine/mock-port.test.ts`:
 
@@ -79,12 +79,12 @@ it("drops a content script from the live list when it is unregistered", async ()
 });
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 Run: `npx vitest run test/engine/mock-port.test.ts`
 Expected: FAIL — `registeredScripts` still has one entry.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `test/engine/mock-port.ts`, replace the registration:
 
@@ -102,12 +102,12 @@ In `test/engine/mock-port.ts`, replace the registration:
     },
 ```
 
-- [ ] **Step 4: Run the suite**
+- [x] **Step 4: Run the suite**
 
 Run: `npx vitest run test/engine`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add test/engine/mock-port.ts test/engine/mock-port.test.ts
@@ -133,7 +133,7 @@ git commit -m "test: let mock-port model unregistering a content script"
   ```
   `apply` unregisters the handles from the previous call, then registers the current config's snippets in order. Rejects with the port's error if a registration fails.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Rewrite the existing cases to the new shape (`createScriptInjector({ port })` then `await injector.apply(config)`) and add:
 
@@ -176,12 +176,12 @@ it("drops every registration when the new config has no scripts", async () => {
 });
 ```
 
-- [ ] **Step 2: Run and watch it fail**
+- [x] **Step 2: Run and watch it fail**
 
 Run: `npx vitest run test/engine/script-injector.test.ts`
 Expected: FAIL — `createScriptInjector` is not callable with one argument / has no `apply`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```ts
 import type { Config } from "../resolver/types";
@@ -241,12 +241,12 @@ In `src/extension/wiring.ts`, construct it beside the other siblings (synchronou
     },
 ```
 
-- [ ] **Step 4: Run**
+- [x] **Step 4: Run**
 
 Run: `npx vitest run test/engine && npx tsc --noEmit`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/engine/script-injector.ts src/extension/wiring.ts test/engine/script-injector.test.ts
@@ -279,7 +279,7 @@ git commit -m "refactor: let the script injector replace its registrations"
   ```
   `applyStored` never rejects and never fires `afterApply` — the message branch does, so adoption does not re-enter the sync queue it is running inside.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `test/engine/apply-config.test.ts`:
 
@@ -386,12 +386,12 @@ describe("applying a config without a restart", () => {
 
 Adapt the navigation helpers to whatever `test/engine/engine.test.ts` already uses (`browser.navigates`, `browser.tabFor`, `containerNameOf` are placeholders for the file's existing idiom — read it first and match it exactly).
 
-- [ ] **Step 2: Run and watch it fail**
+- [x] **Step 2: Run and watch it fail**
 
 Run: `npx vitest run test/engine/apply-config.test.ts`
 Expected: FAIL — no `config-protocol` module, and the message is unanswered.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `src/extension/config-protocol.ts`:
 
@@ -450,12 +450,12 @@ In `src/extension/wiring.ts` — import `loadConfig`, `CONFIG_STORAGE_KEY`, the 
 
 Hoist the existing `useConfig` body out of the returned object literal into a named function so both callers use it, and return `applyStored` on `Background`.
 
-- [ ] **Step 4: Run**
+- [x] **Step 4: Run**
 
 Run: `npx vitest run test/engine && npx tsc --noEmit && npm run lint`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/extension/config-protocol.ts src/extension/wiring.ts test/engine/apply-config.test.ts
@@ -472,7 +472,7 @@ git commit -m "feat: apply a stored config in process, without restarting"
 **Interfaces:**
 - Consumes: `CONFIG_APPLY`, `ConfigApplyResponse` from Task 3.
 
-- [ ] **Step 1: Implement**
+- [x] **Step 1: Implement**
 
 ```ts
 saveButton.addEventListener("click", () => {
@@ -504,12 +504,12 @@ saveButton.addEventListener("click", () => {
 
 Update the file header: the third line claims saving reloads the extension.
 
-- [ ] **Step 2: Typecheck and lint**
+- [x] **Step 2: Typecheck and lint**
 
 Run: `npx tsc --noEmit && npm run lint`
 Expected: PASS.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/extension/options.ts
@@ -530,7 +530,7 @@ git commit -m "feat: save the config by applying it, not by reloading"
 - Consumes: `Background.applyStored()`.
 - Produces: `browserSyncPorts(apply: () => Promise<unknown>): SyncPorts`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 In the existing config-sync suite, the adopt case asserts the ports' `adopt` was called; add one pinning that the applier runs after the write:
 
@@ -545,7 +545,7 @@ it("applies an adopted config in process rather than restarting", async () => {
 
 Match the file's existing fake-ports idiom exactly.
 
-- [ ] **Step 2: Implement**
+- [x] **Step 2: Implement**
 
 `config-sync.ts`:
 
@@ -587,12 +587,12 @@ and the tail's last step becomes `await configSync.start();`.
 
 `sync-record.ts`: the comment justifying "equal text never returns adopt" cites the reload. Rewrite it — the rule is unchanged, its cost is now repeated re-applies rather than repeated restarts.
 
-- [ ] **Step 3: Run**
+- [x] **Step 3: Run**
 
 Run: `npx vitest run && npx tsc --noEmit && npm run lint`
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/extension/config-sync.ts src/extension/background.ts src/config/sync-record.ts test/
@@ -607,7 +607,7 @@ git commit -m "feat: adopt a synced config by applying it in process"
 - Modify: `test/fitness/seams.test.ts` (or `suite.test.ts`, wherever a src-wide text rule fits best)
 - Modify: `test/fitness/retained-state.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 it("never restarts itself to apply a config", () => {
@@ -619,16 +619,16 @@ it("never restarts itself to apply a config", () => {
 });
 ```
 
-- [ ] **Step 2: Watch it pass, then revert-verify**
+- [x] **Step 2: Watch it pass, then revert-verify**
 
 Run: `npx vitest run test/fitness`
 Expected: PASS (Task 5 removed the last call). Undo Task 5's `config-sync.ts` edit in the editor, re-run, watch it go red, restore.
 
-- [ ] **Step 3: Correct `retained-state.test.ts`**
+- [x] **Step 3: Correct `retained-state.test.ts`**
 
 Its header says "a config save reloads the extension and empties everything", and the four-unbounded case says "In MV2 it restarts on a config save and not otherwise". Both are now false. The rows and the exact-list assertion stay; the prose becomes: nothing empties these four until the browser restarts, and each is still priced at one short string per event rarer than browsing. Note the other direction too — `reopenedNav` and the `tmp<N>` counter now survive a save, which is what stopped saving mid-reopen from costing an extra reopen.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add test/fitness
@@ -642,7 +642,7 @@ git commit -m "test: pin runtime.reload out of src and correct what a save reset
 **Files:**
 - Modify: `test/e2e/options.test.ts` (~lines 108–164)
 
-- [ ] **Step 1: Implement**
+- [x] **Step 1: Implement**
 
 Delete the `browserVersion < 154` skip and the paragraph explaining it. Replace the fixed `sleep(2000)` with a wait on the editor's own status — the reply is the signal the old path did not have:
 
@@ -667,7 +667,7 @@ Delete the `browserVersion < 154` skip and the paragraph explaining it. Replace 
 
 Keep the fresh-tab polling loop below it as is — a cancelled navigation still never returns to the driver, and the poll costs nothing once the status has landed.
 
-- [ ] **Step 2: Run it on both channels**
+- [x] **Step 2: Run it on both channels**
 
 ```bash
 ./scripts/get-firefox.sh
@@ -677,7 +677,7 @@ FIREFOX_BIN=.firefox/latest/firefox npx vitest run test/e2e/options.test.ts
 
 Expected: PASS on both, three cases each — the ESR run is the point of the whole slice. On macOS `get-firefox.sh` fetches linux64 builds; use the mac ESR from `download.mozilla.org/?product=firefox-esr-latest-ssl&os=osx` or run this step on Linux/CI.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add test/e2e/options.test.ts
@@ -691,28 +691,28 @@ git commit -m "test: observe a config save on every channel, ESR included"
 **Files:**
 - Modify: `CLAUDE.md`, `FOLLOWUPS.md`, `CONFIG.md`, `src/config/default.yaml`, `configurable-containers.config.yaml`
 
-- [ ] **Step 1: CLAUDE.md**
+- [x] **Step 1: CLAUDE.md**
 
 - "Saving is a full extension restart, so every in-memory structure dies" is wrong in both halves. Replace with the apply path: one `applyStored`, the config object filled in place, the injector replacing its registrations, and what now survives a save (`handled`, `reopenedNav`, the `tmp<N>` counter). Keep `highestTmpSuffix`'s reason — a browser restart still resets the counter.
 - The disposer's stored-grace paragraph cites "every save reloads": a browser restart is still the reason it is a stored fact; the F10 trigger (saving destroyed live throwaways) is now impossible for a second reason.
 - The ESR line in the e2e section ("`runtime.reload()` does not bring a TEMPORARILY installed extension back on 140 ESR") stays as a measured Firefox fact, with the note that CC no longer depends on it.
 - `src/extension/config-protocol.ts` joins the protocol files in "Where new logic goes".
 
-- [ ] **Step 2: FOLLOWUPS.md**
+- [x] **Step 2: FOLLOWUPS.md**
 
 Delete the "Does a config save reach ESR users at all?" entry. Nothing is left to measure by hand: no save reloads.
 
-- [ ] **Step 3: The user-facing copy**
+- [x] **Step 3: The user-facing copy**
 
 `CONFIG.md` and both seed configs say "Saving reloads the extension". They become "Saving applies the config immediately." Both seeds carry the same line; `test/fitness/seed-config.test.ts` may assert on seed text — run it.
 
-- [ ] **Step 4: Full gate**
+- [x] **Step 4: Full gate**
 
 ```bash
 npm test && npm run typecheck && npm run lint && npm run audit
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add CLAUDE.md FOLLOWUPS.md CONFIG.md src/config/default.yaml configurable-containers.config.yaml

@@ -1,7 +1,7 @@
 # Applying a Config Without Restarting the Extension — Design
 
 **Date:** 2026-08-25
-**Status:** Approved, not yet implemented
+**Status:** Implemented 2026-08-25
 **Topic:** Replace `browser.runtime.reload()` — the way a saved or adopted config is put
 into effect today — with an in-process apply. Amends the 2026-07-28 storage slice §5
 ("saving reloads the extension so every sibling re-reads the config") and the 2026-07-30
@@ -237,3 +237,16 @@ has to model one honestly.
 - **`src/config/default.yaml`, `configurable-containers.config.yaml`, `CONFIG.md`** —
   "Saving reloads the extension" is no longer true; saving applies the config.
 - **`src/extension/options.ts`** header comment, which states the reload as the mechanism.
+
+## 9. What implementation added to this design
+
+- **`test/fitness/suite.test.ts`'s skip inventory** loses `options.test.ts`. It was an exact
+  list of two, and the whole point of removing the reload was that the second entry stops
+  being needed — so the inventory is where that shows up.
+- **`test/extension/fake-storage.ts` drops its `reloads` counter and its `runtime.reload`
+  stub.** Nothing calls the API any more, and a fake that still counts it is a fake nobody
+  can use to notice its return.
+- **The e2e proof was measured, not assumed.** `test/e2e/options.test.ts` passes on
+  140.14.0esr (the mac ESR build, since `scripts/get-firefox.sh` fetches linux64 only), and
+  restoring `runtime.reload()` in the Save handler turns it red there — it never reaches the
+  routing assertion, because the editor's status never becomes "Saved".
