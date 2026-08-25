@@ -92,6 +92,7 @@ function use(ctx: Ctx, version: number): void {
 // its marker written for free rather than by whoever remembers.
 const ACTION_KEYS = ["open", "inherit", "ignore", "redirector"] as const;
 interface FeatureVersions {
+  document: Record<string, number>;
   rule: Record<string, number>;
   cookie: Record<string, number>;
   script: Record<string, number>;
@@ -101,6 +102,7 @@ interface FeatureVersions {
 }
 
 export const FEATURE_VERSIONS: FeatureVersions = {
+  document: { version: 1, rules: 1, groups: 1 },
   rule: {
     match: 1, open: 1, default: 1, inherit: 1, ignore: 1, redirector: 1, cookies: 1, scripts: 1,
   },
@@ -114,12 +116,19 @@ export const FEATURE_VERSIONS: FeatureVersions = {
 };
 
 const {
+  document: DOCUMENT_KEYS,
   rule: RULE_KEYS,
   cookie: COOKIE_KEYS,
   script: SCRIPT_KEYS,
   matchMapping: MATCH_MAPPING_KEYS,
   matchForm: MATCH_FORM_VERSIONS,
 } = FEATURE_VERSIONS;
+// Kept clear for the user: a YAML anchor has to attach to a node, and every node this
+// grammar defines is spoken for, so a config that wants to reuse a fragment needs a key of
+// its own at the top level. Ignored without comment — an `x-` key means nothing here by
+// definition, so there is nothing to warn about.
+const RESERVED_PREFIX = "x-";
+
 const SAME_SITE = new Set(["no_restriction", "lax", "strict"]);
 const RUN_AT = new Set(["document_start", "document_end", "document_idle"]);
 
@@ -486,6 +495,13 @@ export function parseConfigDetailed(yamlText: string): ParseResult {
     requiredVersion: 1,
     warnings: [],
   };
+
+  // A top-level typo costs the whole config — `rulez:` matches nothing anywhere, so every
+  // site opens in a throwaway while this page reports no problem at all. Loud beats that.
+  for (const k of Object.keys(doc)) {
+    if (Object.hasOwn(DOCUMENT_KEYS, k)) use(ctx, DOCUMENT_KEYS[k]!);
+    else if (!k.startsWith(RESERVED_PREFIX)) unknownKey(ctx, k, `unknown key "${k}" at the top level`);
+  }
 
   const rawRules = doc.rules ?? [];
   if (!Array.isArray(rawRules)) throw new ConfigError("`rules` must be a list", { path: "rules" });

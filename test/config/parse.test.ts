@@ -225,4 +225,20 @@ describe("parseConfig — rule validation", () => {
   it("rejects rules that is not a list", () => {
     expect(err(`rules: nope\n`).path).toBe("rules");
   });
+
+  // A top-level typo costs the WHOLE config: `rulez:` leaves nothing matching anything, so
+  // every site opens in a throwaway with the editor reporting no problem at all.
+  it("rejects an unknown top-level key", () => {
+    const e = err(`rulez:\n  - match: x.com\n`);
+    expect(e.message).toMatch(/unknown key "rulez" at the top level/);
+    expect(e.path).toBe("rulez");
+  });
+
+  // The one thing that key could legitimately have been: somewhere to park a YAML anchor.
+  // An anchor needs a node to attach to, and every node in this grammar is spoken for, so
+  // `x-` is the space kept clear for one.
+  it("ignores a top-level key reserved with x-", () => {
+    const c = parseConfig(`x-shared: &work Work\nrules:\n  - match: x.com\n    open: *work\n`);
+    expect(c.rules[0]!.action).toEqual({ kind: "open", containers: ["Work"] });
+  });
 });

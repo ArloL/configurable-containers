@@ -75,6 +75,7 @@ describe("the declared version", () => {
 describe("the feature table", () => {
   it("prices every key and match form", () => {
     expect(FEATURE_VERSIONS).toEqual({
+      document: { version: 1, rules: 1, groups: 1 },
       rule: {
         match: 1, open: 1, default: 1, inherit: 1, ignore: 1, redirector: 1, cookies: 1, scripts: 1,
       },
@@ -161,6 +162,12 @@ describe("a config from the future", () => {
     expect(warning!.path).toBe("rules[1]");
     expect(warning!.message).toContain("rules[1] skipped");
     expect(warning!.message).toContain("must be a string or a list of strings");
+  });
+
+  it("ignores an unknown top-level key", () => {
+    const parsed = future(`sandboxes:\n  - x\nrules:\n  - match: x.com\n`);
+    expect(parsed.config.rules).toHaveLength(1);
+    expect(parsed.warnings[0]!.message).toContain('unknown key "sandboxes" at the top level');
   });
 
   it("skips a group it cannot parse", () => {

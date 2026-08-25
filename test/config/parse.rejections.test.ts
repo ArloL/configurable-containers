@@ -26,6 +26,12 @@ function rejection(yaml: string): ConfigError {
 describe("every way a config is refused", () => {
   it.each([
     [
+      "an unknown top-level key",
+      `rulez:\n  - match: x.com\n`,
+      'unknown key "rulez" at the top level',
+      "rulez",
+    ],
+    [
       "a version that is not a positive integer",
       `version: 0\nrules:\n  - match: x.com\n`,
       "`version` must be a positive integer",
