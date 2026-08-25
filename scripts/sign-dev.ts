@@ -11,19 +11,18 @@ import { spawnSync } from "node:child_process";
 import { readdirSync, rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import * as path from "node:path";
-import { packageExtension } from "./package";
+import { DEV_ID, DEV_NAME, DEV_UPDATE_URL, packageExtension } from "./package";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = path.resolve(HERE, "../dist/dev");
 const SIGNED_DIR = path.join(OUT_DIR, "signed");
 const WEB_EXT = path.resolve(HERE, "../node_modules/.bin/web-ext");
 
-const DEV_ID = "configurable-containers-dev@k5d.de";
-const DEV_NAME = "Configurable Containers Dev";
-
 // Where Firefox polls for a newer build. This URL is baked into every signed build
-// and cannot be changed — a build that shipped keeps asking here forever
-export const UPDATE_URL = "https://arlol.github.io/configurable-containers/updates.json";
+// and cannot be changed — a build that shipped keeps asking here forever. Defined in
+// package.ts, because `npm run package -- <version> --dev` must produce the very same
+// add-on: that is what makes a dev release's published reproduce command true.
+export const UPDATE_URL = DEV_UPDATE_URL;
 
 async function main() {
   for (const name of ["WEB_EXT_API_KEY", "WEB_EXT_API_SECRET", "VERSION"]) {

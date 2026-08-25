@@ -108,6 +108,22 @@ fetched, and that is where the gate died. **A gate that cannot find its subject 
 never pass quietly** — hence `findLatestListedRelease` throwing when it runs out of pages
 rather than answering "nothing to check".
 
+## Does the dev channel owe AMO a source archive too? (2026-08-25)
+
+`release.yaml` submits the listed build with `--upload-source-code`, because AMO requires
+reviewable source whenever the shipped JS is bundled and `background.js` is an esbuild
+bundle. `scripts/sign-dev.ts` runs `web-ext sign --channel unlisted` with **no** source
+upload, and nothing has ever complained — but unlisted add-ons are reviewable too, so
+"nothing complained" may only mean nobody looked.
+
+Not changed while making the two channels publish the same artefacts, because the fix
+touches the AMO submission on the path that runs on **every push to main**: get it wrong
+and the dev channel stops publishing. The GitHub side is now symmetric either way — a dev
+release carries its source archive.
+
+**To settle it:** check AMO's source-code policy for unlisted submissions, or add
+`--upload-source-code` to one `sign:dev` run and see whether the upload still succeeds.
+
 ## `harness/selenium-webdriver.d.ts` is only DefinitelyTyped being behind (2026-08-25)
 
 That file declares two methods — `getDomAttribute` and `getProperty` — that

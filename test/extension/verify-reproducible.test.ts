@@ -133,7 +133,18 @@ describe("what the job refuses to attempt", () => {
       buildTimestamp: "2026-08-24T13:14:15+00:00",
       xpi: expect.objectContaining({ name: "configurable-containers-2608.0.101.xpi" }),
       source: expect.objectContaining({ name: "configurable-containers-src-2608.0.101.zip" }),
+      packageArgs: ["2608.0.101"],
     });
+  });
+
+  // The one thing the two channels do differently, and it is not incidental: a dev build
+  // is a SEPARATE add-on — its own id so it installs beside the listed one, its own
+  // storage.local, and the self-distribution update_url AMO rejects on a listed
+  // submission. Rebuilding a prerelease without --dev produces the listed identity and a
+  // hash that cannot match, which would read as "this release does not reproduce".
+  it("rebuilds a prerelease as the dev add-on", () => {
+    const plan = planFor(release("v2608.0.144", { prerelease: true }));
+    expect(plan).toMatchObject({ packageArgs: ["2608.0.144", "--dev"] });
   });
 
   // Each of these is reported rather than skipped. A release that cannot be reproduced is

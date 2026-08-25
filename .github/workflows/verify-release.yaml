@@ -1,0 +1,65 @@
+name: Verify a published release
+
+# The gate that has no subject to look for. `nightly.yml`'s reproducible-build job had to
+# go hunting for the release to check, its search silently came back empty, and it passed
+# in zero seconds every night for four weeks. Here the event names the release, so that
+# entire class of failure cannot occur.
+#
+# It runs on BOTH channels, with no branching in the workflow: since 2026-08-25 a dev
+# prerelease publishes the same artefacts a listed release does — the reproducible
+# pre-signing xpi, the source archive it was built from, and BUILD_TIMESTAMP in its notes
+# — so "verify a release" means one thing. The only difference left is the `--dev` the
+# rebuild needs, and `planFor` decides that from the release itself.
+#
+# This does NOT replace the nightly job, which answers a different question: whether a
+# release that reproduced when it was cut still reproduces on today's toolchain.
+
+on:
+  release:
+    types: [published]
+  # So a release published before this existed can be checked by hand.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The release tag to verify, e.g. v2608.0.112
+        required: true
+
+permissions: {}
+
+jobs:
+  verify:
+    name: Rebuild the release and compare hashes
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # NO `cache: npm`, unlike every other job in this repo. A job that decides whether a
+      # published artefact is trustworthy must not take its dependencies from a mutable
+      # cache an earlier run could have poisoned: that is how a tampered build gets
+      # certified reproducible. zizmor's cache-poisoning audit is right to pair a release
+      # trigger with caching, and a cold install costs seconds — the price of the answer
+      # meaning anything.
+      #
+      # The suppression is for what is left after that: zizmor models setup-node as
+      # caching whatever its inputs say, so it flags the step even with no `cache:` input
+      # at all. Nothing here is cached, and there is nothing published for a poisoned
+      # cache to taint — this job only downloads, rebuilds and compares.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0 # zizmor: ignore[cache-poisoning]
+        with:
+          node-version: 24
+
+      - run: npm ci
+
+      # Downloads the release's own xpi and source archive, rebuilds from the archive with
+      # the release's own published BUILD_TIMESTAMP, and compares the sha256. A mismatch
+      # means the notes promise a reproduction that does not hold.
+      - name: Rebuild the published release and compare hashes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag || github.event.release.tag_name }}
+        run: npm run verify:reproducible -- "$TAG"

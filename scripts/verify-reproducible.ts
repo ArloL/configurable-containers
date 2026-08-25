@@ -106,6 +106,13 @@ export interface Plan {
   buildTimestamp: string;
   xpi: ReleaseAsset;
   source: ReleaseAsset;
+  // The arguments after `npm run package --`, i.e. the exact command the release notes
+  // publish. A dev release rebuilds with `--dev`, because it is a different add-on: its
+  // own id so it installs beside the listed one, its own storage.local, and the
+  // self-distribution update_url AMO rejects on a listed submission. That difference is
+  // deliberate and cannot be removed, so it is decided HERE, once, rather than by the
+  // caller — and it is the only thing about the two channels this job treats differently.
+  packageArgs: string[];
 }
 
 /** Everything the rebuild needs, or the reason it cannot be attempted. */
@@ -121,7 +128,8 @@ export function planFor(release: Release): Plan | { problem: string } {
   // AMO requires reviewable source whenever the shipped JS is bundled, so its absence is a
   // release that should not have gone out rather than a case to skip.
   if (!source) return { problem: `release ${release.tag_name} has no source archive to rebuild from` };
-  return { version, buildTimestamp, xpi, source };
+  const packageArgs = release.prerelease ? [version, "--dev"] : [version];
+  return { version, buildTimestamp, xpi, source, packageArgs };
 }
 
 export function sha256(bytes: Buffer): string {
@@ -131,6 +139,16 @@ export function sha256(bytes: Buffer): string {
 // --- the part that downloads and builds ---------------------------------------------
 
 const OWNER_REPO = "ArloL/configurable-containers";
+
+/**
+ * One release, by tag. The release-triggered workflow passes the tag the event names, so
+ * that path performs NO SEARCH — which is the whole point of it: a search that silently
+ * comes back empty is how this gate spent four weeks green and inert.
+ */
+function fetchRelease(tag: string): Release {
+  const json = execFileSync("gh", ["api", `repos/${OWNER_REPO}/releases/tags/${tag}`], { encoding: "utf8" });
+  return JSON.parse(json) as Release;
+}
 
 function fetchReleasePage(page: number): Release[] {
   const query = `per_page=${RELEASES_PER_PAGE}&page=${page}`;
@@ -143,7 +161,12 @@ function run(cmd: string, args: string[], cwd: string): void {
 }
 
 function main(): void {
-  const release = findLatestListedRelease(fetchReleasePage);
+  // With a tag, verify exactly that release. Without one, go looking for the newest
+  // listed release, which is what the nightly does — it asks a different question:
+  // whether a release that reproduced when it was cut STILL reproduces on today's
+  // toolchain.
+  const tag = process.argv[2];
+  const release = tag ? fetchRelease(tag) : findLatestListedRelease(fetchReleasePage);
   if (!release) {
     console.log("No listed release in the whole release list — nothing to reproduce.");
     return;
@@ -161,7 +184,7 @@ function main(): void {
     const source = path.join(dir, "source");
     run("npm", ["ci"], source);
     // The exact command the release notes tell a reader to run.
-    execFileSync("npm", ["run", "package", "--", plan.version], {
+    execFileSync("npm", ["run", "package", "--", ...plan.packageArgs], {
       cwd: source,
       stdio: "inherit",
       env: { ...process.env, BUILD_TIMESTAMP: plan.buildTimestamp },

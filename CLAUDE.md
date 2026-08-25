@@ -268,6 +268,16 @@ reasonable-looking change wrong**.
   `// oxlint-disable-next-line <rule> -- because…` spanning three lines suppresses the
   second comment line and nothing else, silently. Put the prose above and the directive
   immediately over the code.
+- **The workflows have their own two gates — `actionlint` and `zizmor`** (`check-actions.yaml`),
+  and zizmor fails the build on any finding, so a false positive has to be suppressed
+  rather than tolerated. Its ignore is a **trailing comment on the flagged line**
+  (`# zizmor: ignore[rule]`), not a line above like oxlint's — the prose still goes above,
+  the directive stays on the code. One exists: `cache-poisoning` on `verify-release.yaml`'s
+  `setup-node`, which zizmor flags for pairing a release trigger with a caching action
+  even when no `cache:` input is given. The real half of that finding was taken, not
+  suppressed: that job installs **uncached** on purpose, because a verifier that decides
+  whether a published artefact is trustworthy must not take its own dependencies from a
+  cache an earlier run could have poisoned.
 - **`?? ""` on a `spawnSync().stdout` is not a dead defence**, whatever the types say:
   `@types/node` declares `string` once an encoding is set, and a spawn that never started
   reports null — which is the case `harness/reaper.ts` exists for. Both sites carry a
@@ -515,6 +525,19 @@ reasonable-looking change wrong**.
   `findLatestListedRelease` pages until one turns up and **throws** when the page cap runs
   out, because "I stopped looking" reported as "there is nothing to check" is what made
   that gate inert.
+- **Both channels publish the SAME THREE artefacts** — the reproducible pre-signing xpi,
+  the source archive, and `BUILD_TIMESTAMP` in the notes — so one job verifies either and
+  `verify-release.yaml` needs no branch. A dev release carries a fourth, the AMO-signed
+  xpi Firefox actually installs, and that one must stay **distinguishable by name**:
+  `dev-updates.js` picks the signed asset by excluding `configurable-containers-<v>.xpi`,
+  and its old `.endsWith(".xpi")` would have offered the *unsigned* build to every
+  dogfooder — uninstallable, silent, and permanent on an immutable release.
+- **What is NOT symmetric is the add-on itself, and it cannot be.** A dev build has its own
+  id (so it installs beside the listed one with its own `storage.local`), its own name, and
+  the `update_url` AMO rejects on a listed submission. So a dev release's notes publish
+  `npm run package -- <version> --dev`, and `planFor` passes that flag; rebuilding a
+  prerelease without it produces the listed identity and a hash mismatch that reads as
+  "this release does not reproduce".
 - **GitHub immutable releases are ENABLED**: assets can't be edited, so the dev xpi ships
   in the same `gh release create`, and a rollback is *deleting* a release plus
   republishing the manifest.

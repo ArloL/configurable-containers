@@ -104,14 +104,45 @@ jobs:
       - run: npm ci
       - uses: ArloL/calver-tag-action@6cc2895eee289523746b1092b0e91b6b15846c0e # v2608.0.103
         id: version
+      # BUILD_TIMESTAMP exactly as release.yaml captures it: zip records mtimes, so the
+      # build is only reproducible against a known instant, and the source archive has no
+      # .git for anyone to derive one from. `sign:dev` packages before it signs, so this
+      # stamps the reproducible xpi that step leaves in dist/dev/.
       - name: Build and sign the unlisted dev build
         env:
           WEB_EXT_API_KEY: ${{ secrets.WEB_EXT_API_KEY }}
           WEB_EXT_API_SECRET: ${{ secrets.WEB_EXT_API_SECRET }}
           VERSION: ${{ steps.version.outputs.new_version }}
-        run: npm run sign:dev
+        run: |
+          BUILD_TIMESTAMP="$(date --iso-8601=seconds)"
+          export BUILD_TIMESTAMP
+          echo "BUILD_TIMESTAMP=$BUILD_TIMESTAMP" | tee -a "$GITHUB_ENV"
+          npm run sign:dev
+
+      # The same archive release.yaml builds, from the same command. Without it the dev
+      # channel publishes bytes nobody can check against a source they can read.
+      - name: Build the source archive
+        env:
+          VERSION: ${{ steps.version.outputs.new_version }}
+        run: |
+          git archive --format=zip \
+            --output "dist/dev/configurable-containers-src-${VERSION}.zip" HEAD
+
       # --prerelease is what tells a dev build from a listed one
       # scripts/dev-updates.js filters on it
+      #
+      # THREE assets, the same set a listed release carries plus the signed build this
+      # channel is installed from:
+      #   - the signed xpi, which is what Firefox can install and what updates.json
+      #     points at. AMO signs unlisted in minutes, so unlike the listed channel there
+      #     is a permanently installable artefact to attach.
+      #   - the reproducible pre-signing xpi, which `sign:dev` already built on the way
+      #     to signing. AMO's copy is repacked and carries META-INF/, so this is the only
+      #     byte-comparable artefact the channel can offer.
+      #   - the source archive it was built from.
+      # The signed one must stay distinguishable from the reproducible one by NAME —
+      # web-ext derives `configurable_containers_dev-…` from the manifest — because
+      # dev-updates.js has to offer Firefox the signed one and only the signed one.
       - name: Publish the immutable dev release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -120,7 +151,15 @@ jobs:
           gh release create "v${VERSION}" \
             --title "Release v${VERSION}" \
             --prerelease \
-            ./dist/dev/signed/*.xpi
+            --notes "Reproduce this build:
+          \`\`\`
+          npm ci
+          BUILD_TIMESTAMP=${BUILD_TIMESTAMP} npm run package -- ${VERSION} --dev
+          \`\`\`
+          " \
+            ./dist/dev/signed/*.xpi \
+            "dist/dev/configurable-containers-${VERSION}.xpi" \
+            "dist/dev/configurable-containers-src-${VERSION}.zip"
 
   publish-dev-manifest:
     name: Publish dev update manifest
