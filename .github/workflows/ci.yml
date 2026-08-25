@@ -91,6 +91,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write # pushes the tag, creates the release
+    outputs:
+      # So verify-release can be handed the tag rather than going looking for it.
+      version: ${{ steps.version.outputs.new_version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -160,6 +163,19 @@ jobs:
             ./dist/dev/signed/*.xpi \
             "dist/dev/configurable-containers-${VERSION}.xpi" \
             "dist/dev/configurable-containers-src-${VERSION}.zip"
+
+  # Called, not triggered: see verify-release.yaml's `on:` — the release this job just
+  # published was created with GITHUB_TOKEN, so its `release: published` event fires
+  # nothing at all.
+  verify-release:
+    name: Verify the published dev build
+    needs: prerelease
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/verify-release.yaml
+    with:
+      tag: v${{ needs.prerelease.outputs.version }}
 
   publish-dev-manifest:
     name: Publish dev update manifest

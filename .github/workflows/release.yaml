@@ -10,6 +10,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write # calver-tag-action pushes a tag; gh release creates a release
+    outputs:
+      # So verify-release can be handed the tag rather than going looking for it.
+      version: ${{ steps.version.outputs.new_version }}
     steps:
       # calver-tag-action pushes the tag with these credentials, so unlike ci.yml
       # they must be kept.
@@ -106,3 +109,15 @@ jobs:
           " \
             "dist/configurable-containers-${VERSION}.xpi" \
             "dist/configurable-containers-src-${VERSION}.zip"
+
+  # Called, not triggered. The release above was created with GITHUB_TOKEN, and GitHub
+  # fires no workflow for those — see verify-release.yaml's `on:`. Running it here also
+  # means a listed release is checked before anyone acts on it.
+  verify-release:
+    name: Verify the published release
+    needs: release
+    permissions:
+      contents: read
+    uses: ./.github/workflows/verify-release.yaml
+    with:
+      tag: v${{ needs.release.outputs.version }}
