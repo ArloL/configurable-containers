@@ -403,6 +403,23 @@ reasonable-looking change wrong**.
   `about:blank`, which auto-temp ignores by design. Hence the probe's `newTab` / `tabs` /
   `nav` (by **tab id** — the driver can't map a handle to one) / `open` commands; the
   driver can only *operate* an extension page something else opened.
+- **And operating one may NOT run a script in it.** An extension page lives in the
+  extension process, which Firefox counts as a **privileged browsing context**, and
+  Marionette refuses `ExecuteScript`/`ExecuteAsyncScript` there unless the browser was
+  started with `--remote-allow-system-access`. 154 refused only *parent-process* contexts;
+  156.0a1 widened the same check to `isPrivilegedContext` (extension and privileged
+  `about:` processes too) and took nine cases down at once — the Nightly tripwire earning
+  its keep. The trap is that `WebElement.getAttribute` is **not** a protocol command:
+  Selenium implements it as an injected atom, so the call every http(s) case makes reads
+  as `UnsupportedOperationError` here. Use `getDomAttribute` for a `data-*` attribute,
+  `getProperty` for a textarea's value, `switchTo().activeElement()` for the focus, and
+  `clear()` + `sendKeys()` to type — all real commands, all working on ESR through
+  Nightly, and typing fires the `input` the editor validates on, which assigning `.value`
+  never did anyway. **Don't reach for the flag**: it re-grants privileged access to the
+  whole session to keep one convenience call working, and pins the suite to a Firefox that
+  permits what the shipped extension's users never will. `harness/firefox.ts`'s own
+  `executeScript` helpers stay as they are — every one reads a probe-written attribute on
+  an http(s) page, which is ordinary web content.
 - **The command relay is a DOM event injected into http(s) pages only**, so the driver
   must be parked on a probe-reported http(s) page first, and an unanswered command reads
   as an *empty answer*, not an error. **`commands.onCommand` cannot be driven at all**
