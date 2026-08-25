@@ -94,6 +94,11 @@ does not, as of **4.35.6**, the newest published. There is nothing to upgrade to
 declarations live here rather than as a cast at each call site. Delete the file the day
 the types carry them.
 
+**Filed upstream: DefinitelyTyped/DefinitelyTyped#75437**, which adds both plus
+`getAriaRole` and `getAccessibleName` — the other two W3C element commands the package
+is missing. Merged, it republishes `@types/selenium-webdriver` and Renovate carries it
+here.
+
 To be clear about what is *not* temporary: the call sites. `getDomAttribute`,
 `getProperty`, `switchTo().activeElement()` and `clear()` + `sendKeys()` are the
 spec's own commands, they work on ESR through Nightly, and they would stay the right
