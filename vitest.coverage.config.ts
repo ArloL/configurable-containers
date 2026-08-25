@@ -56,10 +56,10 @@ export default defineConfig({
         // Floors, a point or two under what the suite measures today — not targets.
         // Raise them when the number rises; a drop is a file, or a branch of one, that
         // nothing deterministic reaches any more.
-        statements: 93,
-        branches: 91,
-        functions: 84,
-        lines: 93,
+        statements: 97,
+        branches: 95,
+        functions: 95,
+        lines: 97,
         // The pure modules the mutation gate also owns are held at 100 here, so a new
         // branch in them is caught by the fast gate too, on the push that adds it
         // rather than that night.

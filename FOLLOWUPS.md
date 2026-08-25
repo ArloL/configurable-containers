@@ -107,23 +107,6 @@ privileged-context check to cover the extension process, and nine cases that ran
 in an extension page went red at once. Fixed by asking through protocol commands instead
 (CLAUDE.md, the e2e section) — months before it reaches a release users are on.
 
-## The impure shells are where coverage stops (2026-08-24)
-
-Three files sit well under the rest and are carried by the global floor rather than by
-anything of their own: `src/extension/config.ts` (24% statements, **0% branches**),
-`src/extension/config-sync.ts` (67%/31%) and `src/engine/browser-port.ts` (74%/62%).
-
-All three are shells around cores that are already at 100% under mutation — `config.ts` is
-`browser.storage` plumbing, `config-sync.ts` moves bytes around the `sync-record` policy,
-`browser-port.ts` maps `browser.*` objects to the port's shapes. So this is a boundary
-question rather than a defect: the decisions are tested, the adapters are not, and the
-adapters are what an L4 case exercises without contributing coverage (the code runs in
-another process).
-
-Worth revisiting if a bug is ever traced to one of them. The cheapest first move is
-`config.ts` against a fake `browser.storage`, since 0% branch coverage means not one of its
-`?? undefined` / area-name guards has ever been executed by a deterministic test.
-
 ## `harness/selenium-webdriver.d.ts` is only DefinitelyTyped being behind (2026-08-25)
 
 That file declares two methods — `getDomAttribute` and `getProperty` — that

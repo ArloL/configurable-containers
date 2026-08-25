@@ -1,5 +1,18 @@
-import { describe, it, expect } from "vitest";
-import { createConfigSync, type SyncPorts } from "../../src/extension/config-sync";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import {
+  browserSyncPorts,
+  createConfigSync,
+  type SyncPorts,
+} from "../../src/extension/config-sync";
+import {
+  CONFIG_REPLACED_KEY,
+  CONFIG_STORAGE_KEY,
+  CONFIG_UPDATED_AT_KEY,
+  PRE_SYNC_EDIT,
+  SEED_CONFIG_YAML,
+  UNEDITED,
+} from "../../src/extension/config";
+import { installFakeBrowser, uninstallFakeBrowser, type FakeBrowser } from "./fake-storage";
 import {
   CHUNK_CHARS,
   MAX_PARTS,
@@ -245,5 +258,159 @@ describe("publishing a config that shrank", () => {
     expect(Object.keys(machine.area)).not.toContain(partKey(1));
     expect(Object.keys(machine.area)).not.toContain(partKey(2));
     expect(decodeRecord(machine.area)).toMatchObject({ text: "tiny", parts: 1 });
+  });
+});
+
+// A config too large is DIAGNOSED — the user is told, and the local config keeps routing.
+// Anything else out of encodeRecord is a bug in this build, and reporting it as
+// "too-large" would send whoever reads the warning to shorten a config that is fine. So it
+// propagates. `text` is lied about here on purpose: the types say it cannot happen, which
+// is exactly what makes the rethrow untestable any other way.
+describe("an encoding failure that is not a size limit", () => {
+  it("propagates rather than being reported as a config that is too large", async () => {
+    const machine = aMachine({ text: "x", updatedAt: 100 });
+    const broken: SyncPorts = {
+      ...machine.ports,
+      readLocal: () => Promise.resolve({ text: undefined as unknown as string, updatedAt: 100 }),
+    };
+
+    await expect(createConfigSync(broken).sync()).rejects.toThrow();
+    expect(machine.warnings).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// browserSyncPorts() — the shell the module's own comment calls "the only part of this
+// module that cannot run under a fake". It can, against a fake `browser.storage`; what it
+// cannot do is answer the questions above, which is why the two halves are tested apart
+// (FOLLOWUPS.md, "The impure shells are where coverage stops").
+//
+// Everything here is about which bytes land in storage.local, since that area is the
+// single source of truth for routing and an adoption is the one write no edit can undo.
+// ---------------------------------------------------------------------------
+
+describe("browserSyncPorts", () => {
+  let f: FakeBrowser;
+
+  beforeEach(() => {
+    f = installFakeBrowser();
+  });
+  afterEach(() => {
+    uninstallFakeBrowser();
+  });
+
+  it("reads the stored config and its stamp, writing nothing", async () => {
+    f.local[CONFIG_STORAGE_KEY] = "rules: []";
+    f.local[CONFIG_UPDATED_AT_KEY] = 4242;
+
+    expect(await browserSyncPorts().readLocal()).toEqual({ text: "rules: []", updatedAt: 4242 });
+    expect(f.localSets).toEqual([]);
+  });
+
+  // Installed before the stamp existed. The seed is written stamped on first run
+  // (background.ts), so an unstamped config means an upgrade, and the two reserved values
+  // are what rank it against machines that have real stamps.
+  it("backfills an untouched seed as UNEDITED, and persists the backfill", async () => {
+    f.local[CONFIG_STORAGE_KEY] = SEED_CONFIG_YAML;
+
+    expect(await browserSyncPorts().readLocal()).toEqual({
+      text: SEED_CONFIG_YAML,
+      updatedAt: UNEDITED,
+    });
+    // Persisted, or every startup re-derives it — and the derivation stops being right the
+    // moment a later build ships a different seed.
+    expect(f.local[CONFIG_UPDATED_AT_KEY]).toBe(UNEDITED);
+    expect(f.localSets).toEqual([{ [CONFIG_UPDATED_AT_KEY]: UNEDITED }]);
+  });
+
+  // The half that matters: a config that differs from the seed was hand-written, and must
+  // outrank a fresh install's untouched seed rather than being replaced by it.
+  it("backfills a config that differs from the seed as PRE_SYNC_EDIT", async () => {
+    f.local[CONFIG_STORAGE_KEY] = "rules: []";
+
+    expect(await browserSyncPorts().readLocal()).toEqual({
+      text: "rules: []",
+      updatedAt: PRE_SYNC_EDIT,
+    });
+    expect(f.local[CONFIG_UPDATED_AT_KEY]).toBe(PRE_SYNC_EDIT);
+  });
+
+  it("reads an absent config as the empty string", async () => {
+    expect(await browserSyncPorts().readLocal()).toEqual({ text: "", updatedAt: PRE_SYNC_EDIT });
+  });
+
+  // One `set`, then the reload: an adoption is applied by restarting, exactly as a Save is,
+  // and there is deliberately no second apply path.
+  it("adopts a remote config, keeping what it overwrote, then reloads", async () => {
+    f.local[CONFIG_STORAGE_KEY] = "mine";
+    f.local[CONFIG_UPDATED_AT_KEY] = 10;
+
+    await browserSyncPorts().adopt("theirs", 20);
+
+    expect(f.localSets).toEqual([
+      {
+        [CONFIG_STORAGE_KEY]: "theirs",
+        [CONFIG_UPDATED_AT_KEY]: 20,
+        // Without this the first startup after sync ships silently destroys a hand-written
+        // config — the one failure editing cannot undo.
+        [CONFIG_REPLACED_KEY]: "mine",
+      },
+    ]);
+    expect(f.reloads).toBe(1);
+  });
+
+  it("keeps no backup when there was no config to overwrite", async () => {
+    await browserSyncPorts().adopt("theirs", 20);
+
+    expect(f.localSets).toEqual([
+      { [CONFIG_STORAGE_KEY]: "theirs", [CONFIG_UPDATED_AT_KEY]: 20 },
+    ]);
+    expect(f.local[CONFIG_REPLACED_KEY]).toBeUndefined();
+    expect(f.reloads).toBe(1);
+  });
+
+  // reconcile() never adopts text equal to the local text, so this is a second line of
+  // defence — but offering the user their own config back as "what sync replaced" is a
+  // confusing lie, and the guard is a character comparison.
+  it("keeps no backup when the adopted text is what is already stored", async () => {
+    f.local[CONFIG_STORAGE_KEY] = "same";
+
+    await browserSyncPorts().adopt("same", 20);
+
+    expect(f.local[CONFIG_REPLACED_KEY]).toBeUndefined();
+  });
+
+  it("delegates the sync area, and the change signal, to the storage module", async () => {
+    const ports = browserSyncPorts();
+    let fired = 0;
+    ports.onSyncChanged(() => {
+      fired += 1;
+    });
+
+    await ports.writeSync({ "cc.meta": "m" }, []);
+    expect(f.sync).toEqual({ "cc.meta": "m" });
+    expect(await ports.readSync()).toEqual({ "cc.meta": "m" });
+
+    f.fireChange("local");
+    expect(fired).toBe(0);
+    f.fireChange("sync");
+    expect(fired).toBe(1);
+  });
+
+  it("warns with the cause, and with a placeholder when there is none", () => {
+    const seen: unknown[][] = [];
+    const original = console.warn;
+    console.warn = (...args: unknown[]) => void seen.push(args);
+    try {
+      const ports = browserSyncPorts();
+      ports.warn("could not read storage.sync", new Error("no account"));
+      ports.warn("config too large");
+    } finally {
+      console.warn = original;
+    }
+
+    expect(seen[0]![0]).toBe("[cc] config sync: could not read storage.sync");
+    expect((seen[0]![1] as Error).message).toBe("no account");
+    expect(seen[1]).toEqual(["[cc] config sync: config too large", ""]);
   });
 });
