@@ -20,7 +20,23 @@ rules:
     open: Nope
 `;
 
+// The whole reason the version marker exists: a machine still on an older build adopts a
+// config another machine wrote, and goes on routing by the parts of it that it understands.
+const FROM_A_NEWER_BUILD = `
+version: 99
+rules:
+  - match: stored.example
+    open: Stored
+    sandbox: true
+`;
+
 describe("loadConfig", () => {
+  it("runs a config written by a newer build, ignoring what it does not know", () => {
+    const r = loadConfig(FROM_A_NEWER_BUILD, SEED);
+    expect(r.error).toBeUndefined();
+    expect(r.config.rules[0]!.action).toEqual({ kind: "open", containers: ["Stored"] });
+  });
+
   it("falls back to the seed when nothing is stored", () => {
     const r = loadConfig(undefined, SEED);
     expect(r.seeded).toBe(true);
