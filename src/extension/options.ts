@@ -1,6 +1,7 @@
 // The config editor. Re-parses on every keystroke with no debounce, because parseConfig is
 // pure and sub-millisecond at this size, and refuses to save anything that does not parse.
-// Saving reloads the extension so every sibling re-reads the config — 2026-07-28 spec §5.
+// Saving writes storage and asks the background to apply it — 2026-08-25 spec. It used to
+// call runtime.reload(), which is the one step of a save nothing here could observe.
 //
 // It REPORTS on Firefox Sync (2026-07-30 spec §6) without ever writing to it: the background
 // is the only publisher, so this page says what the sync area holds and offers back a config
@@ -18,6 +19,7 @@ import {
   writeStoredConfigYaml,
 } from "./config";
 
+import { CONFIG_APPLY, type ConfigApplyResponse } from "./config-protocol";
 import { PAUSE_STORAGE_KEY } from "../engine/pause";
 import type { ContainerRow, PauseStatusResponse, PauseToggleResponse } from "./pause-protocol";
 
@@ -220,14 +222,33 @@ restoreButton.addEventListener("click", () => {
 saveButton.addEventListener("click", () => {
   if (!validate()) return;
   void (async () => {
-    // The stamp decides conflicts against other machines; the background reads it back on
-    // the restart below and publishes.
+    // The stamp decides conflicts against other machines; the background reads it back when
+    // the apply below publishes.
     await writeStoredConfigYaml(textarea.value, Date.now());
     await clearReplacedConfigYaml();
-    statusEl.textContent = "Saved — reloading";
-    // runtime.reload() tears down every extension page, this one included. The delay lets
-    // the status paint first, so the teardown reads as a consequence of the click.
-    setTimeout(() => browser.runtime.reload(), 100);
+    statusEl.textContent = "Saving…";
+
+    // The status reports the background's answer instead of predicting it. The old one said
+    // "Saved — reloading" and called runtime.reload(), which on a temporarily installed
+    // extension on 140 ESR never came back: the old config kept routing and this page said
+    // it had saved. An unanswered apply now says so.
+    let report: ConfigApplyResponse | undefined;
+    try {
+      report = (await browser.runtime.sendMessage({ type: CONFIG_APPLY })) as ConfigApplyResponse | undefined;
+    } catch {
+      report = undefined;
+    }
+    statusEl.textContent =
+      report === undefined
+        ? "Stored, but the extension did not confirm it applied — restart Firefox"
+        : report.scriptError
+          ? `Saved — a script could not be registered: ${report.scriptError}`
+          : "Saved";
+
+    // This page survives its own save now, so what it says about sync and about a replaced
+    // config has to be brought up to date rather than rebuilt by a restart.
+    await renderSyncStatus();
+    await renderReplaced();
   })();
 });
 
