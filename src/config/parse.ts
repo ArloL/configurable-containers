@@ -82,6 +82,7 @@ function warn(ctx: Ctx, path: string, message: string): void {
 }
 
 function use(ctx: Ctx, version: number): void {
+  // Stryker disable next-line EqualityOperator: `>=` reassigns the value it already holds.
   if (version > ctx.requiredVersion) ctx.requiredVersion = version;
 }
 
@@ -434,6 +435,8 @@ function parseGroup(raw: unknown, i: number, ctx: Ctx): Group {
 function readVersion(doc: Record<string, unknown>): number {
   if (!("version" in doc)) return 1;
   const v = doc.version;
+  // Stryker disable next-line ConditionalExpression: `Number.isInteger` already answers
+  // false for every non-number; the typeof is what narrows `v` for the return below.
   if (typeof v !== "number" || !Number.isInteger(v) || v < 1) {
     throw new ConfigError("`version` must be a positive integer", { path: "version" });
   }
@@ -445,7 +448,6 @@ export function parseConfig(yamlText: string): Config {
 }
 
 export function parseConfigDetailed(yamlText: string): ParseResult {
-  const ctx: Ctx = { lenient: false, declaredVersion: 1, requiredVersion: 1, warnings: [] };
   let doc: unknown;
   try {
     doc = parse(yamlText);
@@ -478,8 +480,12 @@ export function parseConfigDetailed(yamlText: string): ParseResult {
   // read. A version this build cannot understand is not a reason to refuse the config —
   // it is the reason to be lenient with the parts of it we have never heard of.
   const declaredVersion = readVersion(doc);
-  ctx.declaredVersion = declaredVersion;
-  ctx.lenient = declaredVersion > CONFIG_VERSION;
+  const ctx: Ctx = {
+    lenient: declaredVersion > CONFIG_VERSION,
+    declaredVersion,
+    requiredVersion: 1,
+    warnings: [],
+  };
 
   const rawRules = doc.rules ?? [];
   if (!Array.isArray(rawRules)) throw new ConfigError("`rules` must be a list", { path: "rules" });

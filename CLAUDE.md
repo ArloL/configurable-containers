@@ -183,6 +183,29 @@ reasonable-looking change wrong**.
 - **A broken stored config never falls back to the seed**: `loadConfig` returns the
   *empty* config plus the error, so everything opens in a throwaway — loud, where stale
   rules are a silent wrong answer. `parseConfig("")` is legal and means "nothing matches".
+- **An unknown key is a TYPO unless the config declares a `version:` above `CONFIG_VERSION`**
+  (`src/config/parse.ts`). Only then does the parser ignore keys it does not know and skip
+  rules it cannot parse; a config declaring nothing is refused with the same words as
+  before, and `test/config/parse.rejections.test.ts` still owns every one of them. Do not
+  make that leniency unconditional to "be forgiving": `opne: X` ignored is a rule that
+  auto-names a container instead of opening the one it names, which is the silent wrong
+  answer this whole file exists to prevent. Leniency also **stops at the rule** — a
+  document whose own shape is wrong (`rules: 5`, a YAML error) is still refused whole,
+  because the empty config that follows sends every site to a throwaway.
+  `FEATURE_VERSIONS` is the allow-list AND the price list, so a new grammar key needs a row
+  there with the version it arrives in; version 2 is the two non-hostname match forms,
+  which are shapes rather than keys and are priced under `matchForm`. Warnings ride
+  `parseConfigDetailed` only — `loadConfig` drops them, and the options page is the one
+  surface that shows them.
+- **The `version:` line is DERIVED, written by Save, and a build in LENIENT mode must never
+  rewrite it** (`stampVersion`, `src/config/stamp.ts`). Restamping there computes a version
+  from the keys this build happens to know, strips the marker, and disarms leniency on
+  every other older machine while the feature it was announcing sits in the text. The
+  self-check at the end of `stampVersion` only catches the case where stripping leaves the
+  document unparseable; the one where a newer version changed what an EXISTING key means is
+  what the guard is for, and `test/config/stamp.test.ts` owns it. It also edits **text**
+  rather than round-tripping through the YAML parser: this is the user's hand-written file,
+  and a serialise reflows their comments, quoting and key order.
 - **Every `browser.*` listener registers SYNCHRONOUSLY as `background.ts` evaluates.**
   Wiring inside an async IIFE loses the session's *first* navigation: Firefox dispatches it
   before `onBeforeRequest` exists (four `auto-temp` e2e cases went red deterministically).
@@ -360,6 +383,11 @@ reasonable-looking change wrong**.
   `__CC_NOTIFY_ECHO_TO__` already shows the cost (no test build is byte-equivalent to a
   packaged one), and arming by name would make the shipped extension capable of starting
   up with routing disabled.
+- **An options-page e2e parks on a probe page from a FRESH tab.** The cases share one
+  Firefox and one storage, so a case that saves a config changes what the next case can
+  navigate to — once `work.example` is unmatched, `driver.get` on the tab the driver is
+  already parked on has its navigation cancelled and never returns. That reads as the case
+  timing out with no assertion having run, not as a routing failure.
 - **The options page is REACHABLE a beat before it is POPULATED.** It fills `#cc-config`
   from `storage.local` after it renders, and `switchToUrl` returns on the url alone, so a
   single read can land in the gap — measured on 140 ESR, one first read in twelve came

@@ -7,7 +7,8 @@
 // is the only publisher, so this page says what the sync area holds and offers back a config
 // an incoming sync replaced.
 
-import { parseConfig, ConfigError } from "../config/parse";
+import { parseConfigDetailed, ConfigError } from "../config/parse";
+import { stampVersion } from "../config/stamp";
 import { MAX_PARTS, decodeRecord, splitParts } from "../config/sync-record";
 import {
   PRE_SYNC_EDIT,
@@ -26,6 +27,7 @@ import type { ContainerRow, PauseStatusResponse, PauseToggleResponse } from "./p
 const textarea = document.getElementById("cc-config") as HTMLTextAreaElement;
 const saveButton = document.getElementById("cc-save") as HTMLButtonElement;
 const errorEl = document.getElementById("cc-error")!;
+const warningsEl = document.getElementById("cc-warnings")!;
 const statusEl = document.getElementById("cc-status")!;
 const syncEl = document.getElementById("cc-sync")!;
 const replacedEl = document.getElementById("cc-replaced") as HTMLElement;
@@ -42,15 +44,22 @@ function describe(e: unknown): string {
   return String(e);
 }
 
-// Also drives the error region and the Save button's disabled state.
+// Also drives the error and warning regions and the Save button's disabled state.
+//
+// A warning is what a config written by a NEWER build leaves behind here: the parts of it
+// this build has never heard of, which it ignored rather than refused. It does not disable
+// Save — this machine must still be able to edit and re-publish a config it only partly
+// understands, or updating one machine strands every other one read-only.
 function validate(): boolean {
   try {
-    parseConfig(textarea.value);
+    const parsed = parseConfigDetailed(textarea.value);
     errorEl.textContent = "";
+    warningsEl.textContent = parsed.warnings.map((w) => w.message).join("\n");
     saveButton.disabled = false;
     return true;
   } catch (e) {
     errorEl.textContent = describe(e);
+    warningsEl.textContent = "";
     saveButton.disabled = true;
     return false;
   }
@@ -222,6 +231,12 @@ restoreButton.addEventListener("click", () => {
 saveButton.addEventListener("click", () => {
   if (!validate()) return;
   void (async () => {
+    // The `version:` line is derived, so it is written here rather than by whoever
+    // remembers: it is what tells a machine still on an older build that the keys it does
+    // not recognise are features rather than typos. Saved back into the editor so the text
+    // on screen is the text that was stored.
+    textarea.value = stampVersion(textarea.value);
+
     // The stamp decides conflicts against other machines; the background reads it back when
     // the apply below publishes.
     await writeStoredConfigYaml(textarea.value, Date.now());
