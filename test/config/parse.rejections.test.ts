@@ -26,6 +26,12 @@ function rejection(yaml: string): ConfigError {
 describe("every way a config is refused", () => {
   it.each([
     [
+      "a version that is not a positive integer",
+      `version: 0\nrules:\n  - match: x.com\n`,
+      "`version` must be a positive integer",
+      "version",
+    ],
+    [
       "regex mapping with an unknown key",
       `rules:\n  - match: { rx: "^https://x/" }\n    open: A\n`,
       "unknown key \"rx\" in rules[0].match[0] (a regex match is { regex: \"\u2026\" })",
