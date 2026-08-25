@@ -123,3 +123,26 @@ another process).
 Worth revisiting if a bug is ever traced to one of them. The cheapest first move is
 `config.ts` against a fake `browser.storage`, since 0% branch coverage means not one of its
 `?? undefined` / area-name guards has ever been executed by a deterministic test.
+
+## `harness/selenium-webdriver.d.ts` is only DefinitelyTyped being behind (2026-08-25)
+
+That file declares two methods — `getDomAttribute` and `getProperty` — that
+`selenium-webdriver` has shipped since **v4.1.1** (its own `CHANGES.md`: "Implements
+'getDomAttribute' … as defined by w3c spec") and that `@types/selenium-webdriver` still
+does not, as of **4.35.6**, the newest published. There is nothing to upgrade to, so the
+declarations live here rather than as a cast at each call site. Delete the file the day
+the types carry them.
+
+To be clear about what is *not* temporary: the call sites. `getDomAttribute`,
+`getProperty`, `switchTo().activeElement()` and `clear()` + `sendKeys()` are the
+spec's own commands, they work on ESR through Nightly, and they would stay the right
+calls even if Firefox reverted the privileged-context change that forced them (CLAUDE.md,
+the e2e section). Only the type declarations are a stopgap.
+
+**Nothing will announce it.** Merging an interface into a class turns same-named methods
+into *overloads*, not a conflict: measured 2026-08-25, redeclaring even `getAttribute`
+with a wrong return type typechecks clean. So an upstream fix will not collide, and a
+stale local signature would silently win over the real one. The trigger to re-check is a
+Renovate bump of `@types/selenium-webdriver`: grep the new package for the two names, and
+if they are there, delete `harness/selenium-webdriver.d.ts` and let `npm run typecheck`
+confirm the call sites still resolve.
