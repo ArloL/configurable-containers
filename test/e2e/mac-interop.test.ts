@@ -33,16 +33,16 @@ describe("MAC interop (real Firefox, CC + MAC + probe)", () => {
 
   it("defers to MAC on an assigned host instead of routing it into a throwaway", async () => {
     const url = `http://nomatch.example:${serverPort}/`;
-    await firefox.driver.switchTo().newWindow("tab");
+    const tab = await firefox.browser.newPage();
     try {
-      await firefox.driver.get(url);
+      await tab.goto(url);
     } catch {
       // Whichever extension wins tears the tab down mid-nav — expected.
     }
 
     // MAC's container, not CC's. A tmp here would mean CC ignored the assignment and
     // bought a throwaway — the F2/F7 churn this defers to avoid.
-    const { name: containerName } = await awaitContainerTab(firefox.driver, url);
+    const { name: containerName } = await awaitContainerTab(firefox.browser, url);
     expect(containerName).toBe("Personal");
   });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { launch, awaitContainerTab, listContainers, type Session } from "../../harness/firefox";
+import { launch, navigateToContainerTab, listContainers, type Session } from "../../harness/firefox";
 import { PRODUCTION_GRACE_MS } from "../../harness/build-extension";
 
 // NIGHTLY ONLY. `npm test` excludes *.realtime.test.ts (vitest.config.ts) and
@@ -36,35 +36,24 @@ describe("temp disposal at the shipped grace (real Firefox, real time)", () => {
   });
 
   it("keeps a throwaway for the whole grace after its last tab closes, then removes it", async () => {
-    const d = firefox.driver;
-
     // A stable observation tab first. work.example is matched, so it settles in the
     // permanent Work container and stays there — nothing reopens or tears it down for
     // the rest of the test, and the probe's command relay lives in its document.
-    await d.switchTo().newWindow("tab");
-    try {
-      await d.get(`http://work.example:${serverPort}/`);
-    } catch {
-      /* CC reopened the tab away */
-    }
-    await awaitContainerTab(d, `http://work.example:${serverPort}/`);
-    const observer = await d.getWindowHandle();
+    const observer = await navigateToContainerTab(
+      firefox.browser,
+      `http://work.example:${serverPort}/`,
+    );
 
     // Route an unmatched host into a fresh throwaway.
-    await d.switchTo().newWindow("tab");
-    try {
-      await d.get(`http://nomatch.example:${serverPort}/`);
-    } catch {
-      /* CC reopened the tab away */
-    }
-    const { name: throwaway } = await awaitContainerTab(d, `http://nomatch.example:${serverPort}/`);
-    expect(throwaway).toMatch(/^tmp/);
+    const throwaway = await navigateToContainerTab(
+      firefox.browser,
+      `http://nomatch.example:${serverPort}/`,
+    );
+    expect(throwaway.name).toMatch(/^tmp/);
 
-    // Close its only tab — the event the grace is measured from. The driver is on that
-    // tab, and closing the active tab leaves it with no window, so re-attach.
-    await d.close();
+    // Close its only tab — the event the grace is measured from.
+    await throwaway.page.close();
     const closedAt = Date.now();
-    await d.switchTo().window(observer);
 
     // Ask the browser for the live container list until the throwaway is gone. Polling
     // this way touches nothing: no navigation, no new tab, nothing that could itself
@@ -73,12 +62,14 @@ describe("temp disposal at the shipped grace (real Firefox, real time)", () => {
     let lastSeenAfterMs = 0;
     const deadline = closedAt + PRODUCTION_GRACE_MS + SLACK_MS;
     while (Date.now() < deadline) {
-      if (!(await listContainers(d)).includes(throwaway)) {
+      if (!(await listContainers(observer.page)).includes(throwaway.name)) {
         removedAfterMs = Date.now() - closedAt;
         break;
       }
       lastSeenAfterMs = Date.now() - closedAt;
-      await d.sleep(POLL_MS);
+      // A real sleep, deliberately: this is the sampling interval of a measurement, not a
+      // wait for a condition. Everything else in the suite waits through the browser layer.
+      await new Promise((resolve) => setTimeout(resolve, POLL_MS));
     }
 
     // It outlived a window the shortened-grace tests would have expired in many times
@@ -88,7 +79,7 @@ describe("temp disposal at the shipped grace (real Firefox, real time)", () => {
     // or dropped, which is the one thing a fake clock can never tell us.
     expect(
       removedAfterMs,
-      `${throwaway} was still present ${lastSeenAfterMs}ms after its last tab closed`,
+      `${throwaway.name} was still present ${lastSeenAfterMs}ms after its last tab closed`,
     ).not.toBeNaN();
     // Within a poll of the grace at the earliest: closedAt is read just after the close
     // returns, so the disposer's timer starts a hair either side of it.

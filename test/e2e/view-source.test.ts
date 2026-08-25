@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import {
   launch,
-  awaitContainerTab,
+  awaitTab,
+  navigateToContainerTab,
   listTabs,
   listContainers,
   openViewSource,
@@ -33,27 +34,17 @@ describe("view-source (real Firefox, CC + probe)", () => {
     // Park on the page, in the throwaway CC routes it into. This tab is the command
     // relay and nothing below navigates it — the source opens in a tab of its own,
     // exactly as Ctrl+U does.
-    await firefox.driver.switchTo().newWindow("tab");
-    try {
-      await firefox.driver.get(pageUrl);
-    } catch {
-      // CC reopened the tab away — expected.
-    }
-    const page = await awaitContainerTab(firefox.driver, pageUrl);
+    const page = await navigateToContainerTab(firefox.browser, pageUrl);
     expect(page.name).toMatch(/^tmp/);
-    const throwawaysBefore = (await listContainers(firefox.driver)).filter((c) => c.startsWith("tmp"));
+    const throwawaysBefore = (await listContainers(page.page)).filter((c) => c.startsWith("tmp"));
 
-    const sourceTab = await openViewSource(firefox.driver, pageUrl, page.store);
+    const sourceTab = await openViewSource(page.page, pageUrl, page.store);
 
     // The source tab is on `view-source:` for its whole life, so there is no reopen to
     // wait for and nothing lands in its DOM: poll browser.tabs instead, and give CC the
     // time it would need to have got this wrong.
-    const deadline = Date.now() + 15_000;
-    let tabs = await listTabs(firefox.driver);
-    while (Date.now() < deadline && !tabs.some((t) => t.id === sourceTab.id && t.url.startsWith("view-source:"))) {
-      await firefox.driver.sleep(300);
-      tabs = await listTabs(firefox.driver);
-    }
+    await awaitTab(page.page, (t) => t.id === sourceTab.id && t.url.startsWith("view-source:"));
+    const tabs = await listTabs(page.page);
 
     const stillShowingSource = tabs.find((t) => t.id === sourceTab.id);
     expect(stillShowingSource, "the tab opened for the source must survive").toBeDefined();
@@ -64,6 +55,6 @@ describe("view-source (real Firefox, CC + probe)", () => {
 
     // Nothing was reopened: no rendered copy of the page, and no throwaway bought for it.
     expect(tabs.filter((t) => t.url === pageUrl)).toHaveLength(1);
-    expect((await listContainers(firefox.driver)).filter((c) => c.startsWith("tmp"))).toEqual(throwawaysBefore);
+    expect((await listContainers(page.page)).filter((c) => c.startsWith("tmp"))).toEqual(throwawaysBefore);
   }, 60_000);
 });
