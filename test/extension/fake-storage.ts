@@ -25,7 +25,6 @@ export interface FakeBrowser {
   // Delivers a change event the way Firefox does — to every listener, with the area name.
   fireChange(areaName: string): void;
   optionsPagesOpened: number;
-  reloads: number;
 }
 
 export function installFakeBrowser(): FakeBrowser {
@@ -44,7 +43,6 @@ export function installFakeBrowser(): FakeBrowser {
       for (const listener of changeListeners) listener({}, areaName);
     },
     optionsPagesOpened: 0,
-    reloads: 0,
   };
 
   function area(
@@ -89,9 +87,6 @@ export function installFakeBrowser(): FakeBrowser {
       openOptionsPage(): Promise<void> {
         f.optionsPagesOpened += 1;
         return Promise.resolve();
-      },
-      reload(): void {
-        f.reloads += 1;
       },
     },
   };

@@ -161,8 +161,9 @@ export function reconcile(
     case "absent":
       return { action: "push" };
     case "ok": {
-      // Load-bearing: adoption ends in runtime.reload(), so if equal text could adopt, two
-      // machines would restart each other forever.
+      // Required for convergence: an adoption is itself a change the other machine hears,
+      // so if equal text could adopt, a converged pair would go on adopting each other's
+      // identical config forever.
       if (remote.text === local.text) return { action: "none" };
       if (remote.updatedAt > local.updatedAt) {
         return { action: "adopt", text: remote.text, updatedAt: remote.updatedAt };

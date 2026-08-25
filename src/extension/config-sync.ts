@@ -4,12 +4,12 @@
 // `storage.local.configYaml` stays the single source of truth for routing: nothing in the
 // engine, the wiring or loadConfig learns that sync exists. The sync area is a MIRROR — read,
 // compared, then either overwritten from local or copied into local — and applying an adopted
-// config reuses the path a Save takes (write storage, then runtime.reload()). That is what
+// config reuses the path a Save takes (write storage, then apply it in place). That is what
 // keeps this out of wireBackground's startup contract.
 //
 // The BACKGROUND is the sync area's only writer. The options page writes storage.local and
-// reloads; the fresh background reconciles and pushes. One publisher means no window in
-// which a dying options page and a starting background both write.
+// asks the background to apply it; the background publishes. One publisher means no window
+// in which the options page and the background both write.
 
 import {
   ConfigTooLargeError,
@@ -129,7 +129,11 @@ export function createConfigSync(ports: SyncPorts): ConfigSync {
 // a fake.
 // ---------------------------------------------------------------------------
 
-export function browserSyncPorts(): SyncPorts {
+// `apply` puts the adopted text into effect: the wiring's applyStored, handed in by
+// background.ts. Taken as an argument rather than imported because the wiring is built after
+// this is, and because an adoption that could not apply would have to restart the extension
+// — the step this slice removed.
+export function browserSyncPorts(apply: () => Promise<unknown>): SyncPorts {
   return {
     async readLocal() {
       const text = (await readStoredConfigYaml()) ?? "";
@@ -154,8 +158,10 @@ export function browserSyncPorts(): SyncPorts {
         [CONFIG_UPDATED_AT_KEY]: updatedAt,
         ...backup,
       });
-      // The same apply path a Save takes; there is deliberately no second one.
-      browser.runtime.reload();
+      // The same apply path a Save takes; there is deliberately no second one. It used to be
+      // runtime.reload(), which is the one step of an apply nothing could observe — and on a
+      // temporarily installed extension on 140 ESR it never came back at all.
+      await apply();
     },
 
     readSync: readSyncItems,

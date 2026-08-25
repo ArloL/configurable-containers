@@ -96,9 +96,10 @@ export function wireBackground(opts: WiringOptions): Background {
   };
 
   // Shared by the engine's reopen and auto-temp so their container names never collide.
-  // Starts at 0 and is raised past every existing tmp<N> by resumeTmpSuffix below — every
-  // config save reloads, and a reset counter would reissue a live container's name.
-  // Auto-temp cannot wait for that answer; its listeners must register synchronously too.
+  // Starts at 0 and is raised past every existing tmp<N> by resumeTmpSuffix below: a browser
+  // restart leaves the containers behind and the counter at zero, and a reset counter would
+  // reissue a live container's name. Auto-temp cannot wait for that answer; its listeners
+  // must register synchronously too.
   let n = 0;
   const tmpSuffix = (): string => String(++n);
 
