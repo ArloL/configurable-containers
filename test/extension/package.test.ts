@@ -6,6 +6,12 @@ import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { packageExtension, zipTimestamp } from "../../scripts/package";
 import { UPDATE_URL } from "../../scripts/sign-dev";
+import {
+  DEV_ID,
+  DEV_NAME,
+  DEV_UPDATE_URL,
+  packageOptionsFromArgv,
+} from "../../scripts/package";
 
 // Decode the DOS timestamp out of the archive's first local file header (which always
 // starts at offset 0): 2 bytes of time at offset 10, 2 of date at 12.
@@ -194,5 +200,45 @@ describe("zipTimestamp", () => {
   it("rejects a timestamp before 1980, which zip cannot store", () => {
     expect(() => zipTimestamp({ BUILD_TIMESTAMP: "1979-06-01T00:00:00Z" })).toThrow(/before 1980/);
     expect(() => zipTimestamp({ BUILD_TIMESTAMP: "0" })).toThrow(/before 1980/);
+  });
+});
+
+// The CLI's argument parsing, which is what decides whether a dev release's published
+// "Reproduce this build" command tells the truth. Pure, so it is testable without
+// building anything — the packaging itself is covered above.
+describe("packageOptionsFromArgv", () => {
+  it("builds the listed add-on by default: no id, no name, no update_url override", () => {
+    expect(packageOptionsFromArgv(["2608.0.112"])).toEqual({ version: "2608.0.112" });
+  });
+
+  // AMO REJECTS a listed submission carrying an update_url, so this must not leak in.
+  it("names none of the dev overrides without --dev", () => {
+    const opts = packageOptionsFromArgv(["2608.0.112"]);
+    expect(opts.id).toBeUndefined();
+    expect(opts.name).toBeUndefined();
+    expect(opts.updateUrl).toBeUndefined();
+  });
+
+  it("builds the dev add-on with --dev, whichever side of the version it sits", () => {
+    const expected = {
+      version: "2608.0.144",
+      id: DEV_ID,
+      name: DEV_NAME,
+      updateUrl: DEV_UPDATE_URL,
+    };
+    expect(packageOptionsFromArgv(["2608.0.144", "--dev"])).toEqual(expected);
+    expect(packageOptionsFromArgv(["--dev", "2608.0.144"])).toEqual(expected);
+  });
+
+  it("falls back to CC_VERSION and then 0.0.0, so a local build is never submittable", () => {
+    expect(packageOptionsFromArgv([], { CC_VERSION: "1.2.3" })).toEqual({ version: "1.2.3" });
+    expect(packageOptionsFromArgv([], {})).toEqual({ version: "0.0.0" });
+  });
+
+  // sign:dev signs what this builds, so the two must name the same add-on or the
+  // reproducible artefact on a dev release describes a different extension from the
+  // signed one beside it.
+  it("agrees with the update_url sign:dev stamps before signing", () => {
+    expect(packageOptionsFromArgv(["1.0.0", "--dev"]).updateUrl).toBe(UPDATE_URL);
   });
 });

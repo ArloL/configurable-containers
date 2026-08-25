@@ -64,6 +64,14 @@ function stagedFiles(dir: string, prefix = ""): string[] {
     .sort();
 }
 
+// The dev channel's identity, here rather than in sign-dev.ts because BOTH the signing
+// script and this file's CLI need it: a dev release publishes the pre-signing xpi so the
+// channel is verifiable, and that artefact is only reproducible if a reader can rebuild
+// the same add-on. `sign-dev.ts` re-exports UPDATE_URL, which is what the tests import.
+export const DEV_ID = "configurable-containers-dev@k5d.de";
+export const DEV_NAME = "Configurable Containers Dev";
+export const DEV_UPDATE_URL = "https://arlol.github.io/configurable-containers/updates.json";
+
 export interface PackageOptions {
   version: string;
   seedPath?: string;
@@ -124,11 +132,31 @@ export async function packageExtension(
   return { xpiPath, stageDir };
 }
 
-// 0.0.0 by default: local builds are never submitted, and real versions come from the CalVer
-// tag in CI. The argv guard keeps an import from packaging anything.
+/**
+ * The CLI's arguments, as options — pure, because this is the half that can be wrong.
+ *
+ * `--dev` builds the DEV add-on: its own id, its own name and the self-distribution
+ * update_url. Without it a dev release's published "Reproduce this build" command would
+ * rebuild the LISTED identity and never match the xpi attached beside it — the notes would
+ * make a promise the artefact cannot keep, which is the exact failure the reproducibility
+ * gate exists to catch.
+ *
+ * 0.0.0 by default: local builds are never submitted, and real versions come from the
+ * CalVer tag in CI.
+ */
+export function packageOptionsFromArgv(
+  argv: readonly string[],
+  env: NodeJS.ProcessEnv = process.env,
+): PackageOptions {
+  const args = argv.filter((a) => a !== "--dev");
+  const version = args[0] ?? env.CC_VERSION ?? "0.0.0";
+  if (argv.length === args.length) return { version };
+  return { version, id: DEV_ID, name: DEV_NAME, updateUrl: DEV_UPDATE_URL };
+}
+
+// The argv guard keeps an import from packaging anything.
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
-  const version = process.argv[2] ?? process.env.CC_VERSION ?? "0.0.0";
-  packageExtension({ version })
+  packageExtension(packageOptionsFromArgv(process.argv.slice(2)))
     .then(({ xpiPath }) => console.log(xpiPath))
     .catch((err) => {
       console.error(err instanceof Error ? err.message : err);

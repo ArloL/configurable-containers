@@ -61,6 +61,67 @@ describe("updatesManifest", () => {
     expect(updates[0]!.update_link).toBe(asset("some_other_name.xpi").browser_download_url);
   });
 
+  // The regression the symmetric-artefact change would otherwise have caused. A dev
+  // release now carries the reproducible pre-signing build alongside the signed one, and
+  // `.endsWith(".xpi")` took whichever GitHub listed first. Firefox refuses an unsigned
+  // xpi, so half the time this would have offered an uninstallable update — silently, and
+  // permanently, the release being immutable.
+  it("offers the SIGNED xpi, never the reproducible build published beside it", () => {
+    const updates = updatesIn(
+      updatesManifest([
+        dev("v2607.0.104", [
+          // Deliberately first, which is what the old rule would have taken.
+          asset("configurable-containers-2607.0.104.xpi"),
+          asset("configurable_containers_dev-2607.0.104.xpi"),
+        ]),
+      ]),
+    );
+    expect(updates[0]!.update_link).toBe(
+      asset("configurable_containers_dev-2607.0.104.xpi").browser_download_url,
+    );
+  });
+
+  it("still offers the one xpi on releases published before the reproducible build existed", () => {
+    const updates = updatesIn(
+      updatesManifest([dev("v2607.0.104", [asset("configurable_containers_dev-2607.0.104.xpi")])]),
+    );
+    expect(updates[0]!.update_link).toBe(
+      asset("configurable_containers_dev-2607.0.104.xpi").browser_download_url,
+    );
+  });
+
+  // The source archive rides along on a dev release now too, and it is not an xpi — so it
+  // must not be mistaken for one, and must not make the choice ambiguous either.
+  it("ignores the source archive", () => {
+    const updates = updatesIn(
+      updatesManifest([
+        dev("v2607.0.104", [
+          asset("configurable-containers-src-2607.0.104.zip"),
+          asset("configurable-containers-2607.0.104.xpi"),
+          asset("configurable_containers_dev-2607.0.104.xpi"),
+        ]),
+      ]),
+    );
+    expect(updates[0]!.update_link).toBe(
+      asset("configurable_containers_dev-2607.0.104.xpi").browser_download_url,
+    );
+  });
+
+  // Refused rather than guessed. Two signed-looking xpis means something changed about
+  // what a release carries, and picking one would be a coin flip that ships to users.
+  it("skips a release carrying two candidate xpis rather than guessing", () => {
+    const updates = updatesIn(
+      updatesManifest([
+        dev("v2607.0.104", [
+          asset("configurable_containers_dev-2607.0.104.xpi"),
+          asset("something_else-2607.0.104.xpi"),
+        ]),
+        dev("v2607.0.106"),
+      ]),
+    );
+    expect(updates.map((u) => u.version)).toEqual(["2607.0.106"]);
+  });
+
   it("skips a dev release with no xpi", () => {
     // The tag is pushed BEFORE signing, so a signing failure leaves a release-less tag
     // and, if the release was made, an assetless release. An entry pointing at nothing
