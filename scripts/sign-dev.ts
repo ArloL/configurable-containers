@@ -6,7 +6,7 @@
 // and the installed add-on gets its own storage.local, so it cannot clobber the real
 // add-on's config if both are installed.
 //
-// Run: npm run sign:dev [version]
+// Run: VERSION=<version> npm run sign:dev
 import { spawnSync } from "node:child_process";
 import { readdirSync, rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
