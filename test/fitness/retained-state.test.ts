@@ -2,10 +2,13 @@
 //
 // The gates around this one all ask whether an answer is right. None of them asks what the
 // background page is still holding after a week of browsing, and none of them can: the L3
-// cases drive tens of navigations, `npm test` restarts the world between files, and a
-// config save reloads the extension and empties everything. A structure that gains an
-// entry per navigation and loses none is invisible to all of it — the same shape as F10,
-// silent and only visible over time.
+// cases drive tens of navigations and `npm test` restarts the world between files. A
+// structure that gains an entry per navigation and loses none is invisible to all of it —
+// the same shape as F10, silent and only visible over time.
+//
+// It got sharper when a config save stopped reloading the extension (2026-08-25 spec). A
+// save used to empty every one of these, so "unbounded" meant "until the user next edits
+// their rules". Now nothing empties them until the browser restarts.
 //
 // So this is an inventory rather than a measurement. Measuring retained bytes means either
 // reaching into a closure (the collections are private, and exporting them to be counted
@@ -21,8 +24,9 @@ import { sourceFiles } from "./sources";
 type Lifetime =
   // Built and dropped inside one call. Nothing to bound.
   | "call"
-  // Lives as long as the background context, which in MV2 means until the next config
-  // save — `runtime.onMessage`-triggered `runtime.reload()`, not a suspension.
+  // Lives as long as the background context, which in MV2 means until the browser restarts:
+  // Firefox suspends an event page when it is idle, and CC's page is not one. A config save
+  // no longer ends it either — saving applies the config in place.
   | "session";
 
 interface Retained {
@@ -132,11 +136,16 @@ describe("fitness — what the background page keeps", () => {
     // down. Each holds one short string or number, and each is fed by something rarer than
     // browsing: `handled` by a navigation CC actually reopened, `warnedHosts` by a site
     // that declined a non-GET, `processed` by a tab being created, `viewSourceNav` only by
-    // a tab closed while still on `view-source:`. A long session costs kilobytes.
+    // a tab closed while still on `view-source:`. A long session costs kilobytes — and a
+    // session is now a browser run, since a config save applies in place rather than
+    // reloading the extension. That priced these four again rather than changing them.
+    //
+    // What it changed for the better is the state a save used to destroy: `reopenedNav` and
+    // the tmp<N> counter survive one, so saving mid-reopen no longer costs an extra reopen.
     //
     // What this row list is for is the fifth one — the per-navigation Map holding a
-    // NavContext, added by someone who reasonably assumed the background page restarts.
-    // In MV2 it restarts on a config save and not otherwise.
+    // NavContext, added by someone who reasonably assumed the background page restarts. It
+    // restarts with the browser and at no other time.
     const unbounded = DECLARED.filter((r) => r.bound.startsWith("nothing")).map(key).sort();
     expect(unbounded).toEqual([
       "src/engine/auto-temp.ts processed",

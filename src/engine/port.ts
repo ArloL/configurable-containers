@@ -214,9 +214,10 @@ export interface BrowserPort {
   setBadge(text: string): Promise<void>;
 
   // The one thing on this seam that outlives the background context — a pending timer does
-  // not, and `options.ts` calls runtime.reload() on every config save. So a deadline that
-  // must survive a restart is stored as a FACT ("empty since T") and re-derived on the next
-  // startup, never held in a closure. Untyped: each caller owns the shape under its key.
+  // not, and the context dies with the browser. So a deadline that must survive a restart is
+  // stored as a FACT ("empty since T") and re-derived on the next startup, never held in a
+  // closure. It is also how the wiring reads the config a Save has just written. Untyped:
+  // each caller owns the shape under its key.
   readStored(key: string): Promise<unknown>;
   writeStored(key: string, value: unknown): Promise<void>;
 }

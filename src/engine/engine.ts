@@ -142,8 +142,9 @@ export function createEngine(opts: EngineOptions): Engine {
   const { port, config, deps, onChoice, pause } = opts;
   const registry = createRegistry(port, opts.tmpSuffix ?? defaultSuffix());
   const handled = new Set<string>();
-  // Hosts already warned about a declined non-GET. Session-scoped: the runtime.reload() a
-  // config save triggers clears it, which is right — the rules changed, so warn again.
+  // Hosts already warned about a declined non-GET. Lives as long as the background context,
+  // which since a config save stopped restarting the extension means until the browser does:
+  // one host per site that posted cross-container, which a long session prices in bytes.
   const warnedHosts = new Set<string>();
   // The navigation each tab we reopened is still performing: tabId -> the requestId once
   // its first request arrives, or the url we are waiting for until then. onBeforeRequest
