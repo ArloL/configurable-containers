@@ -126,7 +126,8 @@ rather than mis-routing a tab.
 
 `src/config/sync-record.ts` decides what a machine does when its config and the published
 one disagree. It has **no L4 owner and cannot have one** — a test profile has no Firefox
-Account, adoption ends in `runtime.reload()`, and the probe has its own sync namespace —
+Account, `moz-extension:` is unreachable to the driver, and the probe has its own sync
+namespace —
 so the deterministic levels are the whole defence. What they defend against is a config
 silently replaced by an older one on every machine the user owns.
 
@@ -136,7 +137,8 @@ no single-decision example finds them:
 
 - *Convergence* — from any interleaving of edits and syncs on two machines, sync
   terminates: one config, both machines quiet. Equal text must never return `adopt`
-  (adoption reloads, so two machines would restart each other forever), and the
+  (an adoption is itself a change the other machine hears, so a converged pair would adopt
+  each other's identical config forever), and the
   equal-stamp tie-break must give the two machines **opposite** answers, so exactly one
   publishes. The tie is the *normal* first startup — every pre-sync config backfills to
   the same stamp.
@@ -192,8 +194,8 @@ F13, F14.
   guard once a tab has committed. Each is revert-verified; the disposer's stored map reds
   seven cases.
 
-  Not a hypothetical MV3 concern: `src/extension/options.ts` calls `runtime.reload()` on
-  every config save, so a user triggers this in the shipping MV2 build.
+  Not a hypothetical MV3 concern, even though a config save no longer restarts anything:
+  the background context still dies with the browser, which is every user, every day.
 
   The harness calls `wireBackground` (`src/extension/wiring.ts`), the same function the
   extension entry point calls, so no second copy of the startup order can drift. Two
@@ -398,11 +400,15 @@ mutant no other case catches.
   - **The suite itself** (`suite.test.ts`) — no committed `.only` (which shrinks CI to one
     case and still reports success), skips limited to the one documented undriveable case,
     and every `// Stryker disable` carrying its justification.
+  - **No `runtime.reload()` in `src/`** (`seams.test.ts`) — a config is applied in place, by
+    a Save and by a sync adoption alike. Restarting to apply one takes back the single step
+    of a save that nothing can observe, and on a temporarily installed extension on 140 ESR
+    it does not come back at all.
   - **What the background page keeps** (`retained-state.test.ts`) — every `Set` and `Map`
     in `src/`, each with a written bound. No other gate asks this: the L3 cases drive tens
-    of navigations, `npm test` restarts the world between files, and a config save empties
-    everything, so a structure that gains an entry per navigation and loses none is
-    invisible to all of them — F10's shape, silent and only visible over time. An
+    of navigations and `npm test` restarts the world between files, so a structure that
+    gains an entry per navigation and loses none is invisible to all of them — F10's shape,
+    silent and only visible over time. An
     inventory rather than a measurement, because counting retained bytes means either
     exporting a closure's privates to be counted or timing a heap. Four structures are
     recorded as growing with nothing emptying them, and all four are fine: each holds one
@@ -582,10 +588,11 @@ issue on regression rather than blocking a PR — guard rails, not gatekeepers. 
   with a pre-commit `about:blank` snapshot on ESR (which is why auto-temp watches
   `onTabUpdated` too, so ESR is the only channel exercising that path), Marionette raising
   `NoSuchWindowError` when Esc closes the tab the keystroke went to, and a fixed wait for a
-  `runtime.reload()`. A fourth is a real platform difference and the one case ESR cannot
+  `runtime.reload()`. A fourth was a real platform difference and the one case ESR could not
   run: `runtime.reload()` does not bring a temporarily installed extension back on 140 ESR,
-  so nothing about a config save is observable there. Whether that reaches real ESR users
-  is unknown here — the harness cannot install permanently without signing.
+  so nothing about a config save was observable there. That is what a save applying its
+  config in place removed — the case now runs on both channels, measured against
+  140.14.0esr, and no shipped path depends on the extension coming back.
 - **Firefox API drift** — narrowed rather than closed. The `latest`/`latest-esr` matrix
   blocks every push and the nightly **Nightly** tripwire gives months of notice, but all
   three run the same suite: a behaviour no case asserts can still change under us. The
