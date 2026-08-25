@@ -36,6 +36,12 @@ describe("requiredVersion", () => {
 });
 
 describe("the declared version", () => {
+  it("is 1, with nothing to warn about, for an empty document", () => {
+    const parsed = parseConfigDetailed("");
+    expect(parsed.declaredVersion).toBe(1);
+    expect(parsed.warnings).toEqual([]);
+  });
+
   it("is 1 when the document says nothing", () => {
     expect(parseConfigDetailed(`rules:\n  - match: x.com\n`).declaredVersion).toBe(1);
   });

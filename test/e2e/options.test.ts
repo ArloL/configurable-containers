@@ -15,6 +15,23 @@ rules:
     open: Editor
 `;
 
+// Uses a match pattern, which is a version 2 feature — so saving it must write the marker
+// that tells an older build the keys it does not recognise are features, not typos.
+const PATTERN_CONFIG = `
+rules:
+  - match: "*://nomatch.example/*"
+    open: Editor
+`;
+
+// What a machine still on this build sees of a config a newer one wrote.
+const FUTURE_CONFIG = `
+version: 99
+rules:
+  - match: nomatch.example
+    open: Editor
+    sandbox: true
+`;
+
 const BROKEN_SEED = `
 rules:
   - match: 123
@@ -35,15 +52,20 @@ describe("options page (real Firefox, CC + probe)", () => {
       await firefox?.close();
     });
 
-    // Park on a probe-reported page so the cc-probe-cmd relay exists. work.example is
-    // matched, so CC leaves it in Work rather than churning; the cache-buster forces a
-    // fresh probe report.
+    // Park on a probe-reported page so the cc-probe-cmd relay exists; the cache-buster
+    // forces a fresh probe report.
+    //
+    // From a FRESH tab every time, never the one the driver happens to be on. Once a case
+    // has saved a config of its own, work.example may be unmatched — and a reopen CANCELS
+    // the navigation of a tab that is already on a page, which never returns to WebDriver.
+    // That reads as the case timing out with no assertion having run.
     async function parkOnProbePage(tag: string) {
       const url = `http://work.example:${serverPort}/?cb=${tag}-${Date.now()}`;
+      await firefox.driver.switchTo().newWindow("tab");
       try {
         await firefox.driver.get(url);
       } catch {
-        // First visit reopens the tab into Work, tearing this one down — expected.
+        // Reopened into a container, tearing this tab down — expected.
       }
       await awaitContainerTab(firefox.driver, url);
     }
@@ -154,6 +176,49 @@ describe("options page (real Firefox, CC + probe)", () => {
         await firefox.driver.sleep(500);
       }
       expect(container, "the saved config never took effect").toBe("Editor");
+    });
+
+    it("stamps the version a saved config earns", async () => {
+      await openEditor("stamp");
+      await typeConfig(PATTERN_CONFIG);
+      await firefox.driver.findElement(By.id("cc-save")).click();
+      await firefox.driver.wait(
+        async () => (await firefox.driver.findElement(By.id("cc-status")).getText()) === "Saved",
+        10_000,
+        "the editor never reported the config applied",
+      );
+
+      // Back in the editor, because the stored text and the text on screen must be the
+      // same text — the line is derived, and a user who never learns the number still gets
+      // the benefit of it on their other machines.
+      const value = await firefox.driver.findElement(By.id("cc-config")).getProperty("value");
+      expect(value).toContain("version: 2");
+    });
+
+    it("edits and saves a config written by a newer build without losing what it cannot read", async () => {
+      await openEditor("future");
+      await typeConfig(FUTURE_CONFIG);
+
+      // Not an error: the whole point is that this build keeps running a config it only
+      // partly understands, and keeps letting this machine edit and re-publish it.
+      expect(await firefox.driver.findElement(By.id("cc-error")).getText()).toBe("");
+      expect(await firefox.driver.findElement(By.id("cc-save")).isEnabled()).toBe(true);
+      const warnings = await firefox.driver.findElement(By.id("cc-warnings")).getText();
+      expect(warnings).toContain("sandbox");
+
+      await firefox.driver.findElement(By.id("cc-save")).click();
+      await firefox.driver.wait(
+        async () => (await firefox.driver.findElement(By.id("cc-status")).getText()) === "Saved",
+        10_000,
+        "the editor never reported the config applied",
+      );
+
+      // The marker survives the save. Restamping here would compute a version from the keys
+      // THIS build knows, strip the line, and disarm leniency on every other older machine
+      // while the key it was hiding sat right there in the text.
+      const value = await firefox.driver.findElement(By.id("cc-config")).getProperty("value");
+      expect(value).toContain("version: 99");
+      expect(value).toContain("sandbox: true");
     });
   });
 

@@ -26,6 +26,10 @@ exports.
   container. That is the founding premise, so there is no `default:` for it.
 - **Text-edited.** The config is edited as text in a simple editor built into the
   extension. There is no form-based settings UI.
+- **One derived key.** A `version:` line may appear above the lists. Nobody types it: Save
+  writes what the config's features need, and it exists so a machine running an older
+  build can tell a feature it has never heard of from a typo. See
+  [Machines on different versions](#machines-on-different-versions).
 
 ## The rule
 
@@ -478,6 +482,35 @@ Three consequences worth knowing before they surprise you:
 
 A machine not signed into Firefox Sync is not broken — Firefox keeps the record locally
 and uploads it if an account is ever connected.
+
+### Machines on different versions
+
+Machines update on their own schedule, so a config written on an updated one arrives on a
+machine whose CC has never heard of half of it. That machine keeps routing.
+
+The mechanism is the derived `version:` line. Save writes it whenever a config uses a
+feature added after version 1 — today that means a match pattern or a regex, which are
+version 2 — and removes it again when nothing needs it. A build reading a config that
+declares a version **above its own** knows it is the older machine, and treats what it
+does not recognise as a feature rather than a mistake:
+
+- an unknown key is ignored, and the rest of that rule applies;
+- a rule it cannot parse at all is skipped, so the sites it names fall back to a
+  throwaway rather than the whole config collapsing;
+- the editor lists what it ignored, and still lets you edit and save — including saving
+  the `version:` line back untouched, since a build that cannot see those features must
+  not decide the config no longer needs its marker.
+
+A config that declares **no** future version is held to the current grammar exactly as
+before: an unknown key there is a typo, and it is refused with the line it is on. That is
+the whole reason the marker exists — without it, "a key from next year" and "a key with a
+letter missing" are the same observation.
+
+What this does not cover: a build older than the marker itself refuses an unknown key
+whatever a config declares, and a feature filed at the wrong version tells older machines
+nothing. The version table lives beside the keys in `src/config/parse.ts`, pinned by an
+exact inventory in `test/config/parse.version.test.ts`, so filing one is a decision
+someone makes rather than forgets.
 
 ## Importing from MAC + Temporary Containers
 
