@@ -2,8 +2,9 @@ name: Verify a published release
 
 # The gate that has no subject to look for. `nightly.yml`'s reproducible-build job had to
 # go hunting for the release to check, its search silently came back empty, and it passed
-# in zero seconds every night for four weeks. Here the event names the release, so that
-# entire class of failure cannot occur.
+# in zero seconds every night for four weeks. Here the release is NAMED to this workflow —
+# by the job that just published it, or by the event, or by hand — so it never searches,
+# and that entire class of failure cannot occur.
 #
 # It runs on BOTH channels, with no branching in the workflow: since 2026-08-25 a dev
 # prerelease publishes the same artefacts a listed release does — the reproducible
@@ -15,14 +16,28 @@ name: Verify a published release
 # release that reproduced when it was cut still reproduces on today's toolchain.
 
 on:
+  # How it actually fires for our releases. A release created with the default
+  # GITHUB_TOKEN — which is every release this repo publishes — triggers NO workflow:
+  # GitHub suppresses those events to stop workflows recursing. So `on: release` alone
+  # would make this gate dead on arrival, the very failure it exists to prevent.
+  # `publish-dev-manifest.yml` hit the same wall and is called the same way; its
+  # `on: release` has fired exactly zero times in ~150 releases.
+  workflow_call:
+    inputs:
+      tag:
+        description: The release tag to verify, e.g. v2608.0.112
+        required: true
+        type: string
+  # For a release a PERSON creates in the GitHub UI, which does trigger.
   release:
     types: [published]
-  # So a release published before this existed can be checked by hand.
+  # And for checking a release published before this workflow existed.
   workflow_dispatch:
     inputs:
       tag:
         description: The release tag to verify, e.g. v2608.0.112
         required: true
+        type: string
 
 permissions: {}
 
