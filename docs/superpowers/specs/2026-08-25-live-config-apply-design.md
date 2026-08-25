@@ -28,16 +28,15 @@ channel CI drives.
 
 ### In scope
 
-- **`src/extension/wiring.ts`** gains `applyStored()`: read the stored config through an
-  injected loader, swap it into the one `config` object, re-register content scripts.
+- **`src/extension/wiring.ts`** gains `applyStored()`: read the stored config through the
+  port, swap it into the one `config` object, re-register content scripts.
 - **`src/engine/script-injector.ts`** becomes an object that holds its registrations and
   can replace them, instead of a function that registers once and discards the handles.
 - **`src/extension/config-protocol.ts`** (new): the `cc-config-apply` message and its
   reply, alongside the existing `pause-protocol.ts`.
 - **`src/extension/options.ts`**: Save sends the message and reports on the reply.
 - **`src/extension/config-sync.ts`**: adoption applies in process rather than reloading.
-- **`src/extension/background.ts`**: wires the loader, the publish and the adoption
-  callback together.
+- **`src/extension/background.ts`**: wires the publish and the adoption callback together.
 - Tests: `mock-port` fidelity for unregistration, an L3 apply suite, a fitness row pinning
   `runtime.reload` out of `src/`, and the un-skipped e2e case.
 
@@ -61,9 +60,9 @@ claims with *"the same apply path a Save takes; there is deliberately no second 
 
 ```
 applyStored(): Promise<ConfigApplyResponse>
-  1. loadStoredConfig()            injected; browser.storage in production, a fake in L3
-  2. Object.assign(config, ...)    the one object every sibling reads at event time
-  3. scripts.apply(config)         unregister previous handles, register the new set
+  1. port.readStored(CONFIG_STORAGE_KEY) + loadConfig   the stored yaml, parsed
+  2. Object.assign(config, ...)                          the one object every sibling reads at event time
+  3. scripts.apply(config)                               unregister previous handles, register the new set
 ```
 
 Step 2 is what makes the whole thing cheap, and it is not new: `wireBackground` already
@@ -78,10 +77,17 @@ That is a property, not a coincidence, and a third key added later would silentl
 old value; the implementation pins it with a type-level exhaustiveness guard rather than a
 comment.
 
-**The loader is injected.** `wiring.ts` is not one of the four files allowed to touch
-`browser.*` (CLAUDE.md), and `test/engine/restart.ts` drives `wireBackground` under a mock
-port. `WiringOptions.loadStoredConfig: () => Promise<LoadResult>` keeps the browser out of
-it; `background.ts` supplies `loadConfig(await readStoredConfigYaml(), SEED_CONFIG_YAML)`.
+**The read goes through the port, not an injected loader.** `wiring.ts` is not one of the
+five files allowed to touch `browser.*` (`test/fitness/seams.test.ts` pins the list), and
+`test/engine/restart.ts` drives `wireBackground` under a mock port. `BrowserPort.readStored`
+is already generic `storage.local` access — the disposer's grace uses it — and `mock-port`
+models that storage, so an L3 case can write the config text the way a Save does and watch
+the apply pick it up. An injected loader would be a second seam answering a question this
+one already answers.
+
+The seed is deliberately *not* reachable here: `loadConfig(stored, "")`. By the time
+anything applies, storage holds the truth, and a seed reachable from the apply would be a
+second answer to "what is the config".
 
 ## 3. The script injector holds its registrations
 
