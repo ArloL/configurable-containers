@@ -421,6 +421,18 @@ reasonable-looking change wrong**.
   `pageAt`, then a retrying assertion. The race is **load-dependent**: 40 rounds on an idle
   machine, with and without CPU pressure, reproduced it zero times, which is why the
   layer's own semantics are unit-tested against a fake driver instead of a browser.
+- **A case that expects CC's OWN options page must wait for it before opening a tab of its
+  own, and through `pageAt` rather than the probe.** Two measured hazards, both
+  load-dependent, both of which read as "the editor never opened". `openOptionsPage()`
+  lands in an EXISTING blank tab when there is one — including the blank tab a case just
+  opened for itself — and navigating that tab then has CC reopen it, taking the editor
+  with it: the probe's tab log shows the options tab `REMOVED` 16ms after the routed tab
+  appears, `windowClosing=false`, with config-sync (the last step of the startup tail)
+  having published, so the extension was fine. Once that has happened no wait, however
+  long, will find it. And asking the PROBE costs a relay round-trip per poll, which under
+  CPU pressure stacks up past any sensible budget — 13.8s, 13.7s and 22.4s were measured
+  for a tab that had been open the whole time. `pageAt` enumerates window handles, needs
+  no page of its own, and is unaffected by both.
 - **An options-page e2e must read tab ids BEFORE parking on the options page.** The
   probe's relay is a DOM event injected into http(s) pages only, so from
   `moz-extension://` every probe command goes unanswered and reads as a timeout.
