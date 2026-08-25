@@ -161,11 +161,12 @@ describe("choice screen + reopen picker (real Firefox, CC + probe)", () => {
     expect(chosenContainer).toBe("Work");
 
     // Indices come from ONE fresh snapshot: a tab closing elsewhere renumbers every tab
-    // after it, so an earlier reading is only good against itself.
-    const after = await listTabs(article.page);
+    // after it, so an earlier reading is only good against itself. That snapshot is the one
+    // awaitTabs settled on — the choice tab closing is an event with its own timing, and
+    // reading the list once races it.
+    const after = await awaitTabs(article.page, (tabs) => !tabs.some((t) => t.url.includes("/choice.html")));
     const articleStillOpen = after.find((tab) => tab.url === articleUrl);
     const chosenTab = after.find((tab) => tab.url.startsWith(multiOpenUrl));
-    expect(after.some((tab) => tab.url.includes("/choice.html"))).toBe(false);
     expect(articleStillOpen, "the article must survive the choice too").toBeDefined();
     expect(chosenTab!.index).toBe(articleStillOpen!.index + 1);
   });

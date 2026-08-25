@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { Page } from "../../harness/browser/index";
 import {
-  launch, listTabs, navigateTab, openRealNewTab, awaitContainerTab, awaitTab,
+  launch, navigateTab, openRealNewTab, awaitContainerTab, awaitTab, awaitTabs,
   navigateToContainerTab, type ProbeTab, type Session,
 } from "../../harness/firefox";
 
@@ -69,9 +69,9 @@ describe("auto-temp (real Firefox, CC + probe)", () => {
     expect(tab.cookieStoreId).toMatch(/^firefox-container-\d+$/);
     expect(tab.container).toMatch(/^tmp/);
 
-    // The original default-container tab is gone, not merely duplicated.
-    const tabs = await listTabs(relay);
-    expect(tabs.find((tab) => tab.id === created.id)).toBeUndefined();
+    // The original default-container tab is gone, not merely duplicated. Waited for, not
+    // read once: containerizing is a create/remove pair, and the remove lands when it lands.
+    await awaitTabs(relay, (tabs) => tabs.every((tab) => tab.id !== created.id));
   });
 
   it("gives each new tab its own temporary container", async () => {
@@ -139,7 +139,9 @@ describe("auto-temp startup sweep (real Firefox)", () => {
       (tab) => tab.url === "about:newtab" && tab.container.startsWith("tmp"),
       10_000,
     );
-    const last = await listTabs(observer.page);
-    expect(last.some((tab) => tab.url === "about:newtab" && tab.cookieStoreId === "firefox-default")).toBe(false);
+    await awaitTabs(
+      observer.page,
+      (tabs) => !tabs.some((tab) => tab.url === "about:newtab" && tab.cookieStoreId === "firefox-default"),
+    );
   });
 });
