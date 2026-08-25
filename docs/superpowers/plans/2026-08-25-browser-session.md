@@ -1282,8 +1282,11 @@ expect.extend({
   },
 });
 
+// The parameter list must match @vitest/expect's own `interface Matchers<T = any>`
+// exactly, or TS refuses the merge (TS2428) even though the matchers work.
 declare module "vitest" {
-  interface Matchers<T = unknown> {
+  // oxlint-disable-next-line typescript/no-explicit-any -- see above
+  interface Matchers<T = any> {
     toHaveText(expected: string | RegExp, opts?: WaitOpts): Promise<T>;
     toContainText(expected: string, opts?: WaitOpts): Promise<T>;
     toHaveValue(expected: string, opts?: WaitOpts): Promise<T>;
