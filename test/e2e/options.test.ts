@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { By } from "selenium-webdriver";
 import {
   launch, awaitContainerTab, openExtensionPage, switchToUrl, ccExtensionUrl, listTabs,
-  readContainerName, type Session,
+  readContainerName, awaitElement, type Session,
 } from "../../harness/firefox";
 
 const OPTIONS_URL = ccExtensionUrl("options.html");
@@ -84,6 +84,9 @@ describe("options page (real Firefox, CC + probe)", () => {
       await parkOnProbePage(tag);
       await openExtensionPage(firefox.driver, OPTIONS_URL);
       await switchToUrl(firefox.driver, OPTIONS_URL);
+      // The url commits before the document exists, so this waits for the editor to BE
+      // there before waiting for it to be filled. Two separate windows, both real.
+      await awaitElement(firefox.driver, "cc-config");
       await firefox.driver.wait(
         async () => (await firefox.driver.findElement(By.id("cc-config")).getProperty("value")) !== "",
         10_000,
@@ -256,6 +259,7 @@ describe("options page (real Firefox, CC + probe)", () => {
       // async fill, so reading once can catch the page a beat early — and an empty #cc-error
       // is also what a genuinely broken page would show.
       await switchToUrl(firefox.driver, OPTIONS_URL);
+      await awaitElement(firefox.driver, "cc-error");
       await firefox.driver.wait(
         async () => (await firefox.driver.findElement(By.id("cc-error")).getText()) !== "",
         10_000,
