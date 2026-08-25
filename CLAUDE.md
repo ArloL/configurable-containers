@@ -359,7 +359,8 @@ reasonable-looking change wrong**.
   via the *engine's* disposable path, so "open a tab, navigate, assert tmp" passes whether
   or not auto-temp exists. The isolating signal is a tab in `tmp` **while still on
   `about:newtab`** (`launch({ startupUrl: "about:newtab" })`); the startup sweep discards
-  the driver's own tab, so re-`switchTo` a survivor and observe from a fresh one.
+  the driver's own tab, so observe from a page of your own — `navigateToContainerTab`
+  opens one and needs no re-anchoring, which is what that case used to spend three lines on.
 - **Don't trust a green `npm test` on disposal timing** — every fast case keeps browsing,
   and browsing re-triggers the sweep. `*.realtime.test.ts` is the one thing `npm test`
   does not run (`npm run test:realtime`, nightly), and cases there must **not** pass
@@ -386,41 +387,51 @@ reasonable-looking change wrong**.
   `__CC_NOTIFY_ECHO_TO__` already shows the cost (no test build is byte-equivalent to a
   packaged one), and arming by name would make the shipped extension capable of starting
   up with routing disabled.
-- **An options-page e2e parks on a probe page from a FRESH tab.** The cases share one
-  Firefox and one storage, so a case that saves a config changes what the next case can
-  navigate to — once `work.example` is unmatched, `driver.get` on the tab the driver is
-  already parked on has its navigation cancelled and never returns. That reads as the case
-  timing out with no assertion having run, not as a routing failure.
-- **Before that, the page is REACHABLE a beat before its document EXISTS.** `switchToUrl`
-  answers on the tab's committed url, so a read can find no element at all — and
-  `findElement` reports that as a throw, which escapes a loop polling for an element's text
-  and fails the case outright (CI 2026-08-25: `NoSuchElementError: *[id="cc-sync"]`, latest
-  leg only, ESR and every local run green). `awaitElement` (`harness/firefox.ts`, on
-  `findElements`, which answers empty instead of throwing) is the wait for existence, and
-  the wait for the text comes after it. Two windows, both real; closing the second one does
-  nothing about the first.
-- **The options page is REACHABLE a beat before it is POPULATED.** It fills `#cc-config`
-  from `storage.local` after it renders, and `switchToUrl` returns on the url alone, so a
-  single read can land in the gap — measured on 140 ESR, one first read in twelve came
-  back empty and hydrated 13ms later. `#cc-error` has the same window, being written by
-  the `validate()` that follows the fill. Wait for the text; never read once. The gap used
-  to be absorbed by `getAttribute` being a script Selenium injects, and replacing it with a
-  protocol command turned a standing race into a red `main` — a slower call is not a
-  synchronisation primitive. Typing has the same exposure from the other side: a fill
-  landing after `clear()` + `sendKeys()` overwrites what was just typed, and that reads as
-  the editor ignoring input. Note the race is **load-dependent** — 40 rounds on an idle
-  machine, with and without CPU pressure, reproduced it zero times.
+- **`test/e2e` drives the browser through `harness/browser/`, never `driver` directly**
+  (`BrowserSession` → `Page` → `Locator`; 2026-08-25 spec). A locator is a page plus a
+  selector and never an element: every operation switches to its own window handle,
+  re-resolves the selector, runs the actionability checks for that action, and treats the
+  five Selenium "not yet" errors as another poll. The hidden current window and the stale
+  handle — where every flake in this suite came from — are no longer expressible.
+  Assertions retry too (`toHaveText`, `toContainText`, `toHaveValue`, `toHaveAttribute`,
+  `toHaveCount`, `toBeVisible`, `toBeEnabled`, imported for effect from
+  `harness/browser/matchers`), so the shape to avoid is
+  `expect(await locator.innerText()).toBe(…)`: it reads once, which is the flake the
+  retrying form exists to remove.
+
+  Three things a new case gets wrong otherwise. **A textarea's content is its VALUE** —
+  `toHaveValue(/…/)`, not `toContainText`, which reads `innerText` and sees `""`.
+  **`page.close()` and `session.newPage()` re-anchor the driver** on a surviving window,
+  because closing the active tab — or the extension discarding it, as the auto-temp sweep
+  does — otherwise leaves the next command *anywhere later in the file* failing with
+  `NoSuchWindow`. And **a timeout names what it waited for, the page's url, the ids present
+  and the tab list**, which is the report `NoSuchElementError: *[id="cc-sync"]` was not.
+
+  Outside the layer on purpose, because none of it is Selenium's problem:
+  `navigateToContainerTab` (a navigation CC cancels never returns to WebDriver, so it
+  drives from a fresh tab and tolerates the teardown), `awaitContainerTab`,
+  `awaitTab`/`awaitTabs`/`awaitContainers`, and the probe readers — all CC-specific, all
+  taking or returning a `Page`.
+- **The options page is REACHABLE a beat before its document EXISTS, and again before it is
+  POPULATED.** It fills `#cc-config` from `storage.local` after it renders, and a tab
+  answers by url as soon as its navigation commits. Both windows have been measured: on
+  140 ESR one first read in twelve came back empty and hydrated 13ms later; in CI on
+  2026-08-25 a read landed before the document had parsed at all, and `findElement`'s throw
+  escaped a loop that polled for TEXT. Both are now closed by waiting rather than reading —
+  `pageAt`, then a retrying assertion. The race is **load-dependent**: 40 rounds on an idle
+  machine, with and without CPU pressure, reproduced it zero times, which is why the
+  layer's own semantics are unit-tested against a fake driver instead of a browser.
 - **An options-page e2e must read tab ids BEFORE parking on the options page.** The
   probe's relay is a DOM event injected into http(s) pages only, so from
   `moz-extension://` every probe command goes unanswered and reads as a timeout.
 - **A probe reply is written into the DOM of the page that RELAYED the command, so a `nav`
-  must never move the tab the driver is parked on** — the navigation destroys the document
-  the answer lands in, and whether the reply beats the commit is a race the driver's 100ms
+  must never move the RELAY page it was asked through** — the navigation destroys the
+  document the answer lands in, and whether the reply beats the commit is a race the 100ms
   poll loses now and then. It reads as `probe command "nav" timed out`. The probe now
   **refuses** a `nav` targeting `sender.tab.id`, so the mistake names itself instead of
   flaking; the fix is a second http tab to relay from (`openTab` + `awaitContainerTab`, a
-  matched host so CC parks it once). **Open that tab through the probe, not `driver.get`**
-  — from a committed page the reopen cancels the navigation and `driver.get` never returns.
+  matched host so CC parks it once). **Open that tab through the probe, not `page.goto`** —
+  from a committed page the reopen cancels the navigation and it never returns.
 - **`test/engine/mock-port.ts` fidelity is where "L3 green, Firefox broken" comes from.**
   It fires `onTabCreated` from `createTab`, fires `onTabRemoved` from `removeTab` (Firefox
   doesn't care who closed the tab — while it didn't, a tab CC itself closed was invisible
@@ -497,12 +508,17 @@ reasonable-looking change wrong**.
   156.0a1 widened the same check to `isPrivilegedContext` (extension and privileged
   `about:` processes too) and took nine cases down at once — the Nightly tripwire earning
   its keep. The trap is that `WebElement.getAttribute` is **not** a protocol command:
-  Selenium implements it as an injected atom, so the call every http(s) case makes reads
-  as `UnsupportedOperationError` here. Use `getDomAttribute` for a `data-*` attribute,
-  `getProperty` for a textarea's value, `switchTo().activeElement()` for the focus, and
-  `clear()` + `sendKeys()` to type — all real commands, all working on ESR through
-  Nightly, and typing fires the `input` the editor validates on, which assigning `.value`
-  never did anyway. **Don't reach for the flag**: it re-grants privileged access to the
+  Selenium implements it as an injected atom, so the call every http(s) case makes reads as
+  `UnsupportedOperationError` here. `harness/browser` is built so that mistake cannot be
+  made: `Locator.getAttribute` IS `getDomAttribute` (the W3C endpoint — and what
+  Playwright's `getAttribute` returns anyway), `inputValue()` is Get Element Property,
+  visibility is Get Element Rect plus Get Element CSS Value, the focused element is the CSS
+  `:focus`, and `fill()` is `clear()` + `sendKeys()`, which also fires the `input` the
+  editor validates on as assigning `.value` never did.
+  `test/e2e/privileged-protocol.test.ts` pins that each of those answers on an extension
+  page and is the tripwire for the next widening. Measured 2026-08-25 on **154.0**:
+  `executeScript` on that page still WORKS, so the refusal is 156.0a1's and has not reached
+  release — the avoidance is about where release is going, not where it is. **Don't reach for the flag**: it re-grants privileged access to the
   whole session to keep one convenience call working, and pins the suite to a Firefox that
   permits what the shipped extension's users never will. `harness/firefox.ts`'s own
   `executeScript` helpers stay as they are — every one reads a probe-written attribute on
@@ -511,12 +527,13 @@ reasonable-looking change wrong**.
   must be parked on a probe-reported http(s) page first, and an unanswered command reads
   as an *empty answer*, not an error. **`commands.onCommand` cannot be driven at all**
   (chrome-level key events) — the reopen picker is L3-tested and its e2e case is `it.skip`.
-- **The probe's attributes land AFTER `driver.get` resolves** (`reportTab` awaits two
+- **The probe's attributes land AFTER a navigation resolves** (`reportTab` awaits two
   `cookies.getAll` calls first) while server-rendered markup is there as the document
   parses, so asserting on both in one breath is a race. `awaitContainerTab` covers most
   cases free; a navigation with **no reopen to wait for** needs `awaitProbeReport`.
 - **Drive routing from a FRESH tab** — a cancelled navigation never returns to WebDriver,
-  so `driver.get` on a tab already on a page hangs until timeout.
+  so navigating a tab already on a page hangs until timeout. `navigateToContainerTab` is
+  that rule as a function; reach for it rather than `page.goto` when CC may reopen.
 - **The harness server's redirect destinations are CONSTANTS, not query params** — off the
   query string it's an open redirect and CodeQL fails the build. `?link=` for a real
   `target=_blank` anchor is fine, and a scripted `tabs.create` does not reproduce
