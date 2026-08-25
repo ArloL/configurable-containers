@@ -508,6 +508,13 @@ reasonable-looking change wrong**.
 - **Both channels share ONE tag sequence — the `prerelease` flag distinguishes them, not
   the tag.** `scripts/dev-updates.js` filters on it; a tag prefix matches nothing, and
   matching everything pushes the *listed* xpi to dev users under the dev add-on's id.
+  The other half of sharing a sequence: **the dev channel BURIES a listed release in the
+  release list within days**, so anything looking for one must page rather than read a
+  window. `verify-reproducible.ts` asked for the newest 20 and passed nightly for four
+  weeks announcing "No listed release yet" while `v2608.0.112` sat 32 releases down. Its
+  `findLatestListedRelease` pages until one turns up and **throws** when the page cap runs
+  out, because "I stopped looking" reported as "there is nothing to check" is what made
+  that gate inert.
 - **GitHub immutable releases are ENABLED**: assets can't be edited, so the dev xpi ships
   in the same `gh release create`, and a rollback is *deleting* a release plus
   republishing the manifest.
