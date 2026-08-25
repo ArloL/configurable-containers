@@ -82,6 +82,23 @@ describe("mock port — disposal support", () => {
     expect(browser.removedContainers).toEqual([ci.cookieStoreId]);
   });
 
+  it("drops a content script from the live list when it is unregistered", async () => {
+    const browser = aFakeBrowser();
+    const reg = await browser.port.registerContentScript({
+      matches: ["*://a.example/*"],
+      js: [{ code: "a();" }],
+      runAt: "document_start",
+    });
+    expect(browser.registeredScripts).toHaveLength(1);
+
+    await reg.unregister();
+
+    // Firefox stops injecting into new page loads. A mock that kept the entry would let a
+    // snippet a config no longer names look registered forever, which is the one thing an
+    // apply has to get right and the one thing no level below L4 could otherwise see.
+    expect(browser.registeredScripts).toEqual([]);
+  });
+
   it("fake clock fires timers only once their delay elapses", async () => {
     const { clock, advance } = aFakeClock();
     const fired: string[] = [];

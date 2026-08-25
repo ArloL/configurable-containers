@@ -248,7 +248,14 @@ export function aFakeBrowser(): MockPort {
     },
     async registerContentScript(details: RegisterContentScriptDetails): Promise<RegisteredContentScript> {
       registeredScripts.push(details);
-      return { unregister: async () => { /* no-op for tests */ } };
+      // Removed by identity rather than by value: a config may name the same snippet twice,
+      // and unregistering one handle must leave the other injecting.
+      return {
+        unregister: async () => {
+          const at = registeredScripts.indexOf(details);
+          if (at !== -1) registeredScripts.splice(at, 1);
+        },
+      };
     },
     onMessage(h) {
       messageHs.push(h);
