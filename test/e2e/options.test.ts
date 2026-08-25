@@ -48,10 +48,25 @@ describe("options page (real Firefox, CC + probe)", () => {
       await awaitContainerTab(firefox.driver, url);
     }
 
+    // The page fills #cc-config from `storage.local` AFTER it renders, and switchToUrl
+    // returns on the url alone — so the editor is reachable a beat before it is populated.
+    // Measured on 140 ESR: one first read in twelve came back empty, hydrating 13ms later.
+    // It is not a slow machine's problem either. `getAttribute` used to absorb the gap by
+    // accident, being a script Selenium injects rather than a protocol command, and the
+    // faster call that replaced it turned a standing race into a red main.
+    //
+    // So every case waits for the text before touching the editor, typeConfig included:
+    // an async fill landing after clear() + sendKeys() would overwrite the config just
+    // typed, and that failure would read as the editor ignoring input.
     async function openEditor(tag: string) {
       await parkOnProbePage(tag);
       await openExtensionPage(firefox.driver, OPTIONS_URL);
       await switchToUrl(firefox.driver, OPTIONS_URL);
+      await firefox.driver.wait(
+        async () => (await firefox.driver.findElement(By.id("cc-config")).getProperty("value")) !== "",
+        10_000,
+        "the options page never hydrated #cc-config from storage",
+      );
     }
 
     // Clear and TYPE, rather than assigning .value and dispatching a synthetic `input`:
@@ -69,7 +84,8 @@ describe("options page (real Firefox, CC + probe)", () => {
     it("shows the seeded config on first run", async () => {
       await openEditor("seed");
       // getProperty, not getAttribute: a textarea's text is a property, and Selenium
-      // implements getAttribute as an injected script this page will not run.
+      // implements getAttribute as an injected script this page will not run. Safe to read
+      // once here — openEditor has already waited for the fill.
       const value = await firefox.driver.findElement(By.id("cc-config")).getProperty("value");
       // The bundled test config was written to storage at first run.
       expect(value).toContain("work.example");
@@ -179,9 +195,16 @@ describe("options page (real Firefox, CC + probe)", () => {
       const tabs = await listTabs(firefox.driver);
       expect(tabs.some((tab) => tab.url === OPTIONS_URL)).toBe(true);
 
-      // And it shows the parse error rather than a blank page.
+      // And it shows the parse error rather than a blank page. Polled for the same reason
+      // openEditor waits: the message is written by the validate() that follows the page's
+      // async fill, so reading once can catch the page a beat early — and an empty #cc-error
+      // is also what a genuinely broken page would show.
       await switchToUrl(firefox.driver, OPTIONS_URL);
-      expect(await firefox.driver.findElement(By.id("cc-error")).getText()).not.toBe("");
+      await firefox.driver.wait(
+        async () => (await firefox.driver.findElement(By.id("cc-error")).getText()) !== "",
+        10_000,
+        "the editor never reported the seed's parse error",
+      );
     });
   });
 });
