@@ -128,6 +128,10 @@ export function wireBackground(opts: WiringOptions): Background {
 
   createRedirectorCloser({ port, clock, config, deps: { matchRule }, delayMs: redirectorDelayMs });
 
+  // Constructed here rather than in `injectScripts` so one object holds the registrations
+  // across every apply; constructing it registers nothing, so the no-await rule above holds.
+  const scripts = createScriptInjector({ port });
+
   return {
     config,
     useConfig(loaded) {
@@ -140,7 +144,7 @@ export function wireBackground(opts: WiringOptions): Background {
       n = Math.max(n, highestTmpSuffix((await port.queryIdentities()).map((c) => c.name)));
     },
     async injectScripts() {
-      await createScriptInjector({ port, config });
+      await scripts.apply(config);
     },
     engine,
     pause,
