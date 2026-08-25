@@ -71,7 +71,6 @@ class BrowserSession {
   pages(): Promise<Page[]>
   pageAt(urlPrefix: string, opts?): Promise<Page>   // waits for a tab to show it
   newPage(): Promise<Page>                          // a fresh, blank tab
-  close(): Promise<void>
 }
 
 class Page {
@@ -98,6 +97,10 @@ class Locator {
   waitFor(opts?: { state?: "attached" | "detached" | "visible" | "hidden" }): Promise<void>
 }
 ```
+
+**No `close()` on the session.** The harness owns the browser's lifetime — `launch()`
+made the profile directory the reaper identifies its processes by, and a second owner is
+how a Firefox survives a run.
 
 **A locator is a page plus a selector, and never an element.** No API hands out
 something that can go stale — that is the point, and it is why there is no
