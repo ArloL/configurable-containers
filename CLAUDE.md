@@ -411,7 +411,12 @@ reasonable-looking change wrong**.
   holding**, which is not what vitest does on its own: it inverts `pass` and nothing else,
   so a matcher that always waited for its condition would mean the opposite of itself under
   negation — `not.toHaveValue("")` polling until the field IS empty, then calling that a
-  failure. `settle` takes the matcher context for this and nothing else. Backing it out
+  failure. `settle` takes the matcher context for this and nothing else. It also **waits for the
+  element, not only for what it says**: the reader is given a zero budget because the waiting
+  is the matcher's job, so a `PollTimeoutError` out of it means "not in the document yet" and
+  is retried — reading it as a verdict is what made `#cc-sync` fail one full run in ten. An
+  element that never appears fails in BOTH directions, or `.not` passes for a page that
+  rendered nothing. Backing it out
   costs the full timeout on every negated assertion that is already satisfied (61.8s of
   `options.test.ts`, measured) and turns the pre-hydration race it guards into a hard
   failure. `test/fitness/e2e-discipline.test.ts` pins the rest of this bullet — no `driver`,

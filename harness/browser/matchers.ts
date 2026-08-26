@@ -4,7 +4,7 @@
 // the read-then-compare form flakes. Imported for effect by the files that use them.
 import { expect } from "vitest";
 import type { Locator } from "./locator";
-import { ASSERTION_TIMEOUT_MS, RETRY, poll } from "./retry";
+import { ASSERTION_TIMEOUT_MS, PollTimeoutError, RETRY, poll } from "./retry";
 import type { WaitOpts } from "./types";
 
 interface Verdict {
@@ -42,7 +42,10 @@ async function settle<T>(
   describe: (seen: T) => string,
 ): Promise<Verdict> {
   const wanted = ctx.isNot !== true;
-  let last: T | undefined;
+  // A BOX rather than a `T | undefined`, so "never read" stays distinguishable from a
+  // reading that is legitimately falsy, and so nothing has to assume which matchers can
+  // answer undefined.
+  let reading: { value: T } | undefined;
   try {
     await poll(
       {
@@ -51,20 +54,40 @@ async function settle<T>(
         diagnose: async () => "",
       },
       async () => {
-        last = await read();
-        return holds(last) === wanted ? undefined : RETRY;
+        try {
+          reading = { value: await read() };
+        } catch (e) {
+          // The reader is given a zero budget — the waiting is THIS poll's job — so it
+          // gives up the moment the element is not resolvable. That is "not in the document
+          // yet", which is the normal state of a page the driver reached by url: measured on
+          // the options page, whose #cc-sync arrived after `pageAt` had answered. Retry it.
+          // Anything else (a dead driver, a closed session) is not something to wait out.
+          if (e instanceof PollTimeoutError) return RETRY;
+          throw e;
+        }
+        return holds(reading.value) === wanted ? undefined : RETRY;
       },
     );
   } catch {
     // Never settled: the last reading is the diagnosis either way.
   }
-  const held = last !== undefined && holds(last);
+  // An element that never appeared fails in BOTH directions. Reporting it as "the condition
+  // did not hold" would make `.not` pass for a page that rendered nothing at all, which is
+  // the failure this whole layer is against.
+  if (reading === undefined) {
+    return {
+      pass: ctx.isNot === true,
+      message: () => `${name} ${locator.selector}: no element matched`,
+    };
+  }
+  const seen = reading.value;
+  const held = holds(seen);
   return {
     pass: held,
     message: () =>
       held
-        ? `${name} ${locator.selector} held: ${describe(last as T)}`
-        : `${name} ${locator.selector}: ${describe(last as T)}`,
+        ? `${name} ${locator.selector} held: ${describe(seen)}`
+        : `${name} ${locator.selector}: ${describe(seen)}`,
   };
 }
 
