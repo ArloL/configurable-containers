@@ -66,7 +66,12 @@ function syncCase(
       // text it saw rather than a selector it could not locate.
       const status = options.locator("#cc-sync");
       await expect(status).toHaveText(want);
-      check(await status.innerText());
+      // The SAME reading the assertion settled on, near enough: this element is rendered
+      // from a live read of storage.sync, so a second innerText() is a second question
+      // about a moving target rather than a closer look at the answer.
+      const settled = await status.innerText();
+      expect(settled, "the status changed under the second read").toMatch(want);
+      check(settled);
     });
   });
 }

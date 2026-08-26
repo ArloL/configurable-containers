@@ -133,16 +133,13 @@ describe("options page (real Firefox, CC + probe)", () => {
       // anything had been applied.
       await expect(editor.locator("#cc-status")).toHaveText("Saved", { timeout: 10_000 });
 
-      // nomatch.example matched no rule before this edit; it must now land in Editor.
-      // Still polled: the status says the config is live, and what is asserted below is the
-      // routing that follows from it, one navigation later. Each attempt is a FRESH tab,
-      // which navigateToContainerTab guarantees.
-      const deadline = Date.now() + 20_000;
-      let container = "";
-      while (Date.now() < deadline && container !== "Editor") {
-        const url = `http://nomatch.example:${serverPort}/?cb=edited-${Date.now()}`;
-        container = (await navigateToContainerTab(firefox.browser, url)).name;
-      }
+      // nomatch.example matched no rule before this edit; it must now land in Editor. ONE
+      // navigation, not a loop: "Saved" is written when the background answers, and a save
+      // applies its config in place before it does — so if the first navigation after that
+      // reply can still be routed by the old config, that is the finding, not something to
+      // retry past. The loop that used to sit here would have absorbed it in silence.
+      const url = `http://nomatch.example:${serverPort}/?cb=edited-${Date.now()}`;
+      const { name: container } = await navigateToContainerTab(firefox.browser, url);
       expect(container, "the saved config never took effect").toBe("Editor");
     });
 

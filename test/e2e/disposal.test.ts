@@ -4,6 +4,7 @@ import {
   type Session,
 } from "../../harness/firefox";
 import type { Page } from "../../harness/browser/index";
+import { RETRY, poll } from "../../harness/browser/retry";
 
 // Read the probe's container list once it has (re)reported into the fresh document. The
 // attribute IS the report, so waiting for it to exist is waiting for the report.
@@ -49,16 +50,24 @@ describe("temp disposal (real Firefox)", () => {
     // Poll: navigate the Work tab to a fresh (cache-busted) URL each time — same host, so
     // it stays in Work, but a new document forces the probe to re-report the live container
     // list — until the tmp name is gone. Each round trips the network, so it paces itself.
-    const deadline = Date.now() + 15_000;
-    let gone = false;
-    while (Date.now() < deadline) {
-      await observer.page.goto(`http://work.example:${serverPort}/?t=${Date.now()}`);
-      if (!(await freshList(observer.page)).includes(throwaway.name)) {
-        gone = true;
-        break;
-      }
-    }
-    expect(gone).toBe(true);
+    //
+    // Through `poll` rather than a hand-rolled deadline so that giving up says what it last
+    // saw: the old form failed as `expected false to be true`, which names neither the
+    // container it was waiting on nor the list it kept finding it in.
+    let seen: string[] = [];
+    await poll(
+      {
+        timeout: 15_000,
+        interval: 0, // each attempt is a navigation and a probe report; it paces itself
+        what: `${throwaway.name} to be reclaimed`,
+        diagnose: async () => `  last container list: ${JSON.stringify(seen)}`,
+      },
+      async () => {
+        await observer.page.goto(`http://work.example:${serverPort}/?t=${Date.now()}`);
+        seen = await freshList(observer.page);
+        return seen.includes(throwaway.name) ? RETRY : undefined;
+      },
+    );
   });
 
   // The case above polls by NAVIGATING, and a navigation that reopens a tab closes the

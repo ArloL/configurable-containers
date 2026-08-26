@@ -715,20 +715,28 @@ export async function collectStoresUntilContainer(
   url: string,
   timeoutMs = 15_000,
 ): Promise<string[]> {
-  const deadline = Date.now() + timeoutMs;
   let stores: string[] = [];
-  while (Date.now() < deadline) {
-    stores = [];
-    for (const page of await session.pages()) {
-      try {
-        await page.goto(url);
-        stores.push(await readCookieStoreId(page, 2000));
-      } catch {
-        // A handle may have closed mid-loop; skip it this round.
+  // Through `poll`, so running out of time is an error naming the stores it kept seeing.
+  // Returning the last reading instead left the caller's `expect(...some(...)).toBe(true)`
+  // to fail as "expected false to be true", which says nothing about what was there.
+  return poll(
+    {
+      timeout: timeoutMs,
+      interval: 500,
+      what: `a container store for ${url}`,
+      diagnose: async () => `  saw ${JSON.stringify(stores)}`,
+    },
+    async () => {
+      stores = [];
+      for (const page of await session.pages()) {
+        try {
+          await page.goto(url);
+          stores.push(await readCookieStoreId(page, 2000));
+        } catch {
+          // A handle may have closed mid-loop; skip it this round.
+        }
       }
-    }
-    if (stores.some((s) => /^firefox-container-\d+$/.test(s))) return stores;
-    await new Promise((resolve) => setTimeout(resolve, 500));
-  }
-  return stores;
+      return stores.some((s) => /^firefox-container-\d+$/.test(s)) ? stores : RETRY;
+    },
+  );
 }
