@@ -478,13 +478,25 @@ reasonable-looking change wrong**.
   is the matcher's job, so a `PollTimeoutError` out of it means "not in the document yet" and
   is retried — reading it as a verdict is what made `#cc-sync` fail one full run in ten. An
   element that never appears fails in BOTH directions, or `.not` passes for a page that
-  rendered nothing. Backing it out
+  rendered nothing — and that promise belongs to the **reader**, not to `settle`: it holds
+  for the matchers whose reader raises `PollTimeoutError` on an unresolvable element.
+  `toBeVisible` and `toHaveCount` are deliberately outside it, reading a missing element as
+  `false` and `0`, which is Playwright's behaviour and what `.not.toBeVisible()` and
+  `toHaveCount(0)` are asking for. **`toBeEnabled` was outside it by accident** —
+  `isEnabled()` answers `false` for an element that is not there, so "disabled" and "never
+  rendered" arrived as one reading and `.not.toBeEnabled()` passed on an empty document. It
+  asks `Locator.enabledState()` now, which answers `null` for the third case. Backing it out
   costs the full timeout on every negated assertion that is already satisfied (61.8s of
   `options.test.ts`, measured) and turns the pre-hydration race it guards into a hard
   failure. `test/fitness/e2e-discipline.test.ts` pins the rest of this bullet — no `driver`,
-  no sleep, no read-then-compare, no deadline loop — each with one named exception, because
-  the migration that established the rules left a file breaking every one of them, and
-  said in its own commit message that it had not.
+  no sleep, no read-then-compare, no deadline loop — each rule carrying an exact list of the
+  files that are allowed to break it and why, because the migration that established the
+  rules left a file breaking every one of them, and said in its own commit message that it
+  had not. **Read-then-compare matches BOTH forms**: assigning the reading first
+  (`const value = await …inputValue()`) evaded it entirely until 2026-08-26, and two files
+  were doing that — both defensibly, which is the point, since an exception no check can see
+  is a hole rather than an exception. It reads one line at a time, so a read split across two
+  still evades it.
 
   **A window handle is a SNAPSHOT, and the extension closes tabs on its own schedule**, so
   anchoring on one — `newPage` before it can open a tab, `close` re-attaching after — is a

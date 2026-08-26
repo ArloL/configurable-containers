@@ -140,6 +140,41 @@ describe("retrying matchers", () => {
     );
   });
 
+  // That promise was one matcher short of true. `toBeEnabled` read through `isEnabled()`,
+  // which answers `false` for an element that is not there — so "disabled" and "never
+  // rendered" arrived as the same reading, the "no element matched" branch was dead code
+  // for this matcher, and `.not.toBeEnabled()` passed on an empty document. One live call
+  // site (test/e2e/options.test.ts, asserting Save goes disabled on an invalid config),
+  // safe only because the line above it waits on #cc-error first.
+  it("fails a negated toBeEnabled on an element that never appears", async () => {
+    await expect(
+      expect(locatorOn({ elements: () => [] })).not.toBeEnabled({ timeout: 0 }),
+    ).rejects.toThrow(/no element matched/);
+  });
+
+  it("still waits for an element that arrives late before calling it enabled", async () => {
+    const locator = locatorOn({
+      elements: (n) => (n < 3 ? [] : [anElement({ isEnabled: async () => true })]),
+    });
+    await expect(locator).toBeEnabled({ timeout: 5_000 });
+  });
+
+  it("still passes a negated toBeEnabled on an element that IS there and disabled", async () => {
+    await expect(
+      locatorOn({ elements: () => [anElement({ isEnabled: async () => false })] }),
+    ).not.toBeEnabled({ timeout: 0 });
+  });
+
+  // The other two boolean-ish readers stay as they are, and that is a decision rather than
+  // an oversight: Playwright's `isVisible()` does not wait either, and `toHaveCount(0)` is
+  // the ordinary way to assert a list is empty. Reading a missing element as an ANSWER is
+  // what both callers are asking for; `toBeEnabled` was the only one where it was an
+  // accident of how the reading was taken.
+  it("lets toBeVisible and toHaveCount read a missing element as an answer, as Playwright does", async () => {
+    await expect(locatorOn({ elements: () => [] })).not.toBeVisible({ timeout: 0 });
+    await expect(locatorOn({ elements: () => [] })).toHaveCount(0, { timeout: 0 });
+  });
+
   // "expected Saved, got Saving…" is the whole diagnosis; a matcher that only says it
   // timed out has thrown the useful half away.
   it("reports what it last saw when it gives up", async () => {
