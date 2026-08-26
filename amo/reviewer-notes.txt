@@ -9,7 +9,9 @@ Needs Node 22+.
     BUILD_TIMESTAMP={{timestamp}} npm run package -- {{package_args}}
 
 The result, dist/configurable-containers-{{version}}.xpi, matches the submitted file
-byte for byte, so comparing checksums is enough.
+byte for byte, so comparing checksums is enough. Compare it against the submitted
+file, not against a signed copy: signing repacks the archive, so those hashes
+differ by design.
 
 esbuild bundles three TypeScript entry points into background.js, options.js and
 choice.js. Nothing is minified; everything else is copied verbatim.
