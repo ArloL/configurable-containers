@@ -20,6 +20,18 @@ export interface FakeScript {
   handles?: string[] | ((call: number) => string[]);
   /** Handles that are LISTED but refuse to be switched to: the window closed under us. */
   dead?: string[];
+  /**
+   * A switch that fails for a reason that is NOT "not yet" — a dead session, a crashed
+   * driver. `dead` models a tab going; this models the browser going, and the two must not
+   * be handled the same way.
+   */
+  failSwitch?: () => Error;
+  /**
+   * `getAllWindowHandles` itself fails: the driver is gone, not a tab. Nothing can be said
+   * about a browser that will not answer, and this is the one shape `describe` still throws
+   * on — which is what keeps `diagnose`'s outer catch reachable.
+   */
+  failHandles?: () => Error;
   url?: string;
   title?: string;
 }
@@ -55,6 +67,7 @@ export function fakeDriver(script: FakeScript): { driver: WebDriver; calls: stri
         calls.push(`switchTo(${handle})`);
         // A handle can be listed and still be gone: `getAllWindowHandles` answered a moment
         // ago, and the extension closes tabs on its own schedule. This is the shape of it.
+        if (script.failSwitch) throw script.failSwitch();
         if (script.dead?.includes(handle)) throw new seleniumError.NoSuchWindowError(handle);
         current = handle;
       },
@@ -64,6 +77,7 @@ export function fakeDriver(script: FakeScript): { driver: WebDriver; calls: stri
       },
     }),
     async getAllWindowHandles() {
+      if (script.failHandles) throw script.failHandles();
       handleCall++;
       return handlesNow();
     },

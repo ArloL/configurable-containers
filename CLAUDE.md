@@ -495,6 +495,21 @@ reasonable-looking change wrong**.
   retrying the same dead handle spins — and let `close` give up in silence, since every Page
   operation switches to its own handle first.
 
+  **That rule reaches `describe` and `pageAt` too, and it reaches them differently.**
+  `describe` is what a poll's timeout prints, and `diagnose` catches its throw and answers
+  *"could not be described"* — so an unguarded walk made the report vanish exactly when the
+  tabs were churning, which is when a timeout happens and when its tab list is worth having.
+  It now gathers in two independent halves, the TAB LIST FIRST because that half survives
+  this page's own tab being closed, and the tab a poll was waiting on is the likeliest one
+  to have gone: `PageReport.url` is `null` then, `tabs` carries `GONE` where a handle would
+  not answer, and only a browser that will not list its windows at all still throws.
+  `pageAt`, by contrast, must NOT swallow everything — `retry.ts` is explicit that a driver
+  which has died is not something to wait out, and a bare `catch { continue }` there polled
+  a dead session for the full budget and then reported it as "no page at &lt;url&gt;". It
+  distinguishes `isRetryable` as `newPage` does. `close` keeps its bare catch on purpose:
+  it returns nothing, its re-attach is a courtesy, and the next real command reports a dead
+  driver anyway.
+
   Three things a new case gets wrong otherwise. **A textarea's content is its VALUE** —
   `toHaveValue(/…/)`, not `toContainText`, which reads `innerText` and sees `""`.
   **`page.close()` and `session.newPage()` re-anchor the driver** on a surviving window,

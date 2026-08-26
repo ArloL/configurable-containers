@@ -45,6 +45,54 @@ describe("Page", () => {
     });
   });
 
+  // The snapshot assumption `384cdfb` took out of `close` and `newPage` and left here: a
+  // handle can be LISTED and already gone. `describe` switched to each one unguarded, and
+  // `diagnose` catches the throw and answers "could not be described" — so the report
+  // vanished exactly when the extension was churning tabs, which is when a poll times out
+  // and when the tab list is most worth reading.
+  it("keeps walking the tab list when a handle has gone, and records that it had", async () => {
+    const { driver } = fakeDriver({
+      elements: () => [],
+      handles: ["w1", "w2", "w3"],
+      dead: ["w2"],
+      url: "http://x.test/",
+    });
+    const report = await new Page(driver, "w1").describe();
+    // Recorded, not skipped: a list that quietly got shorter would hide the churn.
+    expect(report.tabs).toEqual(["http://x.test/", "<gone>", "http://x.test/"]);
+    expect(report.url).toBe("http://x.test/");
+  });
+
+  // The half that matters most, because the tab a poll was waiting on is the likeliest one
+  // for the extension to have closed. Its own url is unreadable; the browser's other tabs
+  // are not, and they are the answer the reader actually wants.
+  it("still lists the other tabs when its OWN tab has gone", async () => {
+    const { driver } = fakeDriver({
+      elements: () => [],
+      handles: ["w1", "w2"],
+      dead: ["w1"],
+      url: "http://survivor.test/",
+    });
+    const report = await new Page(driver, "w1").describe();
+    expect(report.url).toBeNull();
+    expect(report.title).toBeNull();
+    expect(report.ids).toEqual([]);
+    expect(report.tabs).toEqual(["<gone>", "http://survivor.test/"]);
+  });
+
+  it("says a tab has gone in words, rather than printing null at the reader", async () => {
+    const { driver } = fakeDriver({
+      elements: () => [],
+      handles: ["w1", "w2"],
+      dead: ["w1"],
+      url: "http://survivor.test/",
+    });
+    const text = await new Page(driver, "w1").diagnose();
+    expect(text).toContain("page: this tab (w1) has gone");
+    expect(text).toContain('tabs=["<gone>","http://survivor.test/"]');
+    expect(text).not.toContain("could not be described");
+  });
+
   // Closing the active tab leaves Selenium with no current window, and the failure then
   // lands on whatever the next command happens to be. A page owns its own lifetime.
   it("re-attaches to a survivor after closing itself", async () => {
@@ -78,14 +126,32 @@ describe("Page", () => {
     expect(await new Page(driver, "w1").diagnose()).toMatch(/http:\/\/x\.test\/.*ids=\[\]/s);
   });
 
-  // A diagnosis that throws would replace the real failure with its own, which is how a
-  // useful error message becomes "Cannot read properties of undefined".
-  it("still says something when it cannot describe itself", async () => {
+  // A document that will not answer costs its own half of the report and nothing else. It
+  // used to cost all of it: `findElements` threw, `describe` threw, and `diagnose` said
+  // "could not be described" — discarding the tab list, which needs no document at all.
+  it("keeps the tab list when the document cannot be read", async () => {
     const { driver } = fakeDriver({
       elements: () => {
-        throw new Error("window gone");
+        throw new Error("document not ready");
       },
+      handles: ["w1", "w2"],
+      url: "http://x.test/",
     });
-    expect(await new Page(driver, "w1").diagnose()).toMatch(/could not be described.*window gone/s);
+    const report = await new Page(driver, "w1").describe();
+    expect(report.ids).toEqual([]);
+    expect(report.tabs).toEqual(["http://x.test/", "http://x.test/"]);
+  });
+
+  // A diagnosis that throws would replace the real failure with its own, which is how a
+  // useful error message becomes "Cannot read properties of undefined". A browser that will
+  // not even list its windows is the one shape left where there is nothing to say.
+  it("still says something when the driver itself will not answer", async () => {
+    const { driver } = fakeDriver({
+      elements: () => [],
+      failHandles: () => new Error("invalid session id"),
+    });
+    expect(await new Page(driver, "w1").diagnose()).toMatch(
+      /could not be described.*invalid session id/s,
+    );
   });
 });

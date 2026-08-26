@@ -92,25 +92,6 @@ The entries below came out of one sweep of the cold base on 2026-08-26, against
 `test:coverage` 866 passed, typecheck, lint and `audit` clean). None of them is a red
 test — that is the point of writing them down.
 
-## `Page.describe()` still anchors on a snapshot handle (2026-08-26)
-
-`384cdfb` established that a window handle is a snapshot — `getAllWindowHandles` names a
-tab, the extension closes it, the switch raises `NoSuchWindowError` — and made
-`Page.close` and `BrowserSession.newPage` poll over the list instead. `Page.describe` was
-not touched and still does the unguarded form: list every handle, `switchTo` each, read
-its url (`harness/browser/page.ts`, the `tabs` loop).
-
-It is reached from `diagnose()`, which every `poll` timeout calls to say what it saw, and
-which catches the throw and answers *"page: could not be described"*. So the failure is
-silent and perfectly inverted: the diagnosis disappears precisely when the extension is
-churning tabs, which is when a timeout is most likely and its tab list most worth having.
-`Page.describe` is public, so a case can hit the raw throw too.
-
-`BrowserSession.pageAt` has the same walk with a bare `catch { continue }`, where
-`newPage` distinguishes `isRetryable`. That is the looser half of the same question:
-`retry.ts` is explicit that "a driver that has died is not something to wait out", and
-`pageAt` currently waits one out for the full budget.
-
 ## The AMO reviewer notes explain seven of the nine permissions (2026-08-26)
 
 `amo/reviewer-notes.txt` lists `webRequest`, `webRequestBlocking`, `<all_urls>`,
