@@ -4,6 +4,7 @@ import {
   launch, awaitContainerTab, awaitTab, awaitTabs, ccExtensionUrl, listTabs, type Session,
 } from "../../harness/firefox";
 import type { Page } from "../../harness/browser/index";
+import "../../harness/browser/matchers";
 
 const CHOICE_URL = ccExtensionUrl("choice.html");
 
@@ -51,6 +52,12 @@ describe("choice screen + reopen picker (real Firefox, CC + probe)", () => {
     await navFreshTab(url);
     const choice = await awaitChoicePage();
 
+    // `pageAt` answers as soon as the URL matches, which a tab does the moment its
+    // navigation commits — before the document has rendered anything. `all()` and `count()`
+    // are immediate by contract (harness/browser/locator.ts: the waiting belongs in the
+    // assertion), so every read of the option list is gated on one that retries.
+    await expect(choice.locator("[data-cc-option]")).toHaveCount(2);
+
     // The page rendered both options.
     const containers = await Promise.all(
       (await choice.locator("[data-cc-option]").all()).map((o) => o.getAttribute("data-container")),
@@ -64,19 +71,23 @@ describe("choice screen + reopen picker (real Firefox, CC + probe)", () => {
     expect(containerName).toBe("Work");
   });
 
-  // The container name of the option the page has focused, or null for none. The
-  // highlight is where Enter goes, so this is the page's whole keyboard state.
+  // The option the page has focused — the highlight is where Enter goes, so this is the
+  // page's whole keyboard state.
   //
   // Asked as `:focus`, ordinary CSS, rather than through an injected script reading
-  // document.activeElement — which this page would refuse. Nothing focused matches
-  // nothing, and reads as null: the distinction this case exists to make.
-  async function focusedOption(choice: Page): Promise<string | null> {
-    const focused = choice.locator(":focus");
-    if ((await focused.count()) === 0) return null;
-    return focused.getAttribute("data-container");
+  // document.activeElement — which this page would refuse. An ASSERTION rather than a
+  // read: the focus is set as the page renders, and `count()` is immediate by contract, so
+  // reading once answers "nothing focused" for a document that simply has not got there
+  // yet — the very answer this case exists to rule out. Nothing focused still fails, since
+  // `:focus` then matches no element for the whole budget.
+  async function expectFocusedOption(choice: Page, container: string): Promise<void> {
+    await expect(choice.locator(":focus")).toHaveAttribute("data-container", container);
   }
 
+  // Gated on a retrying count for the same reason as the case above: `all()` on a document
+  // that has not rendered yet answers [], and `order[0]` is then undefined.
   async function optionOrder(choice: Page): Promise<string[]> {
+    await expect(choice.locator("[data-cc-option]")).toHaveCount(2);
     return Promise.all(
       (await choice.locator("[data-cc-option]").all()).map(
         async (o) => (await o.getAttribute("data-container")) ?? "",
@@ -92,10 +103,11 @@ describe("choice screen + reopen picker (real Firefox, CC + probe)", () => {
     const choice = await awaitChoicePage();
 
     const order = await optionOrder(choice);
-    expect(await focusedOption(choice), "the page must take the keyboard as it renders").toBe(order[0]);
+    // The page must take the keyboard as it renders.
+    await expectFocusedOption(choice, order[0]!);
 
     await choice.keyboard.press(Key.ARROW_DOWN);
-    expect(await focusedOption(choice)).toBe(order[1]);
+    await expectFocusedOption(choice, order[1]!);
 
     // Enter opens the highlighted one — the arrow moved the target, so this proves both.
     await choice.keyboard.press(Key.ENTER);
@@ -121,13 +133,17 @@ describe("choice screen + reopen picker (real Firefox, CC + probe)", () => {
   it("a choice is never remembered — a fresh nav re-shows the choice page", async () => {
     const url = `http://figma.example:${serverPort}/`;
     await navFreshTab(url);
-    await awaitChoicePage();
     // The choice page reappeared (no auto-open of the Work container picked above).
-    expect((await firefox.driver.getCurrentUrl()).includes("/choice.html")).toBe(true);
+    // `awaitChoicePage` IS that assertion — it fails with the urls it saw — where the
+    // `getCurrentUrl()` check that used to follow it re-read the tab pageAt had just
+    // switched to and so could not answer anything else. What it could not check is that
+    // the page actually rendered, which is asserted instead.
+    const choice = await awaitChoicePage();
+    await expect(choice.locator("[data-cc-option]")).toHaveCount(2);
     // Clean up: close the choice tab so it doesn't satisfy later tests' awaitChoicePage.
-    await firefox.driver.close();
-    const handles = await firefox.driver.getAllWindowHandles();
-    if (handles.length) await firefox.driver.switchTo().window(handles[0]!);
+    // A page closes itself and re-anchors the driver on a survivor — that is what
+    // Page.close is for, and the hand-rolled version of it is where the flakes came from.
+    await choice.close();
   });
 
   it("keeps the page you were on while you choose, and lands the choice beside it", async () => {
