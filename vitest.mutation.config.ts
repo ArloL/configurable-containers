@@ -18,5 +18,16 @@ export default defineConfig({
     // the score unrepeatable. The seed is pinned for the mutation run only — `npm test`
     // still varies its samples, which is where fast-check earns its keep.
     setupFiles: ["./test/fast-check-seed.ts"],
+    // Named explicitly ONLY to stop vitest adding one of its own. With none configured it
+    // appends `github-actions` whenever `GITHUB_ACTIONS=true`, and that reporter writes a
+    // job summary on every `onTestRunEnd` with `flag: "a"`. Stryker starts ONE vitest and
+    // ends a test run per mutant, so the nightly's summary got **1152 reports, 2302 of
+    // them marked ❌** — and a failing run here is a mutant being KILLED, so a green
+    // 100% job rendered as a wall of red nobody could read. Measured, not guessed.
+    //
+    // `reporters: []` does not work: the auto-add is `if (!resolved.reporters.length)`, so
+    // an empty array takes the same branch. It has to name one, and "default" is what was
+    // already running — this drops the GitHub reporter and changes nothing else.
+    reporters: ["default"],
   },
 });
