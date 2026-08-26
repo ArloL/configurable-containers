@@ -424,6 +424,15 @@ reasonable-looking change wrong**.
   the migration that established the rules left a file breaking every one of them, and
   said in its own commit message that it had not.
 
+  **A window handle is a SNAPSHOT, and the extension closes tabs on its own schedule**, so
+  anchoring on one — `newPage` before it can open a tab, `close` re-attaching after — is a
+  poll over the list rather than a switch to its head. `getAllWindowHandles` names a tab, the
+  auto-temp startup sweep replaces it, and the switch raises `NoSuchWindowError` on line one
+  of a case whose own comment says nothing has to be re-anchored for it. Measured by
+  `npm run test:flake`: one run in three, and never locally. Retry by re-READING the list —
+  retrying the same dead handle spins — and let `close` give up in silence, since every Page
+  operation switches to its own handle first.
+
   Three things a new case gets wrong otherwise. **A textarea's content is its VALUE** —
   `toHaveValue(/…/)`, not `toContainText`, which reads `innerText` and sees `""`.
   **`page.close()` and `session.newPage()` re-anchor the driver** on a surviving window,

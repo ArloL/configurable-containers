@@ -53,6 +53,26 @@ describe("Page", () => {
     expect(calls).toEqual(["switchTo(w2)", "close", "switchTo(w1)"]);
   });
 
+  // The listing is a snapshot, and the extension closes tabs on its own schedule: a handle
+  // can be named and already gone. Same race as BrowserSession.newPage, where it cost a CI
+  // run — here it must not turn a close into a failure, since every Page operation switches
+  // to its own handle first and the re-attach is a courtesy to the NEXT caller.
+  it("keeps looking when the survivor it was offered has gone too", async () => {
+    const { driver, calls } = fakeDriver({
+      elements: () => [],
+      handles: ["w1", "w3", "w2"],
+      dead: ["w1"],
+    });
+    await new Page(driver, "w2").close();
+    expect(calls).toEqual(["switchTo(w2)", "close", "switchTo(w1)", "switchTo(w3)"]);
+  });
+
+  it("does not fail a close just because nothing is left to attach to", async () => {
+    // This page is w2 and closes cleanly; w1 is all that is left and it has gone too.
+    const { driver } = fakeDriver({ elements: () => [], handles: ["w1"], dead: ["w1"] });
+    await expect(new Page(driver, "w2").close()).resolves.toBeUndefined();
+  });
+
   it("renders the report as something a failure can carry", async () => {
     const { driver } = fakeDriver({ elements: () => [], url: "http://x.test/", title: "x" });
     expect(await new Page(driver, "w1").diagnose()).toMatch(/http:\/\/x\.test\/.*ids=\[\]/s);

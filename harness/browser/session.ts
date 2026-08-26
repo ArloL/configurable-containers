@@ -6,7 +6,7 @@
 // survives a run — see harness/reaper.ts.
 import type { WebDriver } from "selenium-webdriver";
 import { Page } from "./page";
-import { DEFAULT_TIMEOUT_MS, RETRY, poll } from "./retry";
+import { DEFAULT_TIMEOUT_MS, RETRY, isRetryable, poll } from "./retry";
 import type { WaitOpts } from "./types";
 
 export class BrowserSession {
@@ -51,13 +51,41 @@ export class BrowserSession {
     );
   }
 
-  async newPage(): Promise<Page> {
-    // The driver may have no current window at all: the extension can discard the tab it
-    // was left on, and `newWindow` still has to run in SOME context. Anchor on a survivor
-    // first, so opening a tab does not depend on where the driver happened to be.
-    const [survivor] = await this.driver.getAllWindowHandles();
-    if (survivor !== undefined) await this.driver.switchTo().window(survivor);
-    await this.driver.switchTo().newWindow("tab");
-    return this.page(await this.driver.getWindowHandle());
+  async newPage(opts?: WaitOpts): Promise<Page> {
+    // The driver may have no current window at all — the extension can discard the tab it
+    // was left on — and `newWindow` still has to run in SOME context. So it anchors on a
+    // survivor first, and the anchoring is a POLL rather than a read: a handle that
+    // `getAllWindowHandles` named a moment ago can be gone by the time we switch to it,
+    // because the extension closes tabs on its own schedule and not on ours. The
+    // auto-temp STARTUP SWEEP is that schedule at its worst — it replaces the very tab
+    // Firefox opened, while the session is still starting — and it is where this was
+    // measured: `NoSuchWindowError` out of the switch on line one of a case, one run in
+    // three, in a case whose own comment says nothing has to be re-anchored for it.
+    //
+    // Reading the list again is the point. Retrying the same dead handle would spin.
+    let seen: string[] = [];
+    return poll(
+      {
+        timeout: opts?.timeout ?? this.defaultTimeout,
+        what: "a window to open a tab from",
+        diagnose: async () => `  last handles: ${JSON.stringify(seen)}`,
+        ...(this.interval === undefined ? {} : { interval: this.interval }),
+      },
+      async () => {
+        seen = await this.driver.getAllWindowHandles();
+        for (const handle of seen) {
+          try {
+            await this.driver.switchTo().window(handle);
+            await this.driver.switchTo().newWindow("tab");
+            return this.page(await this.driver.getWindowHandle());
+          } catch (e) {
+            // That one went between the listing and the switch; try the next.
+            if (isRetryable(e)) continue;
+            throw e;
+          }
+        }
+        return RETRY;
+      },
+    );
   }
 }

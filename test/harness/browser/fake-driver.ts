@@ -1,3 +1,4 @@
+import { error as seleniumError } from "selenium-webdriver";
 import type { WebDriver, WebElement } from "selenium-webdriver";
 
 export interface FakeElement {
@@ -15,7 +16,10 @@ export interface FakeElement {
 export interface FakeScript {
   /** What findElements answers on the nth call (1-based). */
   elements: (attempt: number) => FakeElement[];
-  handles?: string[];
+  /** Static list, or one that answers per call so a case can let a window vanish. */
+  handles?: string[] | ((call: number) => string[]);
+  /** Handles that are LISTED but refuse to be switched to: the window closed under us. */
+  dead?: string[];
   url?: string;
   title?: string;
 }
@@ -36,7 +40,10 @@ export function anElement(over: FakeElement = {}): FakeElement {
 export function fakeDriver(script: FakeScript): { driver: WebDriver; calls: string[] } {
   const calls: string[] = [];
   let attempt = 0;
-  let current = script.handles?.[0] ?? "w1";
+  let handleCall = 0;
+  const handlesNow = (): string[] =>
+    typeof script.handles === "function" ? script.handles(handleCall) : (script.handles ?? ["w1"]);
+  let current = handlesNow()[0] ?? "w1";
   const driver = {
     async findElements() {
       attempt++;
@@ -46,15 +53,19 @@ export function fakeDriver(script: FakeScript): { driver: WebDriver; calls: stri
     switchTo: () => ({
       async window(handle: string) {
         calls.push(`switchTo(${handle})`);
+        // A handle can be listed and still be gone: `getAllWindowHandles` answered a moment
+        // ago, and the extension closes tabs on its own schedule. This is the shape of it.
+        if (script.dead?.includes(handle)) throw new seleniumError.NoSuchWindowError(handle);
         current = handle;
       },
       async newWindow() {
         calls.push("newWindow");
-        current = `w${(script.handles?.length ?? 1) + 1}`;
+        current = `w${handlesNow().length + 1}`;
       },
     }),
     async getAllWindowHandles() {
-      return script.handles ?? ["w1"];
+      handleCall++;
+      return handlesNow();
     },
     async getWindowHandle() {
       return current;
