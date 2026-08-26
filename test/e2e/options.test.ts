@@ -108,7 +108,10 @@ describe("options page (real Firefox, CC + probe)", () => {
       await typeConfig(editor, "rules:\n  - match: 123\n    open: Nope\n");
 
       await expect(editor.locator("#cc-error")).not.toHaveText("");
-      expect(await editor.locator("#cc-save").isEnabled()).toBe(false);
+      // `isEnabled()` is immediate, and the editor disables Save from the same validate()
+      // pass that writes the error — one round trip apart, on a page that had to be
+      // waited for to exist at all. The negated matcher polls for it.
+      await expect(editor.locator("#cc-save")).not.toBeEnabled();
 
       // …and recovers when the text becomes valid again.
       await typeConfig(editor, EDITED_CONFIG);

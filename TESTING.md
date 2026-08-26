@@ -414,6 +414,13 @@ mutant no other case catches.
     recorded as growing with nothing emptying them, and all four are fine: each holds one
     short string or number, fed by something rarer than browsing. The list is there for
     the fifth.
+  - **The e2e discipline** (`e2e-discipline.test.ts`) — no `driver` in a case, no fixed
+    wait, no read-then-compare on an immediate reader, no hand-rolled deadline loop. Each
+    has one named exception and nothing else. It exists because the migration that
+    established those rules announced them as done in its own commit message and left one
+    file carrying every one of them — a `driver.sleep(1000)` as a negative assertion, and a
+    poll that read "no tab shows this url" as a pass, so the case went green with its
+    navigation removed altogether. Nothing else in the repo would ever have asked.
   - **The round-trip budget** (`decision-cost.test.ts`) — the only one that measures
     rather than inspects, and the answer to "nothing tests latency". `onBeforeRequest` is
     blocking, so every awaited call before it answers is latency in front of a page load.
