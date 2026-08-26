@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { spawn, type ChildProcess } from "node:child_process";
+import { once } from "node:events";
 import { existsSync } from "node:fs";
 import { claimProfileDir, liveProfileDirs, reapAll, reapProfile } from "../../harness/reaper";
 import { eventually, isRunning } from "./process-state";
@@ -17,15 +18,18 @@ const REAPER = new URL("../../harness/reaper.ts", import.meta.url).href;
 const spawned: ChildProcess[] = [];
 
 // A process whose command line contains `dir`, standing in for a browser running in it.
+// Awaited on its `spawn` event rather than a settle: "has it started" has an exact answer
+// and a fixed delay is only a guess at one, which on a slow machine is the wrong guess.
 // The path goes in as a bare argument rather than after a `-profile` flag the way
 // Firefox's does — node rejects an unknown dash option and would exit on the spot,
 // leaving a test that passes against a process that was never alive. What the reaper
 // matches on is the path, not the flag.
-function sleeperIn(dir: string): ChildProcess {
+async function sleeperIn(dir: string): Promise<ChildProcess> {
   const child = spawn(process.execPath, ["-e", "setTimeout(() => {}, 60000)", dir], {
     stdio: "ignore",
   });
   spawned.push(child);
+  await once(child, "spawn");
   return child;
 }
 
@@ -49,8 +53,7 @@ afterEach(() => {
 describe("the harness reaper", () => {
   it("kills a process still running in a profile it reaps", async () => {
     const dir = claimProfileDir();
-    const child = sleeperIn(dir);
-    await settle();
+    const child = await sleeperIn(dir);
     expect(alive(child.pid!)).toBe(true);
 
     reapProfile(dir);
@@ -70,8 +73,7 @@ describe("the harness reaper", () => {
   it("leaves a process running in a profile it is not reaping", async () => {
     const mine = claimProfileDir();
     const theirs = claimProfileDir(); // stands in for a concurrent `npm run manual`
-    const child = sleeperIn(theirs);
-    await settle();
+    const child = await sleeperIn(theirs);
 
     reapProfile(mine);
     await settle();
@@ -97,8 +99,7 @@ describe("the harness reaper", () => {
 
   it("kills every outstanding profile in one sweep", async () => {
     const dirs = [claimProfileDir(), claimProfileDir()];
-    const children = dirs.map(sleeperIn);
-    await settle();
+    const children = await Promise.all(dirs.map(sleeperIn));
 
     reapAll();
 
