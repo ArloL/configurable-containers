@@ -92,6 +92,51 @@ export function readRun(report: unknown): Run {
   return { cases, success };
 }
 
+/**
+ * The report vitest was asked to write, or the empty run that a missing or unparseable one
+ * IS. `null` means there is no file: vitest died before writing one — a config that would
+ * not load, a runner killed, a crash during collection.
+ *
+ * That is the emptiest a run can be, and this file already has the words for it
+ * (`emptyRuns`, "agreement over nothing is not agreement"). Letting `readFileSync` throw
+ * instead, which is what `main` did until 2026-08-26, took the whole comparison down with
+ * an ENOENT stack trace — spending the one vocabulary this file has on nothing, and losing
+ * the runs that DID complete along with it.
+ */
+export function readRunText(text: string | null): Run {
+  if (text === null) return { cases: [], success: false };
+  try {
+    return readRun(JSON.parse(text));
+  } catch {
+    // Half a JSON document is not evidence of anything either, and it arrives the same way
+    // — a process killed with the report still buffered. Same answer.
+    return { cases: [], success: false };
+  }
+}
+
+/**
+ * How many times to run the tier. `Number("")` is 0 and `Number("thre")` is NaN, and
+ * `for (let i = 0; i < runs; i++)` runs zero times for both — so a typo in the workflow's
+ * env used to spend no time, exit 0, and print "All NaN runs succeeded, and every case
+ * answered the same way." That is the exact inference this script exists to refuse.
+ *
+ * TWO, not one. A comparison needs something to compare: over a single run every case
+ * agrees with itself, which is agreement over nothing by another spelling. `isRed` refuses
+ * such a verdict as well — the two guards answer different questions, and only this one can
+ * name the typo that caused it.
+ */
+export function parseRuns(raw: string | undefined): number {
+  if (raw === undefined) return DEFAULT_RUNS;
+  const runs = Number(raw);
+  if (!Number.isInteger(runs) || runs < 2) {
+    throw new Error(
+      `FLAKE_RUNS must be an integer of at least 2, not ${JSON.stringify(raw)}. ` +
+        "A run cannot disagree with itself.",
+    );
+  }
+  return runs;
+}
+
 export function compareRuns(runs: Run[]): Verdict {
   const cases = runs.map((run) => run.cases);
   const names = [...new Set(cases.flat().map((c) => c.name))].sort();
@@ -127,6 +172,13 @@ export function compareRuns(runs: Run[]): Verdict {
 /** Did anything at all go wrong? What `main` exits on, and what a caller should ask. */
 export function isRed(verdict: Verdict): boolean {
   return (
+    // Fewer than two runs is not a green verdict; it is the absence of one. `runSucceeded`
+    // carries one entry per run, so its length IS the run count — and over zero runs every
+    // list below is empty, which used to read as "nothing went wrong". Over one run every
+    // case agrees with itself, which is the same emptiness one step along. Neither is
+    // evidence that the tier is deterministic, and this gate's whole job is to refuse a
+    // conclusion drawn from something that is not evidence.
+    verdict.runSucceeded.length < 2 ||
     verdict.flaky.length > 0 ||
     verdict.failing.length > 0 ||
     verdict.emptyRuns.length > 0 ||
@@ -139,6 +191,13 @@ const DEFAULT_RUNS = 3;
 
 export function report(verdict: Verdict, runs: number, target: string = DEFAULT_TARGET): string {
   const lines: string[] = [];
+  // Said before anything else, because everything below it is a summary of no evidence.
+  if (verdict.runSucceeded.length < 2) {
+    lines.push(`NOTHING WAS COMPARED: ${verdict.runSucceeded.length} run(s).`);
+    lines.push("A comparison needs two runs to be one. Nothing here agreed, because there");
+    lines.push("was nothing for it to agree with. Check FLAKE_RUNS: an empty value and a");
+    lines.push("typo both read as a loop that never executes.");
+  }
   if (verdict.flaky.length > 0) {
     lines.push(`${verdict.flaky.length} case(s) did not answer the same way across ${runs} runs:`);
     for (const c of verdict.flaky) {
@@ -173,7 +232,9 @@ export function report(verdict: Verdict, runs: number, target: string = DEFAULT_
   }
 
   const broken = verdict.runSucceeded.flatMap((ok, i) => (ok ? [] : [i]));
-  if (broken.length === runs && verdict.flaky.length === 0 && verdict.failing.length === 0) {
+  // `broken.length > 0` as well as `=== runs`: over zero runs the two are equal and empty,
+  // and the dead-`beforeAll` speech below would be printed about runs that never happened.
+  if (broken.length > 0 && broken.length === runs && verdict.flaky.length === 0 && verdict.failing.length === 0) {
     lines.push("");
     lines.push(`All ${runs} runs failed as a whole, and NO CASE says why.`);
     // The shape this exists for, spelled out because it is the one that used to read green.
@@ -207,7 +268,16 @@ export function report(verdict: Verdict, runs: number, target: string = DEFAULT_
 
 function main(): void {
   const target = process.argv[2] ?? DEFAULT_TARGET;
-  const runs = Number(process.env.FLAKE_RUNS ?? DEFAULT_RUNS);
+  let runs: number;
+  try {
+    runs = parseRuns(process.env.FLAKE_RUNS);
+  } catch (e) {
+    // Printed rather than thrown: an operator typo in a workflow's env deserves the
+    // sentence, not a stack trace pointing into this file.
+    console.error((e as Error).message);
+    process.exitCode = 1;
+    return;
+  }
   // A fresh base per invocation, so two nights do not sample the same ten orders.
   const base = Date.now();
   const dir = mkdtempSync(path.join(tmpdir(), "cc-flake-"));
@@ -228,7 +298,16 @@ function main(): void {
          "--reporter=json", `--outputFile=${outFile}`, "--reporter=default"],
         { stdio: "inherit" },
       );
-      const run = readRun(JSON.parse(readFileSync(outFile, "utf8")));
+      let text: string | null = null;
+      try {
+        text = readFileSync(outFile, "utf8");
+      } catch (e) {
+        // Named here and then COUNTED as the empty run it is. Throwing would lose the runs
+        // that already completed and report a tier that never started as a stack trace
+        // rather than as the emptiest possible disagreement.
+        console.log(`\n  no report at ${outFile}: ${(e as Error).message}`);
+      }
+      const run = readRunText(text);
       // Belt and braces: the report says whether the SUITE succeeded, the exit code says
       // whether the PROCESS did, and a crash after the report was written is only visible
       // in the second. Neither is allowed to vouch for the other.

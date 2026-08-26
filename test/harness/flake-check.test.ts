@@ -6,7 +6,7 @@
 // look exactly like a healthy suite. Everything below is the pure half; the half that
 // starts three Firefox runs is exercised by pointing the script at a browser-free target.
 import { describe, it, expect } from "vitest";
-import { compareRuns, isRed, readRun, report, type CaseOutcome, type Run } from "../../scripts/flake-check";
+import { compareRuns, isRed, parseRuns, readRun, readRunText, report, type CaseOutcome, type Run } from "../../scripts/flake-check";
 
 const passed = (name: string, durationMs = 1): CaseOutcome => ({ name, status: "passed", durationMs });
 const failed = (name: string, durationMs = 1): CaseOutcome => ({ name, status: "failed", durationMs });
@@ -54,6 +54,68 @@ describe("reading a vitest json report", () => {
     expect(readRun({}).success).toBe(false);
     expect(readRun({ success: false, testResults: [] }).success).toBe(false);
     expect(readRun({ success: true, testResults: [] }).success).toBe(true);
+  });
+});
+
+// The report vitest was asked to write may not exist. `main` read it with a bare
+// `readFileSync` until 2026-08-26, so a run that died before writing one took the whole
+// comparison down with an ENOENT — and the runs that HAD completed went with it.
+describe("a report vitest never wrote", () => {
+  it("reads a missing file as the empty run it is, rather than throwing", () => {
+    const run = readRunText(null);
+    expect(run.cases).toEqual([]);
+    expect(run.success).toBe(false);
+  });
+
+  it("reads a half-written report the same way", () => {
+    // A process killed with the report still buffered. Not evidence of anything.
+    expect(readRunText('{"testResults": [')).toEqual({ cases: [], success: false });
+  });
+
+  it("still reads a report that IS there", () => {
+    const text = JSON.stringify({ success: true, testResults: [{ assertionResults: [{ fullName: "a", status: "passed", duration: 5 }] }] });
+    expect(readRunText(text)).toEqual({ cases: [{ name: "a", status: "passed", durationMs: 5 }], success: true });
+  });
+
+  // The point of not throwing: the empty run is COUNTED, so the comparison gets to say the
+  // thing it has words for instead of dying before it can.
+  it("makes the comparison call that run empty, which is red", () => {
+    const verdict = compareRuns([ok(passed("a")), readRunText(null)]);
+    expect(verdict.emptyRuns).toEqual([1]);
+    expect(isRed(verdict)).toBe(true);
+    expect(report(verdict, 2)).toContain("NO CASES AT ALL");
+  });
+});
+
+// `Number("")` is 0 and `Number("thre")` is NaN, and `for (let i = 0; i < runs; i++)` runs
+// zero times for both. The job then compared nothing, exited 0, and printed "All NaN runs
+// succeeded, and every case answered the same way."
+describe("how many times to run", () => {
+  it("defaults when nobody said", () => {
+    expect(parseRuns(undefined)).toBe(3);
+  });
+
+  it("takes a count the workflow named", () => {
+    expect(parseRuns("10")).toBe(10);
+  });
+
+  it("refuses an empty value, which Number reads as zero", () => {
+    expect(() => parseRuns("")).toThrow(/at least 2/);
+  });
+
+  it("refuses a typo, which Number reads as NaN", () => {
+    // The shape this is written against: FLAKE_RUNS mistyped in a workflow's env, where
+    // nobody is watching and the job's own summary said everything agreed.
+    expect(() => parseRuns("thre")).toThrow(/"thre"/);
+  });
+
+  it("refuses one run, because a run cannot disagree with itself", () => {
+    expect(() => parseRuns("1")).toThrow(/at least 2/);
+  });
+
+  it("refuses a fraction and a negative", () => {
+    expect(() => parseRuns("2.5")).toThrow();
+    expect(() => parseRuns("-3")).toThrow();
   });
 });
 
@@ -157,6 +219,32 @@ describe("a tier that did not run at all", () => {
   it("stays green when every run succeeded and every case agreed", () => {
     const run = () => ok(passed("a"), skipped("b"));
     expect(isRed(compareRuns([run(), run(), run()]))).toBe(false);
+  });
+
+  // The emptiness one step further out than `emptyRuns`, which guards a run that produced
+  // nothing rather than the absence of runs. Over no runs every list in the verdict is
+  // empty, and "nothing went wrong" is exactly the wrong reading of that.
+  it("is red over no runs at all, where every list is empty for want of evidence", () => {
+    const verdict = compareRuns([]);
+    expect(verdict.flaky).toEqual([]);
+    expect(verdict.failing).toEqual([]);
+    expect(verdict.emptyRuns).toEqual([]);
+    expect(verdict.runSucceeded).toEqual([]);
+    expect(isRed(verdict)).toBe(true);
+  });
+
+  it("is red over a single run, where every case agrees with itself", () => {
+    expect(isRed(compareRuns([ok(passed("a"))]))).toBe(true);
+  });
+
+  it("says nothing was compared, rather than summarising no evidence", () => {
+    const text = report(compareRuns([]), 0);
+    expect(text).toContain("NOTHING WAS COMPARED: 0 run(s).");
+    expect(text).toContain("FLAKE_RUNS");
+    // And specifically NOT the dead-`beforeAll` speech: over zero runs "every run failed"
+    // and "no run failed" are the same empty list, and that branch used to fire.
+    expect(text).not.toContain("failed as a whole");
+    expect(text).not.toContain("beforeAll");
   });
 });
 

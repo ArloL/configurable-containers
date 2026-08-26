@@ -390,6 +390,18 @@ mutant no other case catches.
   and fails on **disagreement** — a case that fails every time is the suite being red,
   which `ci.yml` already reports.
 
+  **It refuses to answer over nothing, in two places.** `FLAKE_RUNS` is validated at the
+  boundary — `Number("")` is 0 and `Number("thre")` is NaN, and `for (let i = 0; i < runs;
+  i++)` runs zero times for both, so a typo in the workflow's env spent no time, exited 0,
+  and printed *"All NaN runs succeeded, and every case answered the same way."* That is the
+  exact inference this gate exists to refuse, arrived at from the other end. `isRed` refuses
+  such a verdict too, and at **fewer than two runs** rather than fewer than one: over a
+  single run every case agrees with itself, which is the same emptiness one step along. The
+  two guards answer different questions — only the boundary one can name the typo.
+  A run whose report vitest never wrote is now **counted as the empty run it is** rather
+  than thrown as an ENOENT out of `main`, which used to take the runs that had completed
+  down with it.
+
   Ten because three was thin: P(catching a race that fails one run in three) is 67% at
   N=3 and 98% at N=10, and 1-in-10 goes 27% to 65%. The race that took auto-temp's startup
   sweep down had been in `session.ts` since `f9ab866` and had a one-in-three chance of
