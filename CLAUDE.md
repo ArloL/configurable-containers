@@ -141,11 +141,21 @@ reasonable-looking change wrong**.
   one-shot version walked `tmp1`→`tmp2`→`tmp3` on one click; a marker any request could
   claim went stale and loaded the next navigation **unrouted inside the container we had
   just reopened into** (F11 via F1); and HSTS rewrites the url before `onBeforeRequest`,
-  so exact matching bought a throwaway per upgrade. The site is checked on **every hop, not
-  just the first**: a chain that leaves the awaited site is still one requestId, so a guard
-  keyed on the requestId alone absorbed the SSO **return** hop and left the callback unrouted
-  in the identity provider's container (sonarcloud.io → github.com/login/oauth → back, logged
-  out). All four have revert-verified L3 tests.
+  so exact matching bought a throwaway per upgrade. All three have revert-verified L3 tests.
+
+  The site and the requestId answer different halves of a hop, and **neither one alone is the
+  guard**. A hop that stays on the awaited site is absorbed outright. A hop that LEAVES it is
+  resolved like any navigation — with the tab's real container and the awaited url standing in
+  for the `about:blank` it reads as, so a hop within one rule (`github.com` → `github.dev`) is
+  answered "already contained" rather than reopened into the container it is in — and then
+  `aHopBuysNoThrowaway` vetoes any answer that is only another throwaway. Both halves are
+  required and each is pinned by the case it exists for: absorbing a cross-site hop outright
+  left every SSO **return** hop unrouted in the identity provider's container (sonarcloud.io →
+  github.com/login/oauth → back, logged out), and routing one without the veto put `tmp1` **and**
+  `tmp2` on one redirect chain, which is the `tmp1`→`tmp2`→`tmp3` bug again. The second is
+  L3-invisible until you cross a site: the L3 chain case was same-site (`linked.test` →
+  `www.linked.test`) and stayed green while `routing.test.ts` went red in CI. Both sites now
+  have an L3 case.
 - **Firefox honours `windowId` on `tabs.create` even for popup windows** (FF153). Omit it
   and a `window.open` share popup is replaced in the last focused *normal* window, then
   closed with its navigation. `Tab.windowId` is required, not optional — an optional field
