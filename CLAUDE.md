@@ -407,7 +407,17 @@ reasonable-looking change wrong**.
   `toHaveCount`, `toBeVisible`, `toBeEnabled`, imported for effect from
   `harness/browser/matchers`), so the shape to avoid is
   `expect(await locator.innerText()).toBe(…)`: it reads once, which is the flake the
-  retrying form exists to remove.
+  retrying form exists to remove. **`.not` on one of these polls for the condition to STOP
+  holding**, which is not what vitest does on its own: it inverts `pass` and nothing else,
+  so a matcher that always waited for its condition would mean the opposite of itself under
+  negation — `not.toHaveValue("")` polling until the field IS empty, then calling that a
+  failure. `settle` takes the matcher context for this and nothing else. Backing it out
+  costs the full timeout on every negated assertion that is already satisfied (61.8s of
+  `options.test.ts`, measured) and turns the pre-hydration race it guards into a hard
+  failure. `test/fitness/e2e-discipline.test.ts` pins the rest of this bullet — no `driver`,
+  no sleep, no read-then-compare, no deadline loop — each with one named exception, because
+  the migration that established the rules left a file breaking every one of them, and
+  said in its own commit message that it had not.
 
   Three things a new case gets wrong otherwise. **A textarea's content is its VALUE** —
   `toHaveValue(/…/)`, not `toContainText`, which reads `innerText` and sees `""`.
