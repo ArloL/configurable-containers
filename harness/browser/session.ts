@@ -36,14 +36,22 @@ export class BrowserSession {
       async () => {
         seen = [];
         for (const handle of await this.driver.getAllWindowHandles()) {
-          // A tab can go while we are walking the list — CC closes one per reopen.
           try {
             await this.driver.switchTo().window(handle);
             const url = await this.driver.getCurrentUrl();
             seen.push(url);
             if (url.startsWith(urlPrefix)) return this.page(handle);
-          } catch {
-            continue;
+          } catch (e) {
+            // A tab can go while we are walking the list — CC closes one per reopen — so
+            // that handle is passed over and the next one tried.
+            //
+            // But only that. `retry.ts` is explicit that a driver which has died is not
+            // something to wait out, and `newPage` already draws the line here; this loop
+            // swallowed everything, so a dead session was polled for the full budget and
+            // then reported as "no page at <url>" — the driver's own error, which said
+            // what was wrong, discarded once per 100ms until the timeout replaced it.
+            if (isRetryable(e)) continue;
+            throw e;
           }
         }
         return RETRY;

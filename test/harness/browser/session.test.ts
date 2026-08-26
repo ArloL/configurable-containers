@@ -26,6 +26,34 @@ describe("BrowserSession", () => {
     );
   });
 
+  // A tab can go while the walk is in progress — CC closes one per reopen — and that handle
+  // is passed over rather than failing the search.
+  it("passes over a tab that closed while it was walking the list", async () => {
+    const { driver } = fakeDriver({
+      elements: () => [],
+      handles: ["w1", "w2"],
+      dead: ["w1"],
+      url: "moz-extension://cc/options.html",
+    });
+    const page = await new BrowserSession(driver, 500, 0).pageAt("moz-extension://cc/");
+    expect(page.handle).toBe("w2");
+  });
+
+  // …but only that. `retry.ts` is explicit that a driver which has died is not something to
+  // wait out, and `newPage` already draws this line. This loop caught everything, so a dead
+  // session was polled for the full budget and then reported as "no page at <url>" — the
+  // driver's own error thrown away once per interval until a timeout replaced it.
+  it("lets a driver failure out instead of polling a dead session to its deadline", async () => {
+    const { driver } = fakeDriver({
+      elements: () => [],
+      handles: ["w1"],
+      failSwitch: () => new Error("invalid session id"),
+    });
+    await expect(new BrowserSession(driver, 5_000, 0).pageAt("moz-extension://cc/")).rejects.toThrow(
+      "invalid session id",
+    );
+  });
+
   // The driver can be left with no current window — the extension discards the tab it was
   // on — and `newWindow` needs a context to run in. Anchoring first is what stops opening a
   // tab from depending on where the driver happened to be.

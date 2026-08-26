@@ -3,7 +3,7 @@
 import { By, type WebDriver } from "selenium-webdriver";
 import { Locator } from "./locator";
 import { DEFAULT_TIMEOUT_MS, RETRY, poll } from "./retry";
-import type { PageContext, PageReport, WaitOpts } from "./types";
+import { GONE, type PageContext, type PageReport, type WaitOpts } from "./types";
 
 export class Page implements PageContext {
   constructor(
@@ -86,35 +86,59 @@ export class Page implements PageContext {
     }
   }
 
+  // What a failure gets to say, gathered in two independent halves so that losing one does
+  // not cost the other.
+  //
+  // Every part of this used to assume a handle that `getAllWindowHandles` named would still
+  // be there when we switched to it — the snapshot assumption `384cdfb` took out of `close`
+  // and `BrowserSession.newPage` and left here. The inversion that made it worth fixing:
+  // `diagnose()` catches the throw and answers "could not be described", so the report
+  // vanished precisely when the extension was churning tabs, which is when a poll times out
+  // and when its tab list is most worth having.
+  //
+  // The TAB LIST GOES FIRST because it is the half that survives this page's own tab being
+  // closed — and the tab a poll was waiting on is the likeliest one to have gone.
   async describe(): Promise<PageReport> {
-    await this.switchHere();
-    const ids: string[] = [];
-    for (const element of await this.driver.findElements(By.css("[id]"))) {
-      const id = await element.getDomAttribute("id");
-      if (id !== null) ids.push(id);
-    }
     const tabs: string[] = [];
     for (const handle of await this.driver.getAllWindowHandles()) {
-      await this.driver.switchTo().window(handle);
-      tabs.push(await this.driver.getCurrentUrl());
+      try {
+        await this.driver.switchTo().window(handle);
+        tabs.push(await this.driver.getCurrentUrl());
+      } catch {
+        // Listed and already gone. Recorded rather than skipped: this is the churn the
+        // reader is trying to understand, and a list that quietly got shorter hides it.
+        tabs.push(GONE);
+      }
     }
-    await this.switchHere();
-    return {
-      url: await this.driver.getCurrentUrl(),
-      title: await this.driver.getTitle(),
-      ids,
-      tabs,
-    };
+
+    const ids: string[] = [];
+    let url: string | null = null;
+    let title: string | null = null;
+    try {
+      await this.switchHere();
+      for (const element of await this.driver.findElements(By.css("[id]"))) {
+        const id = await element.getDomAttribute("id");
+        if (id !== null) ids.push(id);
+      }
+      url = await this.driver.getCurrentUrl();
+      title = await this.driver.getTitle();
+    } catch {
+      // This page's own tab has gone. `url === null` says so, and the tabs above still
+      // say what the browser has instead — which is the whole answer a reader wants.
+    }
+    return { url, title, ids, tabs };
   }
 
   async diagnose(): Promise<string> {
     try {
       const report = await this.describe();
-      return (
-        `  page: ${report.url} (${report.title})\n` +
-        `  ids=[${report.ids.join(", ")}]\n` +
-        `  tabs=${JSON.stringify(report.tabs)}`
-      );
+      // Said in words rather than printed as `null`: "this tab has gone" is a finding, and
+      // the line below it is then the list of what the browser has instead.
+      const where =
+        report.url === null
+          ? `  page: this tab (${this.handle}) has gone`
+          : `  page: ${report.url} (${report.title})`;
+      return `${where}\n  ids=[${report.ids.join(", ")}]\n  tabs=${JSON.stringify(report.tabs)}`;
     } catch (e) {
       // A diagnosis that throws would replace the real failure with its own.
       return `  page: could not be described (${(e as Error).message})`;
