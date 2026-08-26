@@ -375,6 +375,17 @@ mutant no other case catches.
   by construction. What it buys is **latency to detection, and latency is the blame
   window**.
 
+  The file ORDER is shuffled too (`sequence.shuffle: { files: true }`, `vitest.config.ts`),
+  which is what makes the comparison able to see the other kind of nondeterminism. A case
+  that depends on state an earlier file left behind fails the same way every run in a fixed
+  order, so it lands in the "red, not flaky" column and the comparison never sees it as a
+  race at all; shuffling turns it into the disagreement it actually is. Files only — a
+  file's cases share one browser session and several are written as a sequence on purpose,
+  so the file is the unit of isolation, not the case. The seed is random and printed
+  ("Running tests with seed N"); `--sequence.seed=N` replays an order exactly. The mutation
+  run does not inherit any of it: `stryker.config.mjs` points at `vitest.mutation.config.ts`,
+  and deciding each mutant from one run needs that run repeatable.
+
   Deliberately not `--retry`, which turns a race into a pass and throws away the evidence
   that there was one. Every "flake" this harness has actually had was a race in the case:
   a probe reply landing after the navigation that destroyed the document it was written

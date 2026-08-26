@@ -16,6 +16,8 @@ const skipped = (name: string): CaseOutcome => ({ name, status: "skipped", durat
 // which is a different fact, and one no case status can carry.
 const ok = (...cases: CaseOutcome[]): Run => ({ cases, success: true });
 const broke = (...cases: CaseOutcome[]): Run => ({ cases, success: false });
+/** The same, for the cases about which ORDER produced which answer. */
+const inOrder = (seed: string, run: Run): Run => ({ ...run, seed });
 
 describe("reading a vitest json report", () => {
   it("flattens the cases of every file into one list", () => {
@@ -170,5 +172,45 @@ describe("what the job prints", () => {
 
   it("shows a run that never reached a case as such, rather than as a status", () => {
     expect(report(compareRuns([ok(passed("a")), broke()]), 2)).toContain("passed → never ran");
+  });
+
+  // The file order is shuffled (vitest.config.ts), which is what lets the comparison see an
+  // ORDER dependence at all — a case that leans on state an earlier file left behind answers
+  // the same way every run in a fixed order, so it lands under "red, not flaky" instead. But
+  // a disagreement that names no order is one nobody can reproduce: vitest invents a seed and
+  // only prints it, so `main` chooses them and they come back out here.
+  it("names the order each answer came from", () => {
+    const text = report(
+      compareRuns([
+        inOrder("100", ok(passed("a"))),
+        inOrder("101", broke(failed("a"))),
+        inOrder("102", ok(passed("a"))),
+      ]),
+      3,
+      "test/e2e",
+    );
+    expect(text).toContain("seeds 100 → 101 → 102");
+  });
+
+  it("offers the order of the run that did NOT pass, since that is the one worth running again", () => {
+    const text = report(
+      compareRuns([
+        inOrder("100", ok(passed("a"))),
+        inOrder("101", broke(failed("a"))),
+        inOrder("102", ok(passed("a"))),
+      ]),
+      3,
+      "test/e2e",
+    );
+    expect(text).toContain("npx vitest run test/e2e --sequence.seed=101");
+    // Not one of the runs that agreed: replaying a control reproduces nothing.
+    expect(text).not.toContain("--sequence.seed=100");
+  });
+
+  it("says nothing about orders when nobody chose one", () => {
+    // compareRuns is pure and its own cases pass no seeds; a line of "?" would be noise.
+    const text = report(compareRuns([ok(passed("a")), broke(failed("a"))]), 2);
+    expect(text).not.toContain("seeds");
+    expect(text).not.toContain("--sequence.seed");
   });
 });
