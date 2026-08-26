@@ -92,26 +92,6 @@ The entries below came out of one sweep of the cold base on 2026-08-26, against
 `test:coverage` 866 passed, typecheck, lint and `audit` clean). None of them is a red
 test — that is the point of writing them down.
 
-## `npm run test:flake` can report agreement over no runs at all (2026-08-26)
-
-`scripts/flake-check.ts` reads `Number(process.env.FLAKE_RUNS ?? DEFAULT_RUNS)`. `NaN` (a
-typo in the workflow env) and `0` (an empty string, which `Number` reads as zero) both
-make the loop body never execute, and `compareRuns([])` then answers with empty
-everything: `isRed` is false, the process exits 0, and it prints *"All NaN runs succeeded,
-and every case answered the same way."*
-
-That is the exact inference the script was written to refuse. It already knows the shape —
-`emptyRuns` exists because "agreement over nothing is not agreement", and `Run.success`
-defaults to false because "a report that does not say it succeeded is not evidence that it
-did" — but both guard a run that produced nothing, not the absence of runs.
-`test/harness/flake-check.test.ts` has 20 cases and none passes zero runs to `isRed`.
-
-Beside it, one shape the comparator cannot report because it never gets the chance:
-`readFileSync(outFile)` throws `ENOENT` when vitest dies before writing its report, taking
-`main` down with a stack trace instead of recording that run as the empty one it is. Loud,
-so not urgent — but it is the one failure mode this file has a vocabulary for and cannot
-use.
-
 ## `Page.describe()` still anchors on a snapshot handle (2026-08-26)
 
 `384cdfb` established that a window handle is a snapshot — `getAllWindowHandles` names a
