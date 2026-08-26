@@ -1,5 +1,39 @@
 import { describe, it, expect } from "vitest";
+import { globSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { buildAmoMetadata, readListingCopy, SUMMARY_LIMIT } from "../../scripts/amo-metadata";
+
+const root = fileURLToPath(new URL("../../", import.meta.url));
+
+/**
+ * The `- <permissions> — <why>` bullets of the notes' PERMISSIONS section, as the set of
+ * names they claim to explain.
+ *
+ * Parsed rather than eyeballed because these notes are uploaded to AMO on every push to
+ * main, so a permission added to the manifest and not to them is drift that gets
+ * PUBLISHED. It throws rather than returning nothing when the section or a bullet's
+ * em dash is missing: a parser that silently found no permissions would make the
+ * comparison below pass over an empty set, which is the failure it exists to prevent.
+ */
+function explainedPermissions(notes: string): string[] {
+  const lines = notes.split("\n");
+  const start = lines.indexOf("PERMISSIONS");
+  if (start === -1) throw new Error("amo/reviewer-notes.txt has no PERMISSIONS heading");
+  // Headings in this file are bare ALL-CAPS lines; the section runs to the next one.
+  const rest = lines.slice(start + 1);
+  const end = rest.findIndex((line) => /^[A-Z][A-Z ]+$/.test(line));
+  const section = end === -1 ? rest : rest.slice(0, end);
+
+  const bullets = section.filter((line) => line.startsWith("- "));
+  if (bullets.length === 0) throw new Error("the PERMISSIONS section explains nothing");
+  return bullets.flatMap((bullet) => {
+    // Everything before the em dash is what the bullet is ABOUT; after it is the prose,
+    // where a permission may well be named in passing without being explained.
+    const [heads] = bullet.slice(2).split("—");
+    if (heads === bullet.slice(2)) throw new Error(`no em dash in permission bullet: ${bullet}`);
+    return heads!.split(",").map((name) => name.trim()).filter((name) => name !== "");
+  });
+}
 
 const COPY = {
   summary: "One YAML file decides which container each site opens in.",
@@ -83,5 +117,42 @@ describe("the copy this repo actually ships", () => {
 
   it("keeps the summary inside the cap", () => {
     expect(readListingCopy().summary.length).toBeLessThanOrEqual(SUMMARY_LIMIT);
+  });
+
+  // What a reviewer opens this file for. `test/fitness/manifest.test.ts` pins the manifest
+  // against the APIs `src/` calls, in both directions — so a permission cannot arrive
+  // without a caller. Nothing pinned it against the PROSE, and two had arrived without one:
+  // webNavigation (the view-source guard) and notifications (the declined-POST toast) were
+  // both added after these notes were written and went unexplained for as long as it took
+  // someone to read them side by side.
+  //
+  // An exact set, in both directions, as everywhere else here. A permission removed from
+  // the manifest but still explained is the same drift facing the other way, and it is
+  // worse than stale: the notes would be telling a reviewer the add-on asks for something
+  // it does not.
+  it("explains every permission the manifest declares, and no others", () => {
+    const manifest = JSON.parse(readFileSync(root + "extensions/cc/manifest.json", "utf8")) as {
+      permissions: string[];
+    };
+    const explained = explainedPermissions(readListingCopy().reviewerNotes);
+
+    expect([...explained].sort()).toEqual([...manifest.permissions].sort());
+  });
+
+  // The paragraph exists so a reviewer can reproduce the checksum, so the version floor in
+  // it has to be one this project actually stands behind. It said "Needs Node 22+" while CI
+  // built and verified on 24 only, `package.json` declares no `engines`, and nothing
+  // anywhere established that a Node 22 rebuild produces the same bytes.
+  it("names the Node version CI really builds on, rather than a floor nobody tested", () => {
+    const declared = new Set(
+      globSync(".github/workflows/*.y*ml", { cwd: root })
+        .flatMap((file) => [...readFileSync(root + file, "utf8").matchAll(/node-version:\s*(\d+)/g)])
+        .map((m) => m[1]!),
+    );
+
+    // One version across every workflow: if the release build and the reproducibility
+    // verifier ever disagreed, no single sentence here could be true for both.
+    expect([...declared]).toHaveLength(1);
+    expect(readListingCopy().reviewerNotes).toContain(`Node ${[...declared][0]}`);
   });
 });

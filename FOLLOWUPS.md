@@ -92,28 +92,6 @@ The entries below came out of one sweep of the cold base on 2026-08-26, against
 `test:coverage` 866 passed, typecheck, lint and `audit` clean). None of them is a red
 test — that is the point of writing them down.
 
-## The AMO reviewer notes explain seven of the nine permissions (2026-08-26)
-
-`amo/reviewer-notes.txt` lists `webRequest`, `webRequestBlocking`, `<all_urls>`,
-`cookies`, `contextualIdentities`, `tabs` and `storage`. `extensions/cc/manifest.json`
-also declares **`webNavigation`** (the F13 view-source guard) and **`notifications`** (the
-F9 toast), both added after the notes were written. An AMO reviewer reads that file to
-find out why an add-on asks for what it asks for, and two of the answers are missing.
-
-`test/fitness/manifest.test.ts` pins the manifest against the APIs `src/` calls, in both
-directions, and would have caught either permission being added without a caller. Nothing
-pins the notes against the manifest — and since `c48182e` these notes are uploaded to AMO
-on **every push to main**, so the drift is published rather than merely stale. A third row
-in that fitness function ("every declared permission is named somewhere in the reviewer
-notes") is the shape; it needs the notes' permission section to be machine-findable, which
-today it is only by convention.
-
-Same file, unverified: *"Needs Node 22+."* CI builds and verifies on Node 24 only,
-`package.json` declares no `engines`, and nothing anywhere establishes that a Node 22
-rebuild produces the same bytes. The whole point of that paragraph is a reviewer
-reproducing the checksum, so the version floor in it should either be what CI proves or be
-dropped.
-
 ## Two gaps in what the browser layer promises e2e cases (2026-08-26)
 
 Both are in the layer's own stated contract rather than in a case, so no case failing will

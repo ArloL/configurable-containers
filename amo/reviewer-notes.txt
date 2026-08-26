@@ -1,6 +1,7 @@
 BUILD INSTRUCTIONS
 
-Needs Node 22+.
+Built with Node 24, which is what this project's CI builds and verifies the
+checksum on. Other versions are untested here.
 
     git clone https://github.com/ArloL/configurable-containers
     cd configurable-containers
@@ -32,6 +33,17 @@ PERMISSIONS
   cookie-seeding feature.
 - contextualIdentities, tabs — create/query/remove containers and tabs.
 - storage — the user's config. storage.local only.
+- webNavigation — a "view-source:" load reaches webRequest wearing the INNER url,
+  so the blocking listener sees an ordinary GET for the page being printed and
+  would reopen it elsewhere, losing the view-source wrapper and taking the source
+  tab down with it. webNavigation.onBeforeNavigate is the only event that names
+  the view-source: URL, and Firefox fires it before that navigation's request.
+  Observed only; nothing is cancelled from this listener.
+- notifications — one toast, when a navigation carries a request body. tabs.create
+  can only issue a GET, so re-opening a POST elsewhere would drop the body (a SAML
+  assertion, a card payment); it is left where it is instead and the user is told
+  which container it would otherwise have gone to. Without the permission that
+  message is dropped with no error.
 
 CONTENT SCRIPTS
 
