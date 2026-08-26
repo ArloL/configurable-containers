@@ -360,18 +360,29 @@ mutant no other case catches.
   `npm audit` permanently loud and this one meaningful: the shipped tree is two packages
   wide (`tldts`, `yaml`), and an advisory in either is a real one, in code that runs
   inside every page load's decision.
-- **The reproducibility promise** — `npm run verify:reproducible`, nightly. Every release
-  body says "Reproduce this build:" and gives two commands; this runs them, rebuilding the
-  last **listed** release from its own published source archive with its own published
-  `BUILD_TIMESTAMP` and comparing the sha256 with the xpi attached beside it. It is the
-  only check of that promise, and the GitHub asset is the only copy it can be made
-  against — AMO repacks uploads, so its copy differs by entry order and mtimes whatever
-  the build did. The release-picking is unit-tested (`test/extension/verify-reproducible.test.ts`)
-  because picking wrong is the failure that matters: both channels share one tag sequence,
-  and reproducing a dev build reports a mismatch that is not one, since AMO signed it on
-  the way out. **Inert until the first listed release** — every release so far is a
-  prerelease, so the job currently reports "nothing to reproduce" and passes; `FOLLOWUPS.md`
-  carries that until it stops being true.
+- **The reproducibility promise** — `npm run verify:reproducible`, on two triggers. Every
+  release body says "Reproduce this build:" and gives two commands; this runs them,
+  rebuilding a release from its own published source archive with its own published
+  `BUILD_TIMESTAMP` and comparing the sha256 with the xpi attached beside it. The GitHub
+  asset is the only copy the comparison can be made against — AMO repacks uploads, so its
+  copy differs by entry order and mtimes whatever the build did.
+
+  The two triggers ask different questions and neither replaces the other.
+  `verify-release.yaml` checks **each release as it is published**, on either channel, with
+  the tag handed to it by the job that just published it — so it performs no search, which
+  is the whole point of it. `nightly.yml`'s `reproducible-build` re-checks the newest
+  **listed** release against today's toolchain: whether something that reproduced when it
+  was cut still does, after a newer Node or a dependency yanked from the registry.
+
+  Both are called rather than triggered. A release published with `GITHUB_TOKEN` fires no
+  `release: published` event at all, so `on: release` alone would leave the gate dead on
+  arrival — which is a variation of how it spent its first four weeks. The release-PICKING
+  is unit-tested (`test/extension/verify-reproducible.test.ts`) because picking wrong is
+  the failure that matters: both channels share one tag sequence and the dev channel
+  buries a listed release within days, so the fixed 20-release window this used to read
+  never reached `v2608.0.112` (the 32nd newest release on 2026-08-25) and the job passed
+  every night announcing "No listed release yet". It pages now, and **throws** when the
+  page cap runs out rather than reporting an unfinished search as "nothing to check".
 - **Determinism of the browser tier** — `npm run test:flake`, nightly. Every other gate
   asks whether the suite is green. This asks whether green means anything: L4/L5 drive a
   real Firefox through a real network stack and real timers, and one run cannot tell a
@@ -631,6 +642,15 @@ issue on regression rather than blocking a PR — guard rails, not gatekeepers. 
   Scheduled runs go unwatched, so a red night has to come and find us; the rails fail for
   unrelated reasons and are fixed by different work, so they get an issue each, and each
   issue body says what the two or three shapes of that failure mean.
+- `.github/workflows/verify-release.yaml` — the per-release half of the reproducibility
+  gate above, `workflow_call`ed by `ci.yml` and `release.yaml` with the tag they just
+  published, so it never has to go looking for its subject. It installs with
+  `package-manager-cache: false` on purpose: a job deciding whether a published artefact
+  is trustworthy must not take its dependencies from a mutable cache an earlier run could
+  have poisoned.
+- `.github/workflows/check-actions.yaml` — `actionlint` and `zizmor` over the workflows
+  themselves, on every push and PR. zizmor fails the build on any finding and there are no
+  suppressions.
 
 ## What CI still can't catch
 
