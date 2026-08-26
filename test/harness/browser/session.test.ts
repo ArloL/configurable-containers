@@ -35,4 +35,39 @@ describe("BrowserSession", () => {
     expect(calls).toEqual(["switchTo(w1)", "newWindow"]);
     expect(page.handle).toBe("w2");
   });
+
+  // A handle can be LISTED and already gone: getAllWindowHandles answered a moment ago and
+  // the extension closes tabs on its own schedule. Measured in CI on the auto-temp startup
+  // sweep, which replaces the very tab Firefox opened — one run in three, as the first line
+  // of a case whose own comment says nothing has to be re-anchored for it.
+  it("passes over a window that closed between the listing and the switch", async () => {
+    const { driver, calls } = fakeDriver({
+      elements: () => [],
+      handles: ["w1", "w2"],
+      dead: ["w1"],
+    });
+    const page = await new BrowserSession(driver, 500, 0).newPage();
+    expect(calls).toEqual(["switchTo(w1)", "switchTo(w2)", "newWindow"]);
+    expect(page.handle).toBe("w3");
+  });
+
+  // …and asks the browser again rather than retrying the handles it has, because the whole
+  // reason the first list was wrong is that it was a snapshot.
+  it("re-reads the handle list when every window in it has gone", async () => {
+    const { driver, calls } = fakeDriver({
+      elements: () => [],
+      handles: (call) => (call === 1 ? ["w1"] : ["w9"]),
+      dead: ["w1"],
+    });
+    const page = await new BrowserSession(driver, 500, 0).newPage();
+    expect(calls).toEqual(["switchTo(w1)", "switchTo(w9)", "newWindow"]);
+    expect(page.handle).toBe("w2");
+  });
+
+  it("says which handles it kept finding closed when none of them opens", async () => {
+    const { driver } = fakeDriver({ elements: () => [], handles: ["w1", "w2"], dead: ["w1", "w2"] });
+    await expect(new BrowserSession(driver, 0, 0).newPage()).rejects.toThrow(
+      /a window to open a tab from.*\["w1","w2"\]/s,
+    );
+  });
 });

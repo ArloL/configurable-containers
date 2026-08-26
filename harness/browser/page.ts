@@ -70,8 +70,20 @@ export class Page implements PageContext {
     // command fails with NoSuchWindow wherever it happens to be — miles from the close
     // that caused it. Re-attach to whatever survives, so a page's lifetime is its own
     // business and closing one is not a trap for the next read.
-    const [survivor] = await this.driver.getAllWindowHandles();
-    if (survivor !== undefined) await this.driver.switchTo().window(survivor);
+    //
+    // Whatever survives, not whatever was listed: a handle can be named by
+    // `getAllWindowHandles` and already gone, because the extension closes tabs on its own
+    // schedule (see BrowserSession.newPage, where that cost a CI run). Best effort — every
+    // Page operation switches to its own handle first, so failing to find an anchor here is
+    // only a missed courtesy, not a broken session.
+    for (const handle of await this.driver.getAllWindowHandles()) {
+      try {
+        await this.driver.switchTo().window(handle);
+        return;
+      } catch {
+        continue;
+      }
+    }
   }
 
   async describe(): Promise<PageReport> {
