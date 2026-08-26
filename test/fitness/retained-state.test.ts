@@ -45,6 +45,9 @@ const DECLARED: Retained[] = [
   // test/config/parse.version.test.ts pins by value instead.
   { where: "src/config/parse.ts", name: "SAME_SITE", lifetime: "session", bound: "literal" },
   { where: "src/config/parse.ts", name: "RUN_AT", lifetime: "session", bound: "literal" },
+  // The pages `supersede` replaces rather than keeps. A constant, but an ALLOW-LIST: the
+  // cost of it being short is a fresh-tab page missing from it, not memory.
+  { where: "src/engine/supersede.ts", name: "EMPTY_PAGES", lifetime: "session", bound: "literal" },
 
   // --- per-call working sets ----------------------------------------------------------
   { where: "src/engine/disposer.ts", name: "occupied", lifetime: "call", bound: "one sweep" },

@@ -42,8 +42,10 @@ export function createPicker(opts: PickerOptions): Picker {
   // anything — the loss `supersede` exists to avoid. Both paths now share that rule: a
   // triggering tab on a page is kept, one with nothing to lose is replaced.
   //
-  // Picking then supersedes the CHOICE tab, which is never on http(s) and so is always
-  // replaced, landing the container tab where a single-container reopen would have put it.
+  // Picking then supersedes the CHOICE tab, which `supersede` names explicitly among the
+  // pages with nothing to lose — so it is always replaced, landing the container tab where a
+  // single-container reopen would have put it. It is named there rather than falling out of
+  // a scheme test: CC's other page, the options editor, is KEPT.
   async function showChoice(tabId: number, url: string, options: string[]): Promise<void> {
     const tab = await port.getTab(tabId);
     if (!tab) return; // raced away
