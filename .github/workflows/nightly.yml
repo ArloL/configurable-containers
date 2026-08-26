@@ -77,9 +77,31 @@ jobs:
         run: npm run test:mutation
 
   flake:
-    name: e2e determinism
+    name: e2e determinism (sample ${{ matrix.sample }})
     runs-on: ubuntu-latest
-    # Three passes over the browser tier. Generous, because a run killed at the cap looks
+    # Two SAMPLES, ten runs each. Not shards — each leg runs the whole tier and reaches its
+    # own verdict; what differs is the machine.
+    #
+    # Ten because the marginal cost of a run is only the suite (~2min: checkout, npm ci and
+    # Firefox are amortised across the whole job), and because three is thin. P(catching a
+    # race that fails 1 run in 3) is 67% at N=3 and 98% at N=10; 1-in-10 goes 27% to 65%.
+    # The race that took auto-temp's startup sweep down had been there since f9ab866 and
+    # had a one-in-three chance of slipping through the run that finally caught it.
+    #
+    # Two legs because runs INSIDE one job are correlated: same runner, same machine, same
+    # noisy neighbours. A race whose odds depend on how fast the box is can sit at ~0 there
+    # however many times it repeats, and separate hardware is the only thing that varies
+    # it. Ten each on two boxes beats twenty on one, at the same wall clock.
+    #
+    # More runs cannot make this job noisier, which is what makes the trade one-sided: it
+    # fails on DISAGREEMENT, and a disagreement is a real race by construction.
+    strategy:
+      # Both legs always run. A leg that finds a race must not deny the other the chance
+      # to say whether it saw the same one — that comparison is half the diagnosis.
+      fail-fast: false
+      matrix:
+        sample: [1, 2]
+    # Twenty-odd minutes of testing. Generous, because a run killed at the cap looks
     # exactly like the thing this job exists to report.
     timeout-minutes: 120
     permissions:
@@ -110,12 +132,15 @@ jobs:
 
       - run: npm ci
 
-      # Fails only on DISAGREEMENT between the runs. A case that fails all three is the
-      # suite being red, which ci.yml already reports; a case that answers differently is
-      # a race, and `npm test` deliberately has no --retry to paper over it.
-      - name: Run the browser tier three times and compare
+      # Fails on DISAGREEMENT between the runs — a case that fails every time is the suite
+      # being red, which ci.yml already reports — and on a run that failed as a WHOLE with
+      # no case to show for it, which is what a dead `beforeAll` looks like and what this
+      # job used to call "all consistent". `npm test` deliberately has no --retry to paper
+      # over either.
+      - name: Run the browser tier ten times and compare
         env:
           FIREFOX_BIN: ${{ steps.firefox.outputs.firefox-path }}
+          FLAKE_RUNS: "10"
         run: npm run test:flake
 
   firefox-nightly:

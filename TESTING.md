@@ -361,9 +361,19 @@ mutant no other case catches.
 - **Determinism of the browser tier** — `npm run test:flake`, nightly. Every other gate
   asks whether the suite is green. This asks whether green means anything: L4/L5 drive a
   real Firefox through a real network stack and real timers, and one run cannot tell a
-  1-in-20 case from a solid one. It runs `test/e2e` three times and fails **only on
-  disagreement** — a case that fails all three is the suite being red, which `ci.yml`
-  already reports.
+  1-in-20 case from a solid one. It runs `test/e2e` **ten times, on each of two runners**,
+  and fails on **disagreement** — a case that fails every time is the suite being red,
+  which `ci.yml` already reports.
+
+  Ten because three was thin: P(catching a race that fails one run in three) is 67% at
+  N=3 and 98% at N=10, and 1-in-10 goes 27% to 65%. The race that took auto-temp's startup
+  sweep down had been in `session.ts` since `f9ab866` and had a one-in-three chance of
+  slipping past the run that finally caught it. Two runners because repeats inside one job
+  are correlated — same machine, same neighbours — so a race whose odds depend on how fast
+  the box is can sit at ~0 there however often it repeats. Raising the count cannot make
+  this job noisier, which is what makes the trade one-sided: a disagreement is a real race
+  by construction. What it buys is **latency to detection, and latency is the blame
+  window**.
 
   Deliberately not `--retry`, which turns a race into a pass and throws away the evidence
   that there was one. Every "flake" this harness has actually had was a race in the case:
