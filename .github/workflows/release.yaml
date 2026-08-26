@@ -82,6 +82,10 @@ jobs:
 
       # Attaching the archive to the GitHub release satisfies nothing on AMO's side;
       # --upload-source-code is what does.
+      #
+      # This also publishes the listing copy in amo/ — summary, description and the
+      # reviewer notes, which name the VERSION and BUILD_TIMESTAMP above, so both must be
+      # in scope here. BUILD_TIMESTAMP arrives through GITHUB_ENV from the package step.
       - name: Submit to AMO (listed channel)
         env:
           WEB_EXT_API_KEY: ${{ secrets.WEB_EXT_API_KEY }}

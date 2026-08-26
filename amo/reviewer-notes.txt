@@ -1,0 +1,40 @@
+BUILD INSTRUCTIONS
+
+Needs Node 22+.
+
+    git clone https://github.com/ArloL/configurable-containers
+    cd configurable-containers
+    git checkout v{{version}}
+    npm ci
+    BUILD_TIMESTAMP={{timestamp}} npm run package -- {{package_args}}
+
+The result, dist/configurable-containers-{{version}}.xpi, matches the submitted file
+byte for byte, so comparing checksums is enough.
+
+esbuild bundles three TypeScript entry points into background.js, options.js and
+choice.js. Nothing is minified; everything else is copied verbatim.
+
+WHAT IT DOES
+
+Routes each site into a Firefox container per a YAML config the user edits in the
+options page. Unmatched sites open in a fresh temporary container.
+
+PERMISSIONS
+
+- webRequest, webRequestBlocking, <all_urls> — the whole mechanism. A blocking
+  onBeforeRequest listener on main_frame decides the container; if it differs from
+  the current one the request is cancelled and the tab reopened there. It must
+  block because the decision precedes the request, and any domain may be routed.
+- cookies — Firefox requires it for tabs.create({ cookieStoreId }), which
+  otherwise throws "No permission for cookieStoreId". Also used by the optional
+  cookie-seeding feature.
+- contextualIdentities, tabs — create/query/remove containers and tabs.
+- storage — the user's config. storage.local only.
+
+CONTENT SCRIPTS
+
+The config has an optional "scripts" key. If the user sets it,
+src/engine/script-injector.ts passes that string to contentScripts.register().
+The code comes only from their own storage.local config, never the network. No
+eval, no new Function, no remotely loaded code. The shipped default has no
+"scripts" entries.

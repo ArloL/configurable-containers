@@ -21,7 +21,7 @@ describe("signArgs", () => {
     // reviewers. web-ext signs happily without it and an unlisted version is auto-signed
     // either way, so the omission would only surface as a manual review going against a
     // dev add-on that had already shipped.
-    expect(signArgs("stage", "signed", "src.zip")).toEqual([
+    expect(signArgs("stage", "signed", "src.zip", "meta.json")).toEqual([
       "sign",
       "--source-dir",
       "stage",
@@ -31,6 +31,11 @@ describe("signArgs", () => {
       "unlisted",
       "--upload-source-code",
       "src.zip",
+      // The reviewer notes, carrying this build's version and BUILD_TIMESTAMP. Hand-pasted
+      // notes named a `<version>` nobody substituted, so the rebuild a reviewer was told to
+      // run was against the wrong instant and could not match.
+      "--amo-metadata",
+      "meta.json",
     ]);
   });
 });

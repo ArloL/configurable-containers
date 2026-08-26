@@ -12,12 +12,14 @@ import { readdirSync, rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import * as path from "node:path";
 import { DEV_ID, DEV_NAME, DEV_UPDATE_URL, packageExtension } from "./package";
+import { writeAmoMetadata } from "./amo-metadata";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, "..");
 const OUT_DIR = path.resolve(HERE, "../dist/dev");
 const SIGNED_DIR = path.join(OUT_DIR, "signed");
 const WEB_EXT = path.resolve(HERE, "../node_modules/.bin/web-ext");
+const METADATA = path.join(OUT_DIR, "amo-metadata.json");
 
 // Where Firefox polls for a newer build. This URL is baked into every signed build
 // and cannot be changed — a build that shipped keeps asking here forever. Defined in
@@ -58,7 +60,12 @@ export function buildSourceArchive(version: string, outDir: string): string {
 
 // Pure, because the omission this guards against is silent: web-ext signs an unlisted
 // build just as happily with no source attached, and AMO only says so if someone reviews.
-export function signArgs(stageDir: string, artifactsDir: string, sourceArchive: string): string[] {
+export function signArgs(
+  stageDir: string,
+  artifactsDir: string,
+  sourceArchive: string,
+  metadataPath: string,
+): string[] {
   return [
     "sign",
     "--source-dir",
@@ -69,11 +76,16 @@ export function signArgs(stageDir: string, artifactsDir: string, sourceArchive: 
     "unlisted",
     "--upload-source-code",
     sourceArchive,
+    // Reviewer notes only — an unlisted add-on has no listing page. They name the version
+    // and BUILD_TIMESTAMP this build was made against, and the --dev flag without which a
+    // rebuild produces the listed identity instead.
+    "--amo-metadata",
+    metadataPath,
   ];
 }
 
 async function main() {
-  for (const name of ["WEB_EXT_API_KEY", "WEB_EXT_API_SECRET", "VERSION"]) {
+  for (const name of ["WEB_EXT_API_KEY", "WEB_EXT_API_SECRET", "VERSION", "BUILD_TIMESTAMP"]) {
     if (!process.env[name]?.trim()) {
       throw new Error(`${name} is not set`);
     }
@@ -91,9 +103,15 @@ async function main() {
 
   const sourceArchive = buildSourceArchive(version, OUT_DIR);
 
+  const metadata = writeAmoMetadata(METADATA, {
+    version,
+    timestamp: process.env["BUILD_TIMESTAMP"] ?? "",
+    channel: "unlisted",
+  });
+
   rmSync(SIGNED_DIR, { recursive: true, force: true });
 
-  const res = spawnSync(WEB_EXT, signArgs(stageDir, SIGNED_DIR, sourceArchive), {
+  const res = spawnSync(WEB_EXT, signArgs(stageDir, SIGNED_DIR, sourceArchive, metadata), {
     stdio: "inherit",
   });
   if (res.status !== 0) process.exit(res.status ?? 1);

@@ -642,7 +642,20 @@ reasonable-looking change wrong**.
 - **`npm run sign:dev` and `npm run submit` UPLOAD.** The credential guard is not a
   dry-run switch, and `npm` under mise carries AMO credentials even when a plain shell
   shows them unset. `sign:dev` takes its version from `VERSION`; to exercise only the
-  build half, call `packageExtension` with the dev id.
+  build half, call `packageExtension` with the dev id. Both now also require
+  `BUILD_TIMESTAMP`, because the reviewer notes they upload name it.
+- **The AMO listing is PUSHED BY THE UPLOAD, so editing it in the Developer Hub is undone
+  by the next release.** The copy is `amo/{summary.txt,description.md,reviewer-notes.txt}`;
+  `scripts/amo-metadata.ts` fills its `{{version}}`/`{{timestamp}}`/`{{package_args}}`
+  placeholders and both upload paths pass the result to `web-ext sign --amo-metadata`.
+  Three things a change here gets wrong. The **unlisted channel gets `approval_notes` and
+  nothing else** — an unlisted add-on has no listing page, and a field AMO rejects there
+  fails `sign:dev` on **every push to main**, not on a release someone is watching.
+  **`name`, `categories` and `license` are never sent**: they are mandatory at add-on
+  *creation* rather than per version, so a wrong value is a rejected upload rather than a
+  bad paragraph. And an **unknown `{{…}}` throws** rather than shipping the braces — the
+  hand-pasted notes this replaced told a reviewer to rebuild at `<version>` with
+  `BUILD_TIMESTAMP=<value>`, which nobody substituted and which no checksum could match.
 - **Never derive a dev version from the clock** — `YYMM.DD.HHMM` outranks every
   `YYMM.0.<micro>` for the rest of the month, so one local build would own the update
   channel. Nothing enforces this; it is a rule for whoever sets `VERSION`.

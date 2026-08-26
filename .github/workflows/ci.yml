@@ -113,6 +113,10 @@ jobs:
       # .git for anyone to derive one from. `sign:dev` packages before it signs, so this
       # stamps the reproducible xpi that step leaves in dist/dev/.
       #
+      # BUILD_TIMESTAMP is also what the reviewer notes sign:dev uploads are stamped with,
+      # so this export is now required rather than merely reproducible: sign:dev refuses to
+      # run without it.
+      #
       # It also builds the source archive and hands it to AMO with --upload-source-code,
       # exactly as release.yaml does for the listed channel: the requirement is the
       # reviewer's, not the channel's, and an unlisted add-on can be reviewed at any time
