@@ -112,6 +112,54 @@ describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
     expect(browser.closedTabIds).toEqual([sourceTab.id]);
   });
 
+  it("keeps a tab showing CC's own options page, so a half-written config survives", async () => {
+    const browser = aFakeBrowser();
+    // The editor holds text that is not in storage until Save. Replacing the tab discards
+    // it with no way back, which is worse than what CC does for any stranger's website.
+    const editor = browser.existingTab({ url: browser.port.getURL("options.html"), cookieStoreId: "firefox-default", index: 3, active: true, openerTabId: 7 });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
+
+    await browser.navigates(aNavigationTo({ tabId: editor.id }));
+
+    expect(browser.closedTabIds).toEqual([]);
+    expect(browser.openedTabs[0]).toMatchObject({ url: "https://example.com/", index: 4, openerTabId: editor.id });
+  });
+
+  it("replaces the choice page, whose whole purpose is to be navigated away from", async () => {
+    const browser = aFakeBrowser();
+    // Picking a container IS this page leaving. Keeping it strands the picker beside the
+    // tab it just opened. It carries an encoded payload, hence the fragment.
+    const choice = browser.existingTab({ url: browser.port.getURL("choice.html") + "#eyJ1cmwiOiJ4In0", cookieStoreId: "firefox-default", index: 3 });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
+
+    await browser.navigates(aNavigationTo({ tabId: choice.id }));
+
+    expect(browser.closedTabIds).toEqual([choice.id]);
+    expect(browser.openedTabs[0]).toMatchObject({ index: 3 });
+  });
+
+  it("replaces a fresh tab that reports an empty url rather than about:blank", async () => {
+    const browser = aFakeBrowser();
+    // Tab.url is documented as `"" / about:blank for a fresh tab`. Both are pre-commit;
+    // keeping either strands an empty tab beside every link opened in a new tab.
+    const fresh = browser.existingTab({ url: "", cookieStoreId: "firefox-default", index: 3, openerTabId: 7 });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
+
+    await browser.navigates(aNavigationTo({ tabId: fresh.id }));
+
+    expect(browser.closedTabIds).toEqual([fresh.id]);
+  });
+
+  it("replaces about:privatebrowsing, which is the new-tab page of a private window", async () => {
+    const browser = aFakeBrowser();
+    const fresh = browser.existingTab({ url: "about:privatebrowsing", cookieStoreId: "firefox-default", index: 3, openerTabId: 7 });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
+
+    await browser.navigates(aNavigationTo({ tabId: fresh.id }));
+
+    expect(browser.closedTabIds).toEqual([fresh.id]);
+  });
+
   it("F1: a re-fire of the same request+url does not open a second tab", async () => {
     const browser = aFakeBrowser();
     const sourceTab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });

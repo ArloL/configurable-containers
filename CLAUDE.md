@@ -38,8 +38,8 @@ reasonable-looking change wrong**.
 - **Tab placement is `src/engine/supersede.ts` — add a caller, never a copy.** Callers:
   `engine.reopen`; `picker.showChoice`, through the injected `engine.reopen` (hence
   `createEngine` returning `{ reopen }`), because a hand-rolled reopen skips `reopenedNav`
-  and reopens forever; and `auto-temp.containerize`, where an about: page never matches
-  `keep` and takes the replace branch. The rule was copied into the picker once and
+  and reopens forever; and `auto-temp.containerize`, where `about:newtab`/`about:home` are
+  named among the pages with nothing to lose and take the replace branch. The rule was copied into the picker once and
   drifted: the choice page loaded into the triggering tab and destroyed the user's page.
 - **A guard on the engine's own webRequest handling stays IN `engine.ts`.** `handled`,
   `reopenedNav` and `viewSourceNav` are one family, each keyed on a navigation and read
@@ -147,11 +147,21 @@ reasonable-looking change wrong**.
   and a `window.open` share popup is replaced in the last focused *normal* window, then
   closed with its navigation. `Tab.windowId` is required, not optional — an optional field
   is one the mock forgets to set, and coverage quietly stops.
-- **A reopen KEEPS a source tab that is on a page**, cancelling only its navigation and
-  opening beside it: session history doesn't span containers, so replacing it destroys
-  what the user was reading. A tab with **nothing to lose** (new-tab, choice page,
-  pre-commit `about:blank`) is still replaced, or every new-tab link strands an empty tab.
-  MAC's rule (`mac/src/js/background/assignManager.js`, `removeTab`).
+- **A reopen KEEPS a source tab unless `hasNothingToLose` names the page it is on**
+  (`supersede.ts`), cancelling only its navigation and opening beside it: session history
+  doesn't span containers, so replacing it destroys what the user was looking at. What gets
+  replaced is an **allow-list, not a scheme test** — `""` (a fresh tab can report that
+  instead of `about:blank`), `about:blank`, `about:newtab`/`about:home`,
+  `about:privatebrowsing`, and the choice page by prefix (it carries a fragment). Don't
+  "simplify" it back to `/^https?:/`: that is what it was, and it swept **CC's own options
+  page** in with the blanks, so a url typed into the editor's tab destroyed a half-written
+  config — the textarea is not in storage until Save, and the tab is removed rather than
+  kept, so there is no back button either. Keep the list complete in the other direction
+  too: a fresh-tab page missing from it is kept, and a kept blank tab strands an empty one
+  beside every new-tab link, which is the whole reason the replace branch exists. The two CC
+  pages sit on opposite sides deliberately — the choice page is replaced, because picking a
+  container *is* that page being navigated away; the options page is kept. MAC's rule
+  (`mac/src/js/background/assignManager.js`, `removeTab`).
 - **`port.createTab` issues a GET, so a navigation with a body is never reopened**
   (`d.method !== "GET"`, before `macOwns` and `handled.add`, so it adds no state and fails
   open). Reopening a POST drops the SAML assertion. It sits in the engine, not the

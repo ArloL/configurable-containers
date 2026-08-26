@@ -43,9 +43,10 @@ export function createAutoTemp(opts: AutoTempOptions): void {
       icon: "circle",
     });
     // Placement is `supersede`'s: window, index, active and openerTabId come from the tab
-    // being taken over, and a candidate is always an about: page, so it takes the replace
-    // branch. This used to be a hand-rolled copy of that rule; the same duplication had
-    // already drifted once in the picker.
+    // being taken over, and a candidate is always about:newtab or about:home, both of which
+    // `supersede` lists among the pages with nothing to lose, so it takes the replace
+    // branch. Keep the two in step. This used to be a hand-rolled copy of that rule; the
+    // same duplication had already drifted once in the picker.
     //
     // No url on purpose. Firefox rejects `tabs.create({ url: "about:newtab" })` ("Illegal
     // URL"), and about:home too, so passing the tab's own url made every containerize throw
