@@ -402,6 +402,16 @@ export function readSeenPost(page: Page): Promise<string> {
   return attribute(page, "body", "data-seen-post");
 }
 
+// Set a cookie from inside the page, the way a site does — `document.cookie`, in this tab's
+// container partition. The one WRITE still on an injected script, for the same reason as
+// readLocalStorage below: there is no protocol command for it, and every caller is an
+// http(s) page where scripts are allowed. It lives here rather than in a case so that a
+// case never has to reach for `driver` to say it.
+export async function setCookieHere(page: Page, cookie: string): Promise<void> {
+  await page.switchHere();
+  await page.driver.executeScript(`document.cookie = ${JSON.stringify(cookie)};`);
+}
+
 // Generic localStorage read in a tab — containers partition localStorage, so this reads that
 // tab's own partition. The one reader still on an injected script: localStorage has no
 // protocol command, and every caller is an http(s) page where scripts are allowed.

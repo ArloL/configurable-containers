@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import {
   launch, awaitContainerTab, awaitProbeReport, readCookieNamesHere, readCookieNamesDefault,
-  readSeenCookie, type Session,
+  readSeenCookie, setCookieHere, type Session,
 } from "../../harness/firefox";
 
 // F11, the one thing containers must prevent: a cookie set in one throwaway is
@@ -43,8 +43,7 @@ describe("cookie boundary (real Firefox, CC + probe)", () => {
     await navFreshTab(firstThrowawayUrl);
     const a = await awaitContainerTab(firefox.browser, firstThrowawayUrl);
     expect(a.name).toMatch(/^tmp/);
-    await a.page.switchHere();
-    await firefox.driver.executeScript("document.cookie = 'f11=secret; path=/';");
+    await setCookieHere(a.page, "f11=secret; path=/");
 
     // Control arm — without it a vacuous "cookie absent" green proves nothing, which
     // is exactly how this suite has shipped false greens before. Same site, so the

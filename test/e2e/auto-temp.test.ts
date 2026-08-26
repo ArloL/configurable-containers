@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { Page } from "../../harness/browser/index";
 import {
-  launch, navigateTab, openRealNewTab, awaitContainerTab, awaitTab, awaitTabs,
+  launch, navigateTab, openRealNewTab, awaitTab, awaitTabs,
   navigateToContainerTab, type ProbeTab, type Session,
 } from "../../harness/firefox";
 
@@ -29,14 +29,13 @@ describe("auto-temp (real Firefox, CC + probe)", () => {
   // Park the driver on a probe-reported page — probeCommand's DOM relay only exists
   // on injected http(s) pages. A matched host is used so CC leaves the tab in its
   // permanent container, and a cache-buster forces a fresh probe report.
+  // From a FRESH tab, which is what navigateToContainerTab is: `driver.get` drove whichever
+  // tab the driver had been left on, and after a case whose tab the extension discarded that
+  // is no window at all — a NoSuchWindow swallowed by the catch, no navigation, and a
+  // 15-second timeout naming the container tab that was therefore never going to appear.
   async function parkOnProbePage(tag: string) {
     const url = `http://work.example:${serverPort}/?cb=${tag}-${Date.now()}`;
-    try {
-      await firefox.driver.get(url);
-    } catch {
-      // First visit reopens the tab into Work, tearing this one down — expected.
-    }
-    relay = (await awaitContainerTab(firefox.browser, url)).page;
+    relay = (await navigateToContainerTab(firefox.browser, url)).page;
   }
 
   // Wait until the new-tab page tab reports a container, so we don't race the
