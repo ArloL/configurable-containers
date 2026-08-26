@@ -92,33 +92,6 @@ The entries below came out of one sweep of the cold base on 2026-08-26, against
 `test:coverage` 866 passed, typecheck, lint and `audit` clean). None of them is a red
 test — that is the point of writing them down.
 
-## Two gaps in what the browser layer promises e2e cases (2026-08-26)
-
-Both are in the layer's own stated contract rather than in a case, so no case failing will
-find either.
-
-**A variable evades the read-then-compare check.** `test/fitness/e2e-discipline.test.ts`
-matches `expect(await ….inputValue())` and the other immediate readers inline. Assigning
-first — `const value = await editor.locator("#cc-config").inputValue(); expect(value)…` —
-matches nothing. Two files do it today (`options.test.ts:101`, `config-sync.test.ts:72`)
-and both are safe for reasons of their own: each waits with a retrying matcher first, and
-`config-sync` says so in a comment. The rule is fine; the check is one form narrower than
-the rule, and this directory's house rule is that the next exception has to be argued for
-here rather than absorbed.
-
-**Three matchers cannot reach the "no element matched" branch.**
-`harness/browser/matchers.ts` promises that an element which never appears fails in BOTH
-directions, so that `.not` cannot pass for a page that rendered nothing — and
-`test/harness/browser/matchers.test.ts` pins it. That holds only for the four matchers
-whose reader throws `PollTimeoutError` (`toHaveText`, `toContainText`, `toHaveValue`,
-`toHaveAttribute`). `toBeVisible`, `toBeEnabled` and `toHaveCount` read through
-`isVisible()` / `isEnabled()` / `count()`, which answer `false`, `false` and `0` for a
-missing element, so `reading` is always set and the branch is dead for them. For
-`toBeVisible` and `toHaveCount(0)` that matches Playwright and is what a caller wants. For
-`toBeEnabled` it does not: Playwright waits for the element, this passes
-`.not.toBeEnabled()` on a document that has not rendered. One live call site
-(`options.test.ts:114`, and safe only because the line above it waits on `#cc-error`).
-
 ## A startup script injection is not serialised against a Save (2026-08-26)
 
 `applyStored` runs applies through the `applying` chain because `scripts.apply`

@@ -119,6 +119,22 @@ export class Locator {
     return element === undefined ? false : element.isEnabled();
   }
 
+  /**
+   * Enabled, disabled, or `null` for no element at all — the three answers `isEnabled()`
+   * flattens into two.
+   *
+   * That flattening is Playwright's behaviour for `isVisible()` (documented: it does not
+   * wait, and a missing element is simply not visible) but NOT for `isEnabled()`, which
+   * waits for the element and throws. Keeping `isEnabled()` as it is and answering the
+   * third state here is what lets `toBeEnabled` tell "disabled" from "not rendered": the
+   * two were indistinguishable, so `.not.toBeEnabled()` passed on a document that had
+   * rendered nothing at all.
+   */
+  async enabledState(): Promise<boolean | null> {
+    const element = await this.first();
+    return element === undefined ? null : element.isEnabled();
+  }
+
   async waitFor(opts?: { state?: LocatorState } & WaitOpts): Promise<void> {
     const state = opts?.state ?? "visible";
     await poll(

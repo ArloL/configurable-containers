@@ -48,11 +48,29 @@ describe("fitness — e2e drives the browser through harness/browser", () => {
     // failure. The immediate readers (count/all/isEnabled/isVisible/inputValue) are the
     // sharp ones — they answer 0, [] or "" for a document that has not got there yet, which
     // compares as a real answer.
+    //
+    // BOTH FORMS, because the rule is about the reading and not about where it is spelled.
+    // This matched only the inline `expect(await …)` until 2026-08-26, so naming the value
+    // first — `const value = await …inputValue(); expect(value)…` — evaded it entirely, and
+    // two files were doing that. Neither was wrong, and that is the point: an exception that
+    // no check can see is not an exception, it is a hole, and the next one through it would
+    // arrive unargued. Still one LINE at a time, as everything in this file is: a read split
+    // over two lines evades it, and that is the next hole rather than a permitted form.
     const offenders = filesMatching(
       e2e,
-      /expect\(\s*await .*\.(count|isEnabled|isVisible|inputValue|innerText|textContent)\(\s*\)/,
+      /(?:expect\(\s*|\b(?:const|let|var)\s+\w+\s*=\s*)await .*\.(count|isEnabled|isVisible|inputValue|innerText|textContent)\(\s*\)/,
     ).map((f) => f.path);
     expect(offenders).toEqual([
+      // The SAME reading the assertion above it already settled on, taken deliberately:
+      // #cc-sync renders from a live read of storage.sync, so a second innerText() would be
+      // a second question about a moving target. It reads once and asserts the reading has
+      // not moved, with a message that says so if it has.
+      "test/e2e/config-sync.test.ts",
+      // One value, two substrings. `openEditor` has already waited out the editor's async
+      // fill with `not.toHaveValue("")`, so the element exists and is populated before this
+      // read; what is left is asking two questions of ONE reading, which two retrying
+      // matchers cannot express — they would read twice.
+      "test/e2e/options.test.ts",
       // Its whole subject is which W3C commands answer on a privileged page, so it calls
       // each one directly and by name — after waiting for the element with `waitFor`. The
       // one read there that races the PAGE rather than the protocol (#cc-config's async

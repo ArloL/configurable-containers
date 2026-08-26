@@ -74,6 +74,15 @@ async function settle<T>(
   // An element that never appeared fails in BOTH directions. Reporting it as "the condition
   // did not hold" would make `.not` pass for a page that rendered nothing at all, which is
   // the failure this whole layer is against.
+  //
+  // Reaching here is the READER's decision, not this function's: it means every attempt
+  // threw `PollTimeoutError`, which the locator raises when the element is not resolvable.
+  // So the promise above holds for a matcher whose reader asks about an ELEMENT, and only
+  // for those — `toBeVisible` and `toHaveCount` deliberately read a missing element as an
+  // answer (`false`, `0`) rather than an absence, which is Playwright's behaviour for both
+  // and what a caller of `.not.toBeVisible()` or `toHaveCount(0)` is asking. `toBeEnabled`
+  // used to be in that group by accident rather than by choice, through `isEnabled()`
+  // answering `false` for an element that is not there; it asks `enabledState()` now.
   if (reading === undefined) {
     return {
       pass: ctx.isNot === true,
@@ -170,13 +179,26 @@ expect.extend({
     );
   },
 
+  // The one matcher of the three boolean-ish readers that must NOT read a missing element
+  // as an answer. Playwright's `toBeEnabled` waits for the element; ours could not tell
+  // "disabled" from "not rendered", because `isEnabled()` answers `false` for both — so
+  // `.not.toBeEnabled()` passed on a document that had rendered nothing, which is exactly
+  // the inference `settle`'s "no element matched" branch exists to refuse. It was dead code
+  // for this matcher.
   async toBeEnabled(locator: Locator, opts?: WaitOpts) {
     return settle(
       this,
       locator,
       "toBeEnabled",
       opts,
-      () => locator.isEnabled(),
+      async () => {
+        const state = await locator.enabledState();
+        // Absence is raised as the error `settle` already knows how to treat — the same one
+        // the other element-reading matchers get from their zero-budget reader — so it is
+        // retried while the page renders and fails in both directions if it never does.
+        if (state === null) throw new PollTimeoutError(`toBeEnabled ${locator.selector}: no element`);
+        return state;
+      },
       (seen) => seen,
       (seen) => (seen ? "was enabled" : "never became enabled"),
     );
