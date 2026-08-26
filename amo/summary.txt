@@ -1,0 +1,1 @@
+One YAML file decides which Firefox container each site opens in: named containers where you want them, throwaways everywhere else.
