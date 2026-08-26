@@ -3,6 +3,11 @@
 // it into the Developer Hub. The Hub keeps no version history of listing text, which is
 // what made hand-editing it a one-way door.
 //
+// Both channels get the same copy. The dev add-on is unlisted and shows none of it
+// publicly, which is exactly why it is worth sending: every push to main writes the copy
+// somewhere the developer can read it, and that is the only rehearsal before a listed
+// release makes it public.
+//
 // Deliberately narrow: `name`, `categories` and `license` are NOT sent. They never change,
 // they are mandatory at add-on creation rather than per version, and a wrong value there
 // is a rejected upload rather than a bad paragraph.
@@ -29,8 +34,8 @@ export interface AmoMetadataOptions extends ListingCopy {
 }
 
 export interface AmoMetadata {
-  summary?: Record<string, string>;
-  description?: Record<string, string>;
+  summary: Record<string, string>;
+  description: Record<string, string>;
   version: { approval_notes: string };
 }
 
@@ -55,22 +60,9 @@ function fill(text: string, values: Record<string, string>): string {
  */
 export function buildAmoMetadata(opts: AmoMetadataOptions): AmoMetadata {
   // A dev build is a different add-on — its own id, name and update_url — so a reviewer
-  // rebuilding without --dev gets an xpi that cannot match the one they downloaded.
+  // rebuilding without --dev gets an xpi that cannot match the one they downloaded. It is
+  // the only thing the two channels disagree about.
   const packageArgs = opts.channel === "unlisted" ? `${opts.version} --dev` : opts.version;
-
-  const meta: AmoMetadata = {
-    version: {
-      approval_notes: fill(opts.reviewerNotes, {
-        version: opts.version,
-        timestamp: opts.timestamp,
-        package_args: packageArgs,
-      }),
-    },
-  };
-
-  // An unlisted add-on has no listing page: sending copy is at best ignored, and a
-  // rejection would fail sign:dev on every push to main.
-  if (opts.channel === "unlisted") return meta;
 
   for (const [field, text] of [
     ["summary", opts.summary],
@@ -82,9 +74,17 @@ export function buildAmoMetadata(opts: AmoMetadataOptions): AmoMetadata {
     throw new Error(`the summary is ${opts.summary.length} characters, over AMO's cap of ${SUMMARY_LIMIT}`);
   }
 
-  meta.summary = { "en-US": fill(opts.summary, {}) };
-  meta.description = { "en-US": fill(opts.description, {}) };
-  return meta;
+  return {
+    summary: { "en-US": fill(opts.summary, {}) },
+    description: { "en-US": fill(opts.description, {}) },
+    version: {
+      approval_notes: fill(opts.reviewerNotes, {
+        version: opts.version,
+        timestamp: opts.timestamp,
+        package_args: packageArgs,
+      }),
+    },
+  };
 }
 
 /** Writes the file `web-ext sign --amo-metadata` reads, and returns its path. */

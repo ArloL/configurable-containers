@@ -3,16 +3,20 @@
 The copy itself lives in `amo/`, and is **pushed to AMO by the upload**, not pasted into
 the Developer Hub:
 
-| File | AMO field | Channel |
-|---|---|---|
-| `amo/summary.txt` | Summary | listed |
-| `amo/description.md` | Description (markdown) | listed |
-| `amo/reviewer-notes.txt` | "anything our reviewers should bear in mind" | both |
+| File | AMO field |
+|---|---|
+| `amo/summary.txt` | Summary |
+| `amo/description.md` | Description (markdown) |
+| `amo/reviewer-notes.txt` | "anything our reviewers should bear in mind" |
 
 `scripts/amo-metadata.ts` turns them into the JSON `web-ext sign --amo-metadata` merges
 into the submit body; `npm run submit` (listed) and `npm run sign:dev` (unlisted) each
 write their own. **Editing the listing in the Developer Hub is undone by the next
 release** — edit `amo/` instead.
+
+Both channels get all three. The dev add-on is unlisted and displays none of the copy
+publicly, and that is why it is sent there: every push to main writes it somewhere only
+you can read, which is the one rehearsal before a listed release makes it public.
 
 Three placeholders are substituted in the reviewer notes, and an unknown one throws
 rather than shipping the braces:

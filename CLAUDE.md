@@ -648,9 +648,12 @@ reasonable-looking change wrong**.
   by the next release.** The copy is `amo/{summary.txt,description.md,reviewer-notes.txt}`;
   `scripts/amo-metadata.ts` fills its `{{version}}`/`{{timestamp}}`/`{{package_args}}`
   placeholders and both upload paths pass the result to `web-ext sign --amo-metadata`.
-  Three things a change here gets wrong. The **unlisted channel gets `approval_notes` and
-  nothing else** — an unlisted add-on has no listing page, and a field AMO rejects there
-  fails `sign:dev` on **every push to main**, not on a release someone is watching.
+  Three things a change here gets wrong. **Both channels get the same copy, and the dev
+  one is not decoration** — an unlisted add-on displays none of it, so the dev add-on's
+  Developer Hub page is the only place the copy can be read BEFORE a listed release makes
+  it public, and every push to main refreshes it. The cost is that a field AMO rejects
+  fails `sign:dev` on **every push to main**, not on a release someone is watching, which
+  is why the validation is in `buildAmoMetadata` rather than left to the API.
   **`name`, `categories` and `license` are never sent**: they are mandatory at add-on
   *creation* rather than per version, so a wrong value is a rejected upload rather than a
   bad paragraph. And an **unknown `{{…}}` throws** rather than shipping the braces — the

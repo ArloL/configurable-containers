@@ -35,13 +35,14 @@ describe("buildAmoMetadata", () => {
     expect(meta.description).toEqual({ "en-US": COPY.description });
   });
 
-  it("sends no listing copy on the unlisted channel", () => {
-    // An unlisted add-on has no listing page. Anything sent here is either ignored or
-    // rejected, and a rejection fails sign:dev on every push to main.
+  it("publishes the same copy on the dev add-on, where it can be read before it is public", () => {
+    // The dev add-on has no public page, so this is cosmetic there — and that is the
+    // point: every push to main rehearses the copy on a surface only the developer sees,
+    // which is the one chance to read it before a listed release makes it public.
     const meta = buildAmoMetadata({ version: "1", timestamp: "T", channel: "unlisted", ...COPY });
 
-    expect(meta.summary).toBeUndefined();
-    expect(meta.description).toBeUndefined();
+    expect(meta.summary).toEqual({ "en-US": COPY.summary });
+    expect(meta.description).toEqual({ "en-US": COPY.description });
   });
 
   it("refuses a placeholder it does not know rather than shipping the braces", () => {
@@ -53,8 +54,10 @@ describe("buildAmoMetadata", () => {
   });
 
   it("refuses a summary over AMO's cap instead of having the upload rejected", () => {
+    // On either channel: the dev upload runs on every push to main, so the cap has to be
+    // caught there too rather than by AMO on a release day.
     expect(() =>
-      buildAmoMetadata({ ...COPY, version: "1", timestamp: "T", channel: "listed", summary: "x".repeat(SUMMARY_LIMIT + 1) }),
+      buildAmoMetadata({ ...COPY, version: "1", timestamp: "T", channel: "unlisted", summary: "x".repeat(SUMMARY_LIMIT + 1) }),
     ).toThrow(/251/);
   });
 
