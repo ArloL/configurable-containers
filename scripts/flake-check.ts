@@ -25,6 +25,21 @@ export interface CaseOutcome {
   durationMs: number;
 }
 
+/** One run of the tier: what it said about each case, and whether it succeeded AT ALL. */
+export interface Run {
+  cases: CaseOutcome[];
+  /**
+   * The report's own `success`. Kept because the case level cannot answer it: a `beforeAll`
+   * that throws records every case it owns as **"skipped"** — measured, and byte-identical
+   * to a deliberate `it.skip`. So a launch that dies in every run gives every case the same
+   * status in every run, which is agreement, which used to be reported as
+   * "All cases answered the same way 3 times." `launch()` is a beforeAll in every e2e file,
+   * and no Firefox, no geckodriver, no harness server and no `mac/` checkout all arrive
+   * that way — the whole tier not running, reported as the tier being solid.
+   */
+  success: boolean;
+}
+
 /** One case's story across the runs, in run order. `null` where the run never reached it. */
 export interface CaseHistory {
   name: string;
@@ -38,12 +53,23 @@ export interface Verdict {
   failing: string[];
   /** Slowest cases by their longest observed run, for reading rather than for gating. */
   slowest: { name: string; worstMs: number }[];
+  /**
+   * Per run, whether vitest called it a success — COMPARED, never merely checked. Checking
+   * would be wrong: a genuinely flaky case makes exactly one run exit non-zero, and that
+   * run is the thing to report as a race rather than as red.
+   */
+  runSucceeded: boolean[];
+  /** Indices of runs that reported no cases at all. A green verdict over nothing is not one. */
+  emptyRuns: number[];
 }
 
-/** The `assertionResults` of a vitest `--reporter=json` file, flattened across its suites. */
-export function readRun(report: unknown): CaseOutcome[] {
+/** A vitest `--reporter=json` file: its `success`, and its `assertionResults` flattened. */
+export function readRun(report: unknown): Run {
   const files = (report as { testResults?: unknown[] }).testResults ?? [];
-  return files.flatMap((file) => {
+  // Absent `success` reads as FAILURE. A report that does not say it succeeded is not
+  // evidence that it did, and this gate exists to stop exactly that inference.
+  const success = (report as { success?: boolean }).success === true;
+  const cases = files.flatMap((file) => {
     const cases = (file as { assertionResults?: unknown[] }).assertionResults ?? [];
     return cases.map((c) => {
       const a = c as { fullName?: string; title?: string; status?: string; duration?: number };
@@ -54,10 +80,12 @@ export function readRun(report: unknown): CaseOutcome[] {
       };
     });
   });
+  return { cases, success };
 }
 
-export function compareRuns(runs: CaseOutcome[][]): Verdict {
-  const names = [...new Set(runs.flat().map((c) => c.name))].sort();
+export function compareRuns(runs: Run[]): Verdict {
+  const cases = runs.map((run) => run.cases);
+  const names = [...new Set(cases.flat().map((c) => c.name))].sort();
   const flaky: CaseHistory[] = [];
   const failing: string[] = [];
   const slowest: { name: string; worstMs: number }[] = [];
@@ -66,18 +94,34 @@ export function compareRuns(runs: CaseOutcome[][]): Verdict {
     // null, not "missing": a run that never reached a case is a disagreement of its own —
     // a file that crashed on load answers for none of its cases, and reading that as
     // "unchanged" is how a suite that stopped running half of itself stays green.
-    const statuses = runs.map((run) => run.find((c) => c.name === name)?.status ?? null);
+    const statuses = cases.map((run) => run.find((c) => c.name === name)?.status ?? null);
     const seen = [...new Set(statuses)];
     // A case skipped in every run is a deliberate `it.skip`, which `suite.test.ts` owns.
     if (seen.length > 1) flaky.push({ name, statuses });
     else if (seen[0] === "failed") failing.push(name);
 
-    const worstMs = Math.max(...runs.flatMap((run) => run.filter((c) => c.name === name).map((c) => c.durationMs)), 0);
+    const worstMs = Math.max(...cases.flatMap((run) => run.filter((c) => c.name === name).map((c) => c.durationMs)), 0);
     slowest.push({ name, worstMs });
   }
 
   slowest.sort((a, b) => b.worstMs - a.worstMs);
-  return { flaky, failing, slowest: slowest.slice(0, 10) };
+  return {
+    flaky,
+    failing,
+    slowest: slowest.slice(0, 10),
+    runSucceeded: runs.map((run) => run.success),
+    emptyRuns: runs.flatMap((run, i) => (run.cases.length === 0 ? [i] : [])),
+  };
+}
+
+/** Did anything at all go wrong? What `main` exits on, and what a caller should ask. */
+export function isRed(verdict: Verdict): boolean {
+  return (
+    verdict.flaky.length > 0 ||
+    verdict.failing.length > 0 ||
+    verdict.emptyRuns.length > 0 ||
+    verdict.runSucceeded.some((ok) => !ok)
+  );
 }
 
 export function report(verdict: Verdict, runs: number): string {
@@ -95,6 +139,33 @@ export function report(verdict: Verdict, runs: number): string {
     lines.push("A disagreement is a race in the case, not noise to be retried away.");
     lines.push("See TESTING.md's e2e section for the ones this harness has already had.");
   }
+  for (const i of verdict.emptyRuns) {
+    lines.push("");
+    lines.push(`Run ${i + 1} of ${runs} reported NO CASES AT ALL.`);
+    lines.push("Agreement over nothing is not agreement. Look at that run's own output:");
+    lines.push("nothing here can tell you why a suite did not collect.");
+  }
+
+  const broken = verdict.runSucceeded.flatMap((ok, i) => (ok ? [] : [i]));
+  if (broken.length === runs && verdict.flaky.length === 0 && verdict.failing.length === 0) {
+    lines.push("");
+    lines.push(`All ${runs} runs failed as a whole, and NO CASE says why.`);
+    // The shape this exists for, spelled out because it is the one that used to read green.
+    lines.push("That is what a dead `beforeAll` looks like: it records the cases it owns as");
+    lines.push('"skipped", which is what a deliberate it.skip looks like too — so every run');
+    lines.push("agrees, case by case, while none of them ran. `launch()` is a beforeAll in");
+    lines.push("every e2e file: no Firefox, no geckodriver, no harness server, no mac/");
+    lines.push("checkout. Read the first run's output, not this summary.");
+  } else if (broken.length > 0 && verdict.flaky.length === 0) {
+    lines.push("");
+    lines.push(
+      `${broken.length} of ${runs} runs failed as a whole while every case agreed: ` +
+        `run(s) ${broken.map((i) => i + 1).join(", ")}.`,
+    );
+    lines.push("A hook or a teardown that dies SOMETIMES — a race no per-case comparison");
+    lines.push("can see, because the cases it takes down are recorded as skipped.");
+  }
+
   if (verdict.failing.length > 0) {
     lines.push("");
     lines.push(`${verdict.failing.length} case(s) failed in every run — red, not flaky:`);
@@ -116,22 +187,26 @@ function main(): void {
   const runs = Number(process.env.FLAKE_RUNS ?? DEFAULT_RUNS);
   const dir = mkdtempSync(path.join(tmpdir(), "cc-flake-"));
   try {
-    const outcomes: CaseOutcome[][] = [];
+    const outcomes: Run[] = [];
     for (let i = 0; i < runs; i++) {
       const outFile = path.join(dir, `run-${i}.json`);
       console.log(`\n=== flake run ${i + 1}/${runs}: ${target} ===`);
-      spawnSync(
+      const proc = spawnSync(
         "npx",
         ["vitest", "run", target, "--reporter=json", `--outputFile=${outFile}`, "--reporter=default"],
         { stdio: "inherit" },
       );
-      outcomes.push(readRun(JSON.parse(readFileSync(outFile, "utf8"))));
+      const run = readRun(JSON.parse(readFileSync(outFile, "utf8")));
+      // Belt and braces: the report says whether the SUITE succeeded, the exit code says
+      // whether the PROCESS did, and a crash after the report was written is only visible
+      // in the second. Neither is allowed to vouch for the other.
+      outcomes.push({ ...run, success: run.success && proc.status === 0 });
     }
 
     const verdict = compareRuns(outcomes);
     console.log("\n" + report(verdict, runs));
-    if (verdict.flaky.length > 0 || verdict.failing.length > 0) process.exitCode = 1;
-    else console.log(`\nAll cases answered the same way ${runs} times.`);
+    if (isRed(verdict)) process.exitCode = 1;
+    else console.log(`\nAll ${runs} runs succeeded, and every case answered the same way.`);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

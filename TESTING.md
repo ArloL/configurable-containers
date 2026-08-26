@@ -373,9 +373,23 @@ mutant no other case catches.
   for none of its cases, and reading that absence as "unchanged" is how a suite that
   stopped running half of itself stays quiet.
 
+  It also fails on a run that failed **as a whole** with no case to show for it, which is
+  a hole it had until the night it was measured. A `beforeAll` that throws records every
+  case it owns as `"skipped"` and leaves `numFailedTests` at 0 — byte-identical, at the
+  case level, to a deliberate `it.skip`. So a launch that died in every run had every case
+  agreeing in every run, and the job printed *"All cases answered the same way 3 times."*
+  `launch()` is a `beforeAll` in every e2e file, and no Firefox, no geckodriver, no
+  harness server and no `mac/` checkout all arrive that way: the whole tier not running,
+  reported as the tier being solid. A run therefore carries the report's own `success`
+  (and the process's exit code), **compared rather than merely checked** — checking would
+  be wrong, since a genuinely flaky case makes exactly one run exit non-zero and that run
+  is the thing to report as a race. A run that collected no cases at all is red for the
+  same reason: agreement over nothing is not agreement.
+
   The comparison has tests of its own (`test/harness/flake-check.test.ts`) for the reason
   the reaper does: it runs where nobody is watching, and a comparison that always answered
-  "consistent" would look exactly like a healthy suite.
+  "consistent" would look exactly like a healthy suite. That is not hypothetical here —
+  it did, for every shape above.
 - **Fitness functions** — `test/fitness/`, in `npm test`, milliseconds. Every gate above
   asks whether the code is *right*; these ask whether the properties that make those gates
   **mean** anything are still true. Each exists because the property it pins is stated in
