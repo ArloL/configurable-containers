@@ -160,7 +160,12 @@ export function createEngine(opts: EngineOptions): Engine {
   //     (load aborted, user typed elsewhere) would let the guard absorb the next navigation,
   //     leaving that site unrouted inside the container we reopened INTO.
   //   matched by site, not exact url — Firefox rewrites the url first on an HSTS upgrade.
-  const reopenedNav = new Map<number, { awaiting: string } | { requestId: string }>();
+  //     The site is kept once the requestId is known and checked on every hop: a redirect
+  //     chain crossing to ANOTHER site is still one navigation, and absorbing it left the
+  //     new site unrouted in the container we opened for the old one. That is every SSO
+  //     return hop — sonarcloud.io -> github.com/login/oauth -> back — landing the callback
+  //     in the identity provider's container, where the session it needs does not exist.
+  const reopenedNav = new Map<number, { awaiting: string; requestId?: string }>();
 
   // Tabs whose pending top-level navigation is a `view-source:` load.
   //
@@ -258,18 +263,20 @@ export function createEngine(opts: EngineOptions): Engine {
     if (handled.has(key)) return { cancel: true };
 
     // F1: the navigation we reopened this tab to perform, from its first request through
-    // every redirect hop of it.
+    // every redirect hop of it that stays on the site it was reopened for.
     const ours = reopenedNav.get(d.tabId);
     if (ours) {
-      if ("requestId" in ours) {
-        if (ours.requestId === d.requestId) return;
-        reopenedNav.delete(d.tabId); // a later navigation: route it normally
-      } else if (deps.sameSite(ours.awaiting, d.url)) {
-        reopenedNav.set(d.tabId, { requestId: d.requestId });
-        return;
-      } else {
-        reopenedNav.delete(d.tabId); // the awaited navigation never came
+      if (deps.sameSite(ours.awaiting, d.url)) {
+        // Its own first request: adopt the requestId, so the hops of THIS navigation are
+        // told apart from a later one to the same site.
+        if (ours.requestId === undefined) {
+          reopenedNav.set(d.tabId, { awaiting: ours.awaiting, requestId: d.requestId });
+          return;
+        }
+        if (ours.requestId === d.requestId) return; // a redirect hop, still on our site
       }
+      // A hop off our site, or a later navigation, or the awaited one never came: route it.
+      reopenedNav.delete(d.tabId);
     }
 
     const tab = await port.getTab(d.tabId);

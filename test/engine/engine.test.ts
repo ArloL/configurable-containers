@@ -223,6 +223,34 @@ describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
     expect(browser.openedTabs).toHaveLength(1);
   });
 
+  it("routes a redirect hop that leaves the site the tab was reopened for — the SSO callback home", async () => {
+    const browser = aFakeBrowser();
+    const sonar = browser.addContainerNamed({ name: "SonarCloud" });
+    browser.addContainerNamed({ name: "GitHub" });
+    const config = parseConfig("rules:\n  - match: github.com\n    open: GitHub\n  - match: sonarcloud.io\n    open: SonarCloud\n");
+    const tab = browser.existingTab({ url: "https://sonarcloud.io/projects", cookieStoreId: sonar.cookieStoreId });
+    createEngine({ port: browser.port, config, deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
+
+    // "Log in with GitHub": reopened into GitHub, where the user's github session lives.
+    await browser.navigates(aNavigationTo({ requestId: "10", tabId: tab.id, url: "https://github.com/login/oauth/authorize?client_id=x" }));
+    const newTab = [...browser.openTabs.values()].find((t) => t.id !== tab.id)!;
+    newTab.url = "about:blank"; // pre-commit for the whole redirect chain, as in real Firefox
+    await browser.navigates(aNavigationTo({ requestId: "11", tabId: newTab.id, url: "https://github.com/login/oauth/authorize?client_id=x" }));
+
+    // GitHub answers 302 back to SonarCloud: a hop of the SAME navigation, on the same
+    // requestId, at a site the GitHub container has no session for.
+    const hop = await browser.navigates(aNavigationTo({ requestId: "11", tabId: newTab.id, url: "https://sonarcloud.io/sessions/callback/github?code=c" }));
+
+    expect(hop).toEqual({ cancel: true });
+    expect(browser.openedTabs).toHaveLength(2);
+    expect(browser.openedTabs[1]).toMatchObject({
+      url: "https://sonarcloud.io/sessions/callback/github?code=c",
+      cookieStoreId: sonar.cookieStoreId,
+    });
+    // The pre-commit GitHub tab had nothing to lose, so it is replaced rather than stranded.
+    expect(browser.closedTabIds).toEqual([newTab.id]);
+  });
+
   it("F1: a link opened in a new tab buys one throwaway even when its navigation is requested twice", async () => {
     const browser = aFakeBrowser();
     const tmp1 = browser.addContainerNamed({ name: "tmp1" });

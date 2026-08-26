@@ -153,8 +153,11 @@ reasonable-looking change wrong**.
   one-shot version walked `tmp1`→`tmp2`→`tmp3` on one click; a marker any request could
   claim went stale and loaded the next navigation **unrouted inside the container we had
   just reopened into** (F11 via F1); and HSTS rewrites the url before `onBeforeRequest`,
-  so exact matching bought a throwaway per upgrade. All three have revert-verified L3
-  tests.
+  so exact matching bought a throwaway per upgrade. The site is checked on **every hop, not
+  just the first**: a chain that leaves the awaited site is still one requestId, so a guard
+  keyed on the requestId alone absorbed the SSO **return** hop and left the callback unrouted
+  in the identity provider's container (sonarcloud.io → github.com/login/oauth → back, logged
+  out). All four have revert-verified L3 tests.
 - **Firefox honours `windowId` on `tabs.create` even for popup windows** (FF153). Omit it
   and a `window.open` share popup is replaced in the last focused *normal* window, then
   closed with its navigation. `Tab.windowId` is required, not optional — an optional field
