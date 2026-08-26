@@ -327,16 +327,19 @@ mutant no other case catches.
 
   A survivor has two honest exits, and every survivor so far took one: write the missing
   L1/L2 case, or — when the change provably cannot alter an answer — mark it
-  `// Stryker disable … : <why>`. There are four such comments, each naming an equivalence
-  a reader can check. Lowering the threshold is not an exit.
+  `// Stryker disable … : <why>`. There are sixteen such comments — four older than the
+  widening, twelve that arrived with the parser, the sync record and the cookies overlay it
+  brought into scope — each naming an equivalence a reader can check. Lowering the threshold
+  is not an exit.
 
   It reads the code as it is, not as it is meant to be, so it also reports **dead
   defences**: the port/userinfo check in `canonicalHost` and the empty-host check in
   `urlHost` cannot fire for any input that reaches them.
 - **Coverage** — `npm run test:coverage` (v8), a floor on the deterministic levels, run on
   every push before the Firefox suite spends its minutes. It answers a weaker and
-  different question: not "is there logic no test would notice changing" over three
-  modules, but "is any of `src/` reached by no deterministic test at all".
+  different question: not "is there logic no test would notice changing" over the five
+  modules the mutation gate owns, but "is any of `src/` reached by no deterministic test at
+  all".
 
   Thresholds sit a point or two under what the suite measures (~98% statements, ~97%
   branches), **except** the five modules the mutation gate owns — `src/resolver`,
@@ -545,8 +548,9 @@ means something stronger: the decision this class turns on is inside the gate's 
 where no change to that code goes unnoticed by L1/L2 — not "a test exists" but "there is
 no test-shaped hole left". F2 is ticked for its pure half (`alreadyThere`); the stateful
 half, and every class whose decision lives in `src/engine`, is out of scope by design. The
-ticks move only when a decision moves into or out of `src/resolver`, `src/matcher`,
-`src/psl`, never as a score creeping — the gate is all-or-nothing.
+ticks move only when a decision moves into or out of the gate's five modules —
+`src/resolver`, `src/matcher`, `src/psl`, `src/config`, `src/overlays` — never as a score
+creeping, since the gate is all-or-nothing.
 
 Every class has a deterministic owner (L1–L3) and, where the browser is the source of
 truth (F1, F2, F7, F9, F10, F11, F12, F13, F14), a real-Firefox confirmation. F9 was the

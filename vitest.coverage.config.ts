@@ -1,9 +1,9 @@
 // The coverage gate (`npm run test:coverage`, every push in CI).
 //
 // It answers a different question from the mutation gate, and a weaker one: mutation
-// asks whether the pure decision code has logic no test would notice changing, over
-// three modules; this asks whether any of `src/` is reached by no deterministic test at
-// all. Coverage is necessary, the mutation score is the real bar (TESTING.md,
+// asks whether the pure decision code has logic no test would notice changing, over the
+// five modules named below; this asks whether any of `src/` is reached by no deterministic
+// test at all. Coverage is necessary, the mutation score is the real bar (TESTING.md,
 // "Cross-cutting gates") — so the thresholds here are set to what the suite actually
 // reaches, and exist to stop it slipping, not to be aspired to.
 //

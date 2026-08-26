@@ -30,7 +30,7 @@ export default {
   // shared mutable state — every case builds its own config object.
   coverageAnalysis: "perTest",
 
-  // 100 is the bar because the scope is 100-able: three pure modules, no I/O, no clock.
+  // 100 is the bar because the scope is 100-able: five pure modules, no I/O, no clock.
   // A survivor is not a metric wobble, it is a named behaviour nothing asserts — so the
   // nightly run fails and the matrix's Mutation column stops being true until it is
   // either killed by a new test or `// Stryker disable` d with a reason.

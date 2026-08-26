@@ -51,15 +51,15 @@ jobs:
         run: npm run test:realtime
 
   mutation:
-    name: Mutation gate (L1/L2)
+    name: Mutation gate (the pure modules)
     runs-on: ubuntu-latest
-    # Three pure modules, ~190 mutants, no browser: about half a minute of work plus npm.
+    # Five pure modules, ~1070 mutants, no browser: about two minutes of work plus npm.
     timeout-minutes: 20
     permissions:
       contents: read
     steps:
-      # No Firefox and no mac here — the suite Stryker runs is L1/L2 only, on purpose
-      # (vitest.mutation.config.ts says why).
+      # No Firefox and no mac here — the suite Stryker runs is the pure levels only, on
+      # purpose (vitest.mutation.config.ts says why).
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -73,7 +73,7 @@ jobs:
 
       # Fails under 100%. The log names every surviving mutant and the tests that ran
       # against it, which is what the follow-up work needs.
-      - name: Mutate the resolver, the matcher and the same-site check
+      - name: Mutate the resolver, the matcher, the same-site check, the config parser and the overlays
         run: npm run test:mutation
 
       # Stryker writes this on every run and, until now, the runner was torn down with it
@@ -377,9 +377,10 @@ jobs:
           report "Nightly mutation gate is failing" "$(cat <<EOF
         \`npm run test:mutation\` failed: $RUN_URL
 
-        A survivor is a change to the resolver, the matcher or the same-site check that
-        no L1/L2 test notices. The log lists each one with the tests that ran against
-        it. Two ways it goes green again, and the mutant says which is honest:
+        A survivor is a change to one of the five pure modules — the resolver, the matcher,
+        the same-site check, the config parser, the overlays — that no test owning that
+        module notices. The log lists each one with the tests that ran against it. Two ways
+        it goes green again, and the mutant says which is honest:
 
         - **a behaviour nothing asserts** — write the case at L1/L2. That is the whole
           point of the gate; a case at L3 would leave the level that owns the logic

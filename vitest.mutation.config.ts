@@ -1,11 +1,12 @@
 // The suite Stryker mutates against (`npm run test:mutation`, nightly).
 //
-// It is L1 + L2 ONLY — the pure levels: resolver, matcher and the same-site check the
-// resolver's continuity rule leans on. That narrowing is the point of the gate, not a
-// speed compromise: a mutant in `resolve()` that only an L3 engine case notices is a
-// hole in the level that is supposed to own that logic (TESTING.md, "Almost all subtle
-// logic lives in L1/L2"). Widening this include list would let the slow levels paper
-// over exactly the gap the Mutation column is there to report.
+// It is the PURE levels only — the resolver, the matcher, the same-site check the
+// resolver's continuity rule leans on and, since the 2026-08-24 widening, the config
+// parser and the overlays. That narrowing is the point of the gate, not a speed
+// compromise: a mutant in `resolve()` that only an L3 engine case notices is a hole in
+// the level that is supposed to own that logic (TESTING.md, "Almost all subtle logic
+// lives in L1/L2"). Widening this include list would let the slow levels paper over
+// exactly the gap the Mutation column is there to report.
 import { defineConfig } from "vitest/config";
 import { ccDefines } from "./vitest.shared.ts";
 
