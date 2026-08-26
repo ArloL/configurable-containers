@@ -21,9 +21,13 @@ function locatorOn(script: FakeScript) {
 const saying = (text: (n: number) => string) =>
   locatorOn({ elements: (n) => [anElement({ getText: async () => text(n) })] });
 
+// The same, for the matchers that read a VALUE rather than text.
+const valueSaying = (value: (n: number) => string) =>
+  locatorOn({ elements: (n) => [anElement({ getProperty: async () => value(n) })] });
+
 describe("retrying matchers", () => {
   it("waits for the text to arrive", async () => {
-    await expect(saying((n) => (n < 3 ? "Saving…" : "Saved"))).toHaveText("Saved", { timeout: 500 });
+    await expect(saying((n) => (n < 3 ? "Saving…" : "Saved"))).toHaveText("Saved", { timeout: 5_000 });
   });
 
   // Exact, as Playwright's toHaveText is — this suite has a "Saved — a script could not be
@@ -64,7 +68,7 @@ describe("retrying matchers", () => {
         return [anElement({ getDomAttribute: async () => (polls < 3 ? "false" : "true") })];
       },
     });
-    await expect(locator).toHaveAttribute("data-cc-armed", "true", { timeout: 500 });
+    await expect(locator).toHaveAttribute("data-cc-armed", "true", { timeout: 5_000 });
   });
 
   it("waits for a value, a count, visibility and enabledness", async () => {
@@ -76,6 +80,41 @@ describe("retrying matchers", () => {
     });
     await expect(locatorOn({ elements: () => [anElement()] })).toBeVisible({ timeout: 0 });
     await expect(locatorOn({ elements: () => [anElement()] })).toBeEnabled({ timeout: 0 });
+  });
+
+  // `.not` decides what is being waited FOR, not just how the verdict is read. Vitest
+  // inverts `pass` and nothing else, so a matcher that always polled until its condition
+  // held meant the opposite of itself under negation. Both halves are measured below,
+  // because both were real: test/e2e/options.test.ts guarded the editor's async fill with
+  // `not.toHaveValue("")` and got a hard failure on the very race it was waiting out, and
+  // paid the full timeout on every run where it did not fire.
+  it("waits for a negated condition to stop holding, rather than for it to hold", async () => {
+    // Empty for the first two reads — the pre-hydration window — then filled.
+    await expect(valueSaying((n) => (n < 3 ? "" : "rules:\n"))).not.toHaveValue("", {
+      timeout: 5_000,
+    });
+  });
+
+  it("fails a negated assertion whose condition never stops holding, saying what it saw", async () => {
+    await expect(
+      expect(saying(() => "")).not.toHaveText("", { timeout: 0 }),
+    ).rejects.toThrow(/last saw ""/);
+  });
+
+  // It must also RETURN as soon as the condition stops holding. The inverted version passed
+  // this case too — after burning its entire budget, which is 10s a time in the e2e suite.
+  // Counted in READS rather than milliseconds: wall clock in CI is a flake generator, and
+  // one read is the exact claim ("it did not poll again").
+  it("does not go on reading once a negated assertion is satisfied", async () => {
+    let reads = 0;
+    const locator = locatorOn({
+      elements: () => {
+        reads++;
+        return [anElement({ getText: async () => "Saved" })];
+      },
+    });
+    await expect(locator).not.toHaveText("", { timeout: 5_000 });
+    expect(reads).toBe(1);
   });
 
   // "expected Saved, got Saving…" is the whole diagnosis; a matcher that only says it
