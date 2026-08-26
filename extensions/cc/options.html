@@ -17,6 +17,9 @@
     .cc-pause-row { padding: 3px 0; }
     .cc-pause-row button[data-cc-armed="true"] { font-weight: bold; }
     .cc-pause-host { font-family: monospace; }
+    .cc-pause-url { font-family: monospace; color: #444; }
+    .cc-pause-row:has(.cc-pause-url) { padding-left: 24px; }
+    .cc-pause-note { color: #8a6100; margin: 4px 0 4px 24px; }
     .cc-pause-recording { border-left: 3px solid #ccc; padding-left: 10px; margin: 12px 0; }
     .cc-pause-when { color: #555; }
   </style>
@@ -39,6 +42,14 @@
     can add the ones you need to the config above. The toolbar button does the same for
     the container you are currently in. A pause ends when you resume it, or when the
     container's last tab closes.
+  </p>
+  <p>
+    Each host is listed with the URLs seen under it, as ready-made <code>match:</code>
+    patterns — that is what a flow like an OAuth hand-off needs, where only
+    <code>/login/oauth/</code> has to be routed differently from the rest of the site. The
+    method matters too: a <code>POST</code> can only be answered with
+    <code>inherit</code> or <code>ignore</code>, since moving a tab re-issues the request
+    as a <code>GET</code> and would drop the body. Query strings are never recorded.
   </p>
   <div id="cc-pause-containers"></div>
   <h3>Recordings</h3>

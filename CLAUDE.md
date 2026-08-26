@@ -21,6 +21,15 @@ reasonable-looking change wrong**.
   `config/parse` keeps it unreachable by refusing `scripts` on a rule whose match list
   holds a regex (`cookies` are seeded per navigation and need no pattern).
 
+  `patternForUrl` is the same question backwards — the pattern for one observed URL, which
+  the pause record hands the user to paste — and it carries the same "must not widen"
+  duty: `*://` because HSTS rewrites the scheme before webRequest sees it, no port
+  (a pattern's host cannot carry one), a trailing `*` because a path is anchored at both
+  ends and every OAuth entry point has a query, and the query itself **dropped** rather
+  than pasted, since a record written during a checkout must not carry the token. It
+  answers `null` where no pattern exists (an IPv6 literal) rather than a string the config
+  editor would then reject.
+
   Two more things an edit gets wrong. In a **pattern** a bare host is only that host, so
   `https://example.com/*` is not `www.example.com`; `*.` asks for the subtree, and
   widening it widens every path-scoped rule. And a path glob is escaped and anchored at
@@ -73,9 +82,25 @@ reasonable-looking change wrong**.
   continued. `MAX_RECORDED_HOSTS` bounds both — and the hosts past it are **counted into
   `Recording.dropped`**, not dropped in silence: rules are written from that list, and one a
   reader takes for the whole flow while it quietly is not is the same silent wrong answer a
-  half-parsed config would be. `dropped` is optional in the type and lenient in
-  `isRecording` because a recording stored before the cap has no such key, and refusing
-  those on hydrate would throw the user's history away.
+  half-parsed config would be. `dropped` is optional in the type because a recording stored
+  before the cap has no such key, and refusing those on hydrate would throw the user's
+  history away.
+
+  **A row is one per URL as well as one per host** (`RecordedHost.urls`, the pattern
+  `patternForUrl` built), which is what makes a rule for a GitHub OAuth hand-off writable
+  from a record at all — and what makes the second cap
+  (`MAX_RECORDED_URLS_PER_HOST`, counted into the host row's own `dropped`) not optional
+  either: a URL row grows with **browsing**, not with the handful of hops a flow makes.
+  A host whose URLs did not all resolve the same way says `VARIED` rather than picking one,
+  because with path matching `github.com` genuinely has two answers and a row claiming
+  either sends the reader to write the rule that breaks the sign-in.
+
+  Hydration therefore **normalizes rather than validates** (`readRecording`/`readHost`/
+  `readUrl`, which replaced the `isRecording` type guard). A host row written before URL
+  detail has no `urls`, and a build that trusted the stored shape would call `.find` on
+  `undefined` **inside the blocking handler**, where a throw is a navigation that never
+  completes. Filling the missing fields in is what lets `urls` be required in the type
+  instead of checked at every use.
 - **Two arming paths, one `arm()`.** The toolbar button takes its container from the `Tab`
   Firefox passes to `browserAction.onClicked`; the options page names one and the
   background validates it. **WebDriver cannot click a `browser_action`**, so logic living

@@ -1,4 +1,5 @@
-import { targetLabel } from "./engine";
+import { targetLabel, type RecordedNav } from "./engine";
+import { patternForUrl } from "../matcher/matcher";
 import type { Decision } from "../resolver/types";
 import type { ContainerRow, PauseStatusResponse, PauseToggleMessage, PauseToggleResponse } from "../extension/pause-protocol";
 import type { BrowserPort, Clock } from "./port";
@@ -27,10 +28,43 @@ export const MAX_RECORDINGS = 10;
 // what it costs to leave one running.
 export const MAX_RECORDED_HOSTS = 200;
 
+// The same bound one level down, for the URLs recorded under a host. It is much lower
+// because a URL row grows with BROWSING, not with the handful of hops a flow makes: fifty
+// pages read at one site is fifty rows, where the host is still one. Twenty is well above
+// the few paths a payment or SSO chain touches at any one host, and past it the recording
+// stops writing for that host, as it does for the recording as a whole at the cap above.
+export const MAX_RECORDED_URLS_PER_HOST = 20;
+
+// What a host row says when its URLs did not all resolve the same way. Before match
+// patterns a host had exactly one answer; now `github.com` can be `inherit` under
+// `/login/oauth/` and a permanent container everywhere else, and a host row still claiming
+// one of the two is the silent wrong answer the URL rows exist to prevent — it sends the
+// reader to write the one rule that breaks the sign-in.
+export const VARIED = "varies by URL";
+
+export interface RecordedUrl {
+  // The match pattern for this navigation — `*://github.com/login/oauth/authorize*` — and
+  // also the text the row copies. Stored rather than the raw path because it is what gets
+  // pasted into `match:`, and building it here and again in the options page is two things
+  // to keep in step. `patternForUrl` drops the query, so no token is written down.
+  pattern: string;
+  hits: number;
+  // Distinct methods, first-seen order. A top-level navigation is a GET unless a form
+  // posted it, and a POST is the hop no rule can move at all: `tabs.create` issues a GET,
+  // so a `reopen` for a request with a body is declined (F9) however right the rule is.
+  // Reading POST off the row is what says the rule there has to be `inherit`/`ignore`.
+  methods: string[];
+  wouldHave: string; // the declined action AT THIS URL, in the F9 toast's words
+}
+
 export interface RecordedHost {
   host: string;
   hits: number; // main_frame hops that resolved to this host
-  wouldHave: string; // the declined action, in the F9 toast's words
+  wouldHave: string; // the declined action, in the F9 toast's words, or VARIED
+  urls: RecordedUrl[]; // first-seen order, at most MAX_RECORDED_URLS_PER_HOST of them
+  // Distinct URLs seen at this host after its cap was reached — `Recording.dropped` one
+  // level down, and counted for the same reason.
+  dropped: number;
 }
 
 export interface Recording {
@@ -61,8 +95,9 @@ export interface Pause {
   // an await here is latency on every navigation in the browser, armed or not.
   isPaused(cookieStoreId: string): boolean;
   // Returns void and is never awaited: a navigation must not wait on bookkeeping, and a
-  // failed write must not break routing.
-  record(cookieStoreId: string, url: string, decision: Decision): void;
+  // failed write must not break routing. The navigation is passed whole rather than as two
+  // adjacent strings, which is a swap the compiler cannot catch.
+  record(cookieStoreId: string, nav: RecordedNav, decision: Decision): void;
   arm(cookieStoreId: string): Promise<ArmResult>;
   disarm(cookieStoreId: string): Promise<ArmResult>;
   hydrate(): Promise<void>;
@@ -84,21 +119,111 @@ function wouldHaveLabel(decision: Decision): string {
     : "no action";
 }
 
-function isRecording(v: unknown): v is Recording {
-  if (typeof v !== "object" || v === null) return false;
+// A stored recording, read back into the shape this build expects, or null for anything
+// that is not one — the "a corrupt value counts as absent" rule hydrate() applies to the
+// whole state, since a recording that cannot be read must not stop the armed set from being.
+//
+// It NORMALIZES rather than only checking, which the type-guard version it replaced could
+// not: a host row written before URL detail existed has no `urls`, and a build that read it
+// and trusted the type would call `.find` on undefined — inside the blocking handler, where
+// a throw is a navigation that never completes. Filling the missing fields in is the
+// upgrade, and it is why `urls` and `dropped` can be required in the type rather than
+// optional-and-checked at every use. `Recording.dropped` stays optional there for the
+// separate reason below: it is what a pre-cap recording lacks, and it is a plain number.
+function readRecording(v: unknown): Recording | null {
+  if (typeof v !== "object" || v === null) return null;
   // `Partial`, not `Recording`: cast to the whole shape and every check below reads as
   // comparing a `string` to "string", which is to say as dead code — the assertion turns
   // off the checking this function exists to do.
   const r = v as Partial<Recording>;
-  return (
-    typeof r.id === "string" &&
-    typeof r.cookieStoreId === "string" &&
-    typeof r.container === "string" &&
-    typeof r.startedAt === "number" &&
-    (r.endedAt === null || typeof r.endedAt === "number") &&
-    (r.dropped === undefined || typeof r.dropped === "number") &&
-    Array.isArray(r.hosts)
-  );
+  if (
+    typeof r.id !== "string" ||
+    typeof r.cookieStoreId !== "string" ||
+    typeof r.container !== "string" ||
+    typeof r.startedAt !== "number" ||
+    !(r.endedAt === null || typeof r.endedAt === "number") ||
+    !(r.dropped === undefined || typeof r.dropped === "number") ||
+    !Array.isArray(r.hosts)
+  ) {
+    return null;
+  }
+  const out: Recording = {
+    id: r.id,
+    cookieStoreId: r.cookieStoreId,
+    container: r.container,
+    startedAt: r.startedAt,
+    endedAt: r.endedAt,
+    hosts: r.hosts.map(readHost).filter((h): h is RecordedHost => h !== null),
+  };
+  // Spread in conditionally rather than writing `dropped: undefined`: absent and undefined
+  // are different values to `exactOptionalPropertyTypes`, and only one of them round-trips
+  // through JSON as the key a pre-cap recording did not have.
+  return r.dropped === undefined ? out : { ...out, dropped: r.dropped };
+}
+
+function readHost(v: unknown): RecordedHost | null {
+  if (typeof v !== "object" || v === null) return null;
+  const h = v as Partial<RecordedHost>;
+  if (typeof h.host !== "string" || typeof h.hits !== "number" || typeof h.wouldHave !== "string") {
+    return null;
+  }
+  return {
+    host: h.host,
+    hits: h.hits,
+    wouldHave: h.wouldHave,
+    urls: (Array.isArray(h.urls) ? h.urls : []).map(readUrl).filter((u): u is RecordedUrl => u !== null),
+    dropped: typeof h.dropped === "number" ? h.dropped : 0,
+  };
+}
+
+function readUrl(v: unknown): RecordedUrl | null {
+  if (typeof v !== "object" || v === null) return null;
+  const u = v as Partial<RecordedUrl>;
+  if (
+    typeof u.pattern !== "string" ||
+    typeof u.hits !== "number" ||
+    typeof u.wouldHave !== "string" ||
+    !Array.isArray(u.methods)
+  ) {
+    return null;
+  }
+  return {
+    pattern: u.pattern,
+    hits: u.hits,
+    wouldHave: u.wouldHave,
+    methods: u.methods.filter((m): m is string => typeof m === "string"),
+  };
+}
+
+// One hop's URL row, added or updated in place. True when it changed something a reader
+// would notice — a new URL, a method not seen at that URL before, or the cap being reached
+// for the first time — which is what earns a storage write from the blocking path.
+//
+// A URL with no pattern form is skipped rather than stored raw: `patternForUrl` refuses an
+// IPv6 literal, and a row whose text cannot be pasted into `match:` is a Copy button that
+// lies about what it is for. The host row above it still counts the hop.
+function recordUrl(row: RecordedHost, nav: RecordedNav, wouldHave: string): boolean {
+  const pattern = patternForUrl(nav.url);
+  if (pattern === null) return false;
+
+  const seen = row.urls.find((u) => u.pattern === pattern);
+  if (seen) {
+    seen.hits++;
+    // A top-level navigation is a GET unless a form posted it, so this list is two entries
+    // long at worst — and the second is the entry that matters.
+    if (seen.methods.includes(nav.method)) return false;
+    seen.methods.push(nav.method);
+    return true;
+  }
+  if (row.urls.length >= MAX_RECORDED_URLS_PER_HOST) {
+    // Counted, not dropped in silence, exactly as `Recording.dropped` is: a list a reader
+    // takes for everything CC saw at this host, while it quietly is not, is what a
+    // path-scoped rule then gets written against. Worth one write the first time only.
+    row.dropped++;
+    return row.dropped === 1;
+  }
+  row.urls.push({ pattern, hits: 1, methods: [nav.method], wouldHave });
+  return true;
 }
 
 // Suspends routing inside chosen containers and records what routing would have done, so
@@ -254,34 +379,46 @@ export function createPause(opts: { port: BrowserPort; clock: Clock }): Pause {
   return {
     isPaused: (cookieStoreId) => armed.has(cookieStoreId),
 
-    record(cookieStoreId, url, decision) {
+    record(cookieStoreId, nav, decision) {
       const open = running(cookieStoreId);
       if (!open) return;
       let host: string;
       try {
-        host = new URL(url).host;
+        host = new URL(nav.url).host;
       } catch {
         return; // nothing nameable — the engine already filtered to http(s)
       }
+      const wouldHave = wouldHaveLabel(decision);
 
-      const seen = open.hosts.find((h) => h.host === host);
-      if (seen) {
-        seen.hits++;
-        // Deliberately no write: a seven-hop bounce would be seven storage writes from the
-        // blocking path. `disarm` flushes, so a finished recording's counts are accurate; a
-        // background killed mid-flow loses the hops since the last new host.
-        return;
+      // `newFact` decides whether to write, and a hop that only bumps a counter is not one:
+      // a seven-hop bounce would otherwise be seven storage writes from the blocking path.
+      // `disarm` flushes, so a finished recording's counts are accurate; a background killed
+      // mid-flow loses the hops since the last thing that WAS new.
+      let newFact = false;
+      let row = open.hosts.find((h) => h.host === host);
+      if (!row) {
+        if (open.hosts.length >= MAX_RECORDED_HOSTS) {
+          // Counted, not dropped in silence. A list a reader takes for the whole flow and
+          // that quietly is not would be the silent wrong answer this cap exists to avoid —
+          // rules written from it would miss the host that actually broke. Not persisted
+          // here for the reason above; `disarm` flushes it with the hit counts.
+          open.dropped = (open.dropped ?? 0) + 1;
+          return;
+        }
+        row = { host, hits: 0, wouldHave, urls: [], dropped: 0 };
+        open.hosts.push(row);
+        newFact = true;
+      } else if (row.wouldHave !== wouldHave && row.wouldHave !== VARIED) {
+        // Two URLs at this host resolved differently, which is what a path-scoped rule looks
+        // like from the outside. The host row stops claiming either answer; the URL rows
+        // below it carry both.
+        row.wouldHave = VARIED;
+        newFact = true;
       }
-      if (open.hosts.length >= MAX_RECORDED_HOSTS) {
-        // Counted, not dropped in silence. A list a reader takes for the whole flow and
-        // that quietly is not would be the silent wrong answer this cap exists to avoid —
-        // rules written from it would miss the host that actually broke. Not persisted
-        // here for the reason above; `disarm` flushes it with the hit counts.
-        open.dropped = (open.dropped ?? 0) + 1;
-        return;
-      }
-      open.hosts.push({ host, hits: 1, wouldHave: wouldHaveLabel(decision) });
-      void persist().catch((e) => console.warn("[pause] write failed", e));
+      row.hits++;
+      if (recordUrl(row, nav, wouldHave)) newFact = true;
+
+      if (newFact) void persist().catch((e) => console.warn("[pause] write failed", e));
     },
 
     arm,
@@ -306,7 +443,9 @@ export function createPause(opts: { port: BrowserPort; clock: Clock }): Pause {
       if (Array.isArray(state.armed)) {
         for (const id of state.armed) if (typeof id === "string") armed.add(id);
       }
-      if (Array.isArray(state.recordings)) recordings = state.recordings.filter(isRecording);
+      if (Array.isArray(state.recordings)) {
+        recordings = state.recordings.map(readRecording).filter((r): r is Recording => r !== null);
+      }
       await port.setBadge(armed.size === 0 ? "" : String(armed.size));
     },
 

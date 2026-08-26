@@ -82,5 +82,14 @@ describe("pause & record (real Firefox, CC + probe)", () => {
     const recordings = options.locator("#cc-pause-recordings");
     await expect(recordings).toContainText("hop.example", { timeout: 15_000 });
     await expect(recordings).toContainText("temporary");
+
+    // 7. Under the host, the URL as a `match:` value ready to paste — which is what a rule
+    //    for something like an OAuth hand-off has to be written at, and what the host row
+    //    alone cannot say. The port is absent because a match pattern's host cannot carry
+    //    one and CC does not match on it either; the trailing `*` is the query the harness
+    //    cache-buster put on this URL, which the record itself never stores.
+    await expect(recordings).toContainText("*://hop.example/*");
+    await expect(recordings).not.toContainText("pause2-"); // the query, which is never recorded
+    await expect(recordings).toContainText("GET");
   }, 120_000);
 });

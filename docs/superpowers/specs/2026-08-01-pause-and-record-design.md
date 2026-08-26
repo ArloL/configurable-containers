@@ -60,7 +60,8 @@ single user meets is finite.
   permanent record of visited hosts is a liability that buys a partial answer.
 - **Paths, queries, and full URLs in the record.** Hosts only — see §4.2. Revisit when
   the config supports path/regex matching *and* those are in routine use; the record's
-  granularity should follow what a rule is actually written at.
+  granularity should follow what a rule is actually written at. *(Paths arrived
+  2026-08-26; queries did not, and will not.)*
 - **A timer.** The pause has no expiry — see §3.3.
 - **Pausing the default container.** Refused at the arming step, §5.1.
 - **Exemption from MAC.** A paused container is not exempt from Multi-Account
@@ -243,6 +244,12 @@ granularity a rule is written at (`match:` is host-shorthand in the common case)
 trim costs nothing today. Accepted cost, stated so a future reader knows it was chosen:
 a path-based rule cannot be written from a recording. Revisit alongside path/regex
 matching becoming routine.
+
+> **Revisited 2026-08-26** — `2026-08-26-recording-url-detail-design.md`. Match patterns
+> landed, so `match:` is no longer host-shorthand in every case, and the deferral's own
+> condition was met: a row now carries the URLs seen under each host, as pasteable
+> patterns, with the method. The query is still dropped, for the reason above — a
+> pattern's trailing `*` covers it without storing it.
 
 ### 4.3 Persistence and the restart problem
 

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { aFakeBrowser } from "./mock-port";
-import { createEngine, type PauseRecorder } from "../../src/engine/engine";
+import { createEngine, type PauseRecorder, type RecordedNav } from "../../src/engine/engine";
 import { createPicker } from "../../src/engine/picker";
 import { parseConfig } from "../../src/config/parse";
 import { matchRule, matchGroup, hostMatcher } from "../../src/matcher/matcher";
@@ -33,10 +33,10 @@ const noPause: PauseRecorder = { isPaused: () => false, record: () => {} };
 
 // An armed container, plus a log of what the engine handed the recorder.
 function armedFor(cookieStoreId: string) {
-  const recorded: { csid: string; url: string; decision: Decision }[] = [];
+  const recorded: { csid: string; nav: RecordedNav; decision: Decision }[] = [];
   return {
     isPaused: (id: string) => id === cookieStoreId,
-    record: (csid: string, url: string, decision: Decision) => void recorded.push({ csid, url, decision }),
+    record: (csid: string, nav: RecordedNav, decision: Decision) => void recorded.push({ csid, nav, decision }),
     recorded,
   };
 }
@@ -711,7 +711,9 @@ describe("engine — a paused container", () => {
     expect(pause.recorded).toEqual([
       {
         csid: "firefox-container-1",
-        url: "https://example.com/",
+        // The whole navigation, method included: the record is written at a URL now, and a
+        // POST is the hop no rule can move, so both are facts the recorder needs.
+        nav: expect.objectContaining({ url: "https://example.com/", method: "GET" }),
         decision: { kind: "reopen", into: { kind: "permanent", name: "Work" } },
       },
     ]);

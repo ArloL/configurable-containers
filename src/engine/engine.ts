@@ -12,13 +12,18 @@ export interface Engine {
   reopen(tab: Tab, url: string, target: Target): Promise<void>;
 }
 
+// What the recorder is told about one navigation. A `WebRequestDetails` satisfies it, so
+// the engine hands `d` over as it stands. Passing the two strings positionally instead is a
+// swap the compiler cannot catch, and it would put the method where the URL is read.
+export type RecordedNav = Pick<WebRequestDetails, "url" | "method">;
+
 // The pause seam, synchronous by contract: `isPaused` runs inside the blocking webRequest
 // handler, where an await would cost every navigation latency, and `record` returns void so
 // a navigation never waits on bookkeeping. Required, not optional: a mock forgets to set an
 // optional field and coverage stops silently.
 export interface PauseRecorder {
   isPaused(cookieStoreId: string): boolean;
-  record(cookieStoreId: string, url: string, decision: Decision): void;
+  record(cookieStoreId: string, nav: RecordedNav, decision: Decision): void;
 }
 
 export interface EngineOptions {
@@ -337,7 +342,7 @@ export function createEngine(opts: EngineOptions): Engine {
     //
     // Adds nothing to `handled` and never cancels: no state a later navigation inherits.
     if (pause.isPaused(tab.cookieStoreId)) {
-      pause.record(tab.cookieStoreId, d.url, decision);
+      pause.record(tab.cookieStoreId, d, decision);
       return;
     }
 

@@ -112,6 +112,11 @@ const RETAINED: Retained[] = [
     bound: "MAX_RECORDED_HOSTS per recording, applied by record(); hosts past it are counted in `dropped` instead",
   },
   {
+    where: "src/engine/pause.ts",
+    name: "urls",
+    bound: "MAX_RECORDED_URLS_PER_HOST per host, applied by recordUrl(); URLs past it are counted in the host row's `dropped` instead",
+  },
+  {
     where: "src/engine/script-injector.ts",
     name: "live",
     bound: "one handle per registered snippet; replaced wholesale by each apply()",

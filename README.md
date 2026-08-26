@@ -51,6 +51,13 @@ and it records each site it saw with the action it would have taken. Afterwards 
 recording sits beside the config editor, so you can read off the hosts that mattered and
 write the rules yourself. CC never proposes one.
 
+Each host is listed with the URLs seen under it, written as ready-made `match:` patterns —
+`*://github.com/login/oauth/authorize*` — because a flow often needs only part of a site
+routed differently from the rest. The method is shown too: a `POST` can only be answered
+with `inherit` or `ignore`, since moving a tab re-issues the request as a `GET` and would
+drop the body. Query strings are never recorded; the trailing `*` is what lets a rule
+written from a recorded path still match the URL that carried one.
+
 A pause ends when you resume it, or when the container's last tab closes. The toolbar
 badge shows how many containers are paused.
 
