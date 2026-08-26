@@ -106,7 +106,12 @@ describe("auto-temp — onCreated path", () => {
     expect(browser.createdContainers).toHaveLength(0);
   });
 
-  it("guard: creating flag prevents recursive re-containerization of replacement tab", async () => {
+  // The replacement tab is created by `supersede` and lands on the browser's new-tab page —
+  // a candidate url — and the mock fires onTabCreated for it as Firefox does. What stops it
+  // going round again is `isAutoTempCandidate`'s cookieStoreId check: the replacement is in
+  // the tmp container just minted, not in firefox-default. Named after that check, because
+  // this used to be attributed to a `creating` flag that had nothing to do with it.
+  it("does not containerize the replacement tab, which is already in the new container", async () => {
     const { browser } = setup();
     createAutoTemp({ port: browser.port });
 
@@ -115,6 +120,28 @@ describe("auto-temp — onCreated path", () => {
     expect(browser.createdContainers).toHaveLength(1);
     expect(browser.openedTabs).toHaveLength(1);
     expect(browser.closedTabIds).toHaveLength(1);
+  });
+
+  // Two Ctrl+T in the same turn. The second tab's onCreated is delivered while the first
+  // containerize is still parked on `createIdentity`, which is the window a module-level
+  // "one containerize at a time" flag closed by dropping the second tab entirely — neither
+  // containerized nor recorded in `processed`, so nothing would retry it. The invariant here
+  // is per tab, and `processed` is what carries it.
+  //
+  // Deliberately not awaited in between: `opensTab` settles the turn, and that turn is the
+  // whole subject of this case.
+  it("containerizes a second new tab that arrives while the first is minting its container", async () => {
+    const { browser } = setup();
+    createAutoTemp({ port: browser.port });
+
+    const first = browser.opensTab({ url: "about:newtab", cookieStoreId: "firefox-default" });
+    const second = browser.opensTab({ url: "about:newtab", cookieStoreId: "firefox-default" });
+    await first;
+    await second;
+
+    expect(browser.createdContainers).toHaveLength(2);
+    expect(browser.createdContainers[0]!.name).not.toBe(browser.createdContainers[1]!.name);
+    expect(browser.closedTabIds).toHaveLength(2);
   });
 
   it("preserves openerTabId across the reopen", async () => {
@@ -150,15 +177,25 @@ describe("auto-temp — onCreated path", () => {
     expect(browser.createdContainers[1]!.name).toBe("tmps2");
   });
 
-  it("handles createIdentity failure gracefully and resets creating flag", async () => {
+  // A containerize that throws mid-way — here `createTab`, after the identity was minted —
+  // is caught, and the next candidate is containerized as if nothing had happened. The
+  // orphan tmp container it leaves behind is the known cost; the disposer reclaims it.
+  //
+  // This case used to open two tabs with nothing failing and call that "handles
+  // createIdentity failure gracefully and resets creating flag", which is neither.
+  it("a failed containerize does not stop the next tab being containerized", async () => {
     const { browser } = setup();
     createAutoTemp({ port: browser.port });
 
+    browser.tabCreationFails(true);
     await browser.opensTab({ url: "about:newtab", cookieStoreId: "firefox-default" });
-    expect(browser.createdContainers).toHaveLength(1);
+    expect(browser.createdContainers).toHaveLength(1); // minted, then orphaned
+    expect(browser.closedTabIds).toHaveLength(0); // the source tab was never superseded
 
+    browser.tabCreationFails(false);
     await browser.opensTab({ url: "about:newtab", cookieStoreId: "firefox-default" });
     expect(browser.createdContainers).toHaveLength(2);
+    expect(browser.closedTabIds).toHaveLength(1);
   });
 });
 
@@ -197,7 +234,7 @@ describe("auto-temp — onTabUpdated fallback path", () => {
     expect(browser.openedTabs).toHaveLength(1);
   });
 
-  it("skips processed tabs even when creating flag is false", async () => {
+  it("skips a tab already processed, whatever url it reports next", async () => {
     const { browser } = setup();
     createAutoTemp({ port: browser.port });
 

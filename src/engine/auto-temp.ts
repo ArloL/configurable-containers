@@ -34,7 +34,6 @@ export function createAutoTemp(opts: AutoTempOptions): void {
   const { port } = opts;
   const suffix = opts.tmpSuffix ?? defaultSuffix();
   const processed = new Set<number>();
-  let creating = false;
 
   async function containerize(tab: Tab): Promise<void> {
     const ci = await port.createIdentity({
@@ -70,20 +69,28 @@ export function createAutoTemp(opts: AutoTempOptions): void {
     }
   })();
 
+  // `processed` is the WHOLE guard, and it is per tab because that is what the invariant is:
+  // containerize each candidate tab once. There used to be a module-wide `creating` boolean
+  // in front of it, checked before `processed.add`, and it was a mutex over an invariant that
+  // is not global — a second about:newtab arriving while the first was parked on
+  // `createIdentity` was dropped entirely, neither containerized nor recorded, so nothing
+  // retried it. Two Ctrl+T in quick succession is the shape.
+  //
+  // What it looked like it was preventing — the replacement tab being containerized again —
+  // is not reachable: `supersede` creates that tab in the tmp container just minted, and
+  // `isAutoTempCandidate` rejects any tab whose cookieStoreId is not firefox-default. The
+  // double-event case (bug 1586612, onCreated then onUpdated for one tab) is `processed`'s.
+  // Do not reintroduce it per tab either: a per-tab flag is `processed` again.
   function maybeAutoTemp(tab: Tab): void {
-    if (creating) return;
     if (processed.has(tab.id)) return;
     if (!isAutoTempCandidate(tab)) return;
 
     processed.add(tab.id);
-    creating = true;
     void (async () => {
       try {
         await containerize(tab);
       } catch (e) {
         console.warn("[auto-temp] failed", e);
-      } finally {
-        creating = false;
       }
     })();
   }

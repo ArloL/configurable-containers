@@ -92,34 +92,6 @@ The entries below came out of one sweep of the cold base on 2026-08-26, against
 `test:coverage` 866 passed, typecheck, lint and `audit` clean). None of them is a red
 test — that is the point of writing them down.
 
-## `auto-temp`'s `creating` flag is held true by nothing (2026-08-26)
-
-`src/engine/auto-temp.ts` guards `maybeAutoTemp` with a module-level `let creating`, and
-it is the one thing in that file with no comment saying why. **Measured: delete the flag
-outright and all sixteen cases in `test/engine/auto-temp.test.ts` still pass, as does the
-whole deterministic suite (866 cases).** Two of those sixteen name it — *"guard: creating
-flag prevents recursive re-containerization of replacement tab"* and *"handles
-createIdentity failure gracefully and resets creating flag"* — so they are the false
-greens TESTING.md's revert-verify rule exists to prevent, and they are the reason nobody
-has had to answer the question below.
-
-Recursion is not what the flag prevents, because nothing recurses: `supersede` creates the
-replacement tab in the tmp container it just minted, and `isAutoTempCandidate` rejects any
-tab whose `cookieStoreId` is not `firefox-default`. `processed` handles the double-event
-case (bug 1586612) on its own; that is what the dedupe test actually exercises.
-
-What the flag *does* do is drop work. It is one boolean for the whole background, checked
-**before** `processed.add`, so a second `about:newtab` arriving while the first is mid-
-`createIdentity` is neither containerized nor recorded — it goes uncontainerized unless
-one of its two events happens to fire again after the await settles. Two Ctrl+T in quick
-succession is the shape. It is a mutex where the invariant is per tab, which `processed`
-already is.
-
-So: either it guards something real, in which case the case that proves it has to be
-written and the two above have to stop claiming to be it; or it does not, and it goes with
-them. Do not "fix" it by making it per-tab without deciding which — a per-tab flag is
-`processed` again.
-
 ## The retained-state inventory cannot see an array (2026-08-26)
 
 `test/fitness/retained-state.test.ts` scans `src/` for `new Set` / `new Map` and requires
