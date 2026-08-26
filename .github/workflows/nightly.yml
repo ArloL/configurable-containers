@@ -349,7 +349,9 @@ jobs:
           report "Nightly e2e determinism is failing" "$(cat <<EOF
         \`npm run test:flake\` failed: $RUN_URL
 
-        The browser tier was run three times and did not give the same answer every time.
+        The browser tier was run ten times on this runner and did not give the same answer
+        every time. The other sample leg ran ten more on a different box; read its result
+        beside this one, because whether it saw the same disagreement is half the diagnosis.
         The log names each case with its run-by-run story. Two shapes, and the story says
         which:
 
