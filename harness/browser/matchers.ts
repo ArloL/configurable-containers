@@ -12,10 +12,28 @@ interface Verdict {
   message: () => string;
 }
 
-// One shape for every matcher: poll the reading until the comparison holds, and report the
-// LAST reading when it never does — "expected Saved, last saw Saving…" is the whole
-// diagnosis, and a matcher that only says it timed out has thrown it away.
+// What vitest hands a matcher as `this`. Only `isNot` matters here, and it is the whole
+// reason this file cannot use arrow functions for its matchers.
+interface MatcherContext {
+  isNot?: boolean;
+}
+
+// One shape for every matcher: poll the reading until the comparison settles the way the
+// CALLER asked, and report the LAST reading when it never does — "expected Saved, last saw
+// Saving…" is the whole diagnosis, and a matcher that only says it timed out has thrown it
+// away.
+//
+// `isNot` is not a detail of the verdict: it decides what is being waited FOR. Vitest
+// inverts a matcher's `pass` for `.not` and nothing else, so a matcher that always polls
+// until `holds` is true means the opposite of itself under negation — `.not.toHaveValue("")`
+// polls until the field IS empty, then reports that as a failure. Measured: against a field
+// that fills on the third read it threw on the first (`toHaveValue #cc-config held`), which
+// is exactly the pre-hydration race the assertion was written to wait out; and against one
+// already full it burned the entire timeout before passing (10s per `openEditor`, five times
+// over in test/e2e/options.test.ts). So the negated form polls until `holds` STOPS holding,
+// and `pass` is reported in positive terms for vitest to flip.
 async function settle<T>(
+  ctx: MatcherContext,
   locator: Locator,
   name: string,
   opts: WaitOpts | undefined,
@@ -23,6 +41,7 @@ async function settle<T>(
   holds: (seen: T) => boolean,
   describe: (seen: T) => string,
 ): Promise<Verdict> {
+  const wanted = ctx.isNot !== true;
   let last: T | undefined;
   try {
     await poll(
@@ -33,13 +52,20 @@ async function settle<T>(
       },
       async () => {
         last = await read();
-        return holds(last) ? undefined : RETRY;
+        return holds(last) === wanted ? undefined : RETRY;
       },
     );
-    return { pass: true, message: () => `${name} ${locator.selector} held` };
   } catch {
-    return { pass: false, message: () => `${name} ${locator.selector}: ${describe(last as T)}` };
+    // Never settled: the last reading is the diagnosis either way.
   }
+  const held = last !== undefined && holds(last);
+  return {
+    pass: held,
+    message: () =>
+      held
+        ? `${name} ${locator.selector} held: ${describe(last as T)}`
+        : `${name} ${locator.selector}: ${describe(last as T)}`,
+  };
 }
 
 const trimmed = (s: string) => s.trim();
@@ -47,6 +73,7 @@ const trimmed = (s: string) => s.trim();
 expect.extend({
   async toHaveText(locator: Locator, expected: string | RegExp, opts?: WaitOpts) {
     return settle(
+      this,
       locator,
       "toHaveText",
       opts,
@@ -59,6 +86,7 @@ expect.extend({
 
   async toContainText(locator: Locator, expected: string, opts?: WaitOpts) {
     return settle(
+      this,
       locator,
       "toContainText",
       opts,
@@ -72,6 +100,7 @@ expect.extend({
   // not its text, so this — not toContainText — is what asks about one.
   async toHaveValue(locator: Locator, expected: string | RegExp, opts?: WaitOpts) {
     return settle(
+      this,
       locator,
       "toHaveValue",
       opts,
@@ -83,6 +112,7 @@ expect.extend({
 
   async toHaveAttribute(locator: Locator, name: string, expected: string | RegExp, opts?: WaitOpts) {
     return settle(
+      this,
       locator,
       `toHaveAttribute(${name})`,
       opts,
@@ -95,6 +125,7 @@ expect.extend({
 
   async toHaveCount(locator: Locator, expected: number, opts?: WaitOpts) {
     return settle(
+      this,
       locator,
       "toHaveCount",
       opts,
@@ -106,23 +137,25 @@ expect.extend({
 
   async toBeVisible(locator: Locator, opts?: WaitOpts) {
     return settle(
+      this,
       locator,
       "toBeVisible",
       opts,
       () => locator.isVisible(),
       (seen) => seen,
-      () => "never became visible",
+      (seen) => (seen ? "was visible" : "never became visible"),
     );
   },
 
   async toBeEnabled(locator: Locator, opts?: WaitOpts) {
     return settle(
+      this,
       locator,
       "toBeEnabled",
       opts,
       () => locator.isEnabled(),
       (seen) => seen,
-      () => "never became enabled",
+      (seen) => (seen ? "was enabled" : "never became enabled"),
     );
   },
 });
