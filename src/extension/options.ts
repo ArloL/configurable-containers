@@ -197,6 +197,18 @@ function renderRecording(recording: PauseStatusResponse["recordings"][number]): 
     empty.textContent = "Nothing seen yet.";
     box.append(empty);
   }
+
+  // The host list is capped (MAX_RECORDED_HOSTS in src/engine/pause.ts). Saying so is the
+  // point of the cap being counted rather than silent: rules are written FROM this list, so
+  // a reader has to know when it is not the whole of what CC saw. The number is not named
+  // here on purpose — importing it would pull the background's pause module, and with it
+  // the engine, into the options bundle.
+  if (recording.dropped) {
+    const more = document.createElement("p");
+    more.className = "cc-pause-host";
+    more.textContent = `… and ${recording.dropped} more host${recording.dropped === 1 ? "" : "s"} seen but not recorded — the per-recording cap was reached.`;
+    box.append(more);
+  }
   return box;
 }
 

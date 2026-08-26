@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { aFakeBrowser, aFakeClock } from "./mock-port";
-import { createPause, PAUSE_STORAGE_KEY, type PauseState } from "../../src/engine/pause";
+import { createPause, MAX_RECORDED_HOSTS, PAUSE_STORAGE_KEY, type PauseState } from "../../src/engine/pause";
 import type { Decision } from "../../src/resolver/types";
 
 const intoTemporary: Decision = { kind: "reopen", into: { kind: "temporary" } };
@@ -172,10 +172,124 @@ describe("pause — recording", () => {
     pause.record(csid, "https://payment.acme.test/", intoTemporary);
     await browser.settle();
 
-    // Reviewing a recording means editing the config, and a save calls runtime.reload():
-    // a record held only in memory would be destroyed by the act it exists to enable.
+    // A record held only in memory is lost with the background context, and the flow worth
+    // recording is exactly the one the user is still in the middle of. A save no longer ends
+    // that context (it applies in place), but a browser restart does.
     const stored = (await browser.port.readStored(PAUSE_STORAGE_KEY)) as PauseState;
     expect(stored.recordings[0]!.hosts[0]!.host).toBe("payment.acme.test");
+  });
+});
+
+describe("pause — the host cap", () => {
+  async function anArmedPause() {
+    const browser = aFakeBrowser();
+    const shop = browser.addContainerNamed({ name: "tmp3" });
+    const pause = createPause({ port: browser.port, clock: aFakeClock().clock });
+    await pause.arm(shop.cookieStoreId);
+    return { browser, pause, csid: shop.cookieStoreId };
+  }
+
+  // The recordings LIST is capped by arm() and the armed set by the user; `hosts` was
+  // capped by nothing, and it is the only structure CC keeps that a browser restart does
+  // not empty — persist() writes the whole pause state into storage.local on each new host.
+  // A container armed and forgotten grew it for as long as browsing continued.
+  it("stops the host list at the cap instead of growing it for as long as browsing continues", async () => {
+    const { pause, csid } = await anArmedPause();
+
+    for (let i = 0; i < MAX_RECORDED_HOSTS + 3; i++) {
+      pause.record(csid, `https://host${i}.test/`, intoTemporary);
+    }
+
+    const recording = pause.snapshot().recordings[0]!;
+    expect(recording.hosts).toHaveLength(MAX_RECORDED_HOSTS);
+    // First-seen order, so what survives is the head of the flow the user armed for.
+    expect(recording.hosts[0]!.host).toBe("host0.test");
+  });
+
+  it("counts the hosts it did not record, rather than truncating in silence", async () => {
+    const { pause, csid } = await anArmedPause();
+
+    for (let i = 0; i < MAX_RECORDED_HOSTS + 3; i++) {
+      pause.record(csid, `https://host${i}.test/`, intoTemporary);
+    }
+
+    // Rules get written FROM this list. A reader who takes a capped list for the whole of
+    // what CC saw writes rules that miss the host that actually broke, which is the silent
+    // wrong answer the count exists to prevent.
+    expect(pause.snapshot().recordings[0]!.dropped).toBe(3);
+  });
+
+  it("leaves `dropped` unset while the recording is under the cap", async () => {
+    const { pause, csid } = await anArmedPause();
+
+    pause.record(csid, "https://payment.acme.test/", intoTemporary);
+
+    expect(pause.snapshot().recordings[0]!.dropped).toBeUndefined();
+  });
+
+  it("still counts hops on a host it already holds after the cap is reached", async () => {
+    const { pause, csid } = await anArmedPause();
+
+    for (let i = 0; i < MAX_RECORDED_HOSTS + 1; i++) pause.record(csid, `https://host${i}.test/`, intoTemporary);
+    pause.record(csid, "https://host0.test/again", intoTemporary);
+
+    // The cap is on distinct hosts, not on the recording: a bounce through a host already
+    // named is still the evidence the user armed for.
+    expect(pause.snapshot().recordings[0]!.hosts[0]).toEqual({
+      host: "host0.test",
+      hits: 2,
+      wouldHave: "a new temporary container",
+    });
+  });
+
+  it("writes nothing more once the cap is reached", async () => {
+    const { browser, pause, csid } = await anArmedPause();
+
+    for (let i = 0; i < MAX_RECORDED_HOSTS; i++) pause.record(csid, `https://host${i}.test/`, intoTemporary);
+    await browser.settle();
+    const before = JSON.stringify(await browser.port.readStored(PAUSE_STORAGE_KEY));
+
+    for (let i = 0; i < 50; i++) pause.record(csid, `https://overflow${i}.test/`, intoTemporary);
+    await browser.settle();
+
+    // The other half of what an abandoned recording cost: every new host was a write of the
+    // whole pause state from the blocking path. Past the cap there is nothing new to write.
+    expect(JSON.stringify(await browser.port.readStored(PAUSE_STORAGE_KEY))).toBe(before);
+  });
+
+  it("keeps a recording stored by a build that had no cap", async () => {
+    const browser = aFakeBrowser();
+    const shop = browser.addContainerNamed({ name: "tmp3" });
+    await browser.port.writeStored(PAUSE_STORAGE_KEY, {
+      armed: [shop.cookieStoreId],
+      // No `dropped` key at all — the shape every recording written before the cap has.
+      recordings: [
+        { id: "1", cookieStoreId: shop.cookieStoreId, container: "tmp3", startedAt: 1, endedAt: 2, hosts: [{ host: "old.test", hits: 4, wouldHave: "no action" }] },
+      ],
+    });
+    const pause = createPause({ port: browser.port, clock: aFakeClock().clock });
+
+    await pause.hydrate();
+
+    // Validating `dropped` as required would read every pre-cap recording as corrupt and
+    // drop the user's history over a key they never had.
+    expect(pause.snapshot().recordings[0]!.hosts[0]!.host).toBe("old.test");
+  });
+
+  it("refuses a stored recording whose dropped count is not a number", async () => {
+    const browser = aFakeBrowser();
+    await browser.port.writeStored(PAUSE_STORAGE_KEY, {
+      armed: [],
+      recordings: [
+        { id: "1", cookieStoreId: "firefox-container-9", container: "tmp3", startedAt: 1, endedAt: 2, hosts: [], dropped: "lots" },
+      ],
+    });
+    const pause = createPause({ port: browser.port, clock: aFakeClock().clock });
+
+    await pause.hydrate();
+
+    // Lenient about absent, strict about present: the options page renders this number.
+    expect(pause.snapshot().recordings).toEqual([]);
   });
 });
 
