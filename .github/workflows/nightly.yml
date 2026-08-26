@@ -137,6 +137,11 @@ jobs:
       # no case to show for it, which is what a dead `beforeAll` looks like and what this
       # job used to call "all consistent". `npm test` deliberately has no --retry to paper
       # over either.
+      #
+      # Each run gets its own FILE ORDER (vitest.config.ts shuffles; the script picks the
+      # seeds so the report can name them). That is what lets this see an order dependence
+      # at all: in a fixed order such a case fails identically every run, which reads as red
+      # rather than as a race, and the comparison never gets to say anything about it.
       - name: Run the browser tier ten times and compare
         env:
           FIREFOX_BIN: ${{ steps.firefox.outputs.firefox-path }}
@@ -333,12 +338,19 @@ jobs:
         The log names each case with its run-by-run story. Two shapes, and the story says
         which:
 
-        - **passed → failed → passed** — a race in the case. The ones this harness has
-          already had are in TESTING.md's e2e section: a probe reply landing after the
+        - **passed → failed → passed** — a race in the case, in time or in ORDER. The
+          report prints the seed each answer came from and a \`--sequence.seed=\` command
+          that replays the failing one; run that first, because an order that reproduces
+          turns this from a race into an ordinary bug. The time-dependent ones this harness
+          has already had are in TESTING.md's e2e section: a probe reply landing after the
           navigation that destroyed the document it was written into, an assertion made
-          before \`reportTab\` finished its two cookie reads. The fix is the case.
+          before \`reportTab\` finished its two cookie reads, a window handle closing
+          between the listing and the switch. The fix is the case.
         - **passed → never ran** — the file did not get as far as that case, so something
           threw on import or the run died. Look at the run's own output, not at the case.
+        - **every run failed as a whole, no case saying why** — nothing ran at all. That is
+          a dead \`beforeAll\`, which records the cases it owns as "skipped": no Firefox, no
+          geckodriver, no harness server, no \`mac/\` checkout. Read the first run's output.
 
         Not a way it goes green: \`--retry\`. It turns a race into a pass and throws away
         the evidence that there was one (TESTING.md, "Cross-cutting gates").

@@ -38,6 +38,13 @@ export interface Run {
    * that way — the whole tier not running, reported as the tier being solid.
    */
   success: boolean;
+  /**
+   * The `--sequence.seed` this run was given, when the caller chose one. `readRun` cannot
+   * know it — it reads a report, and the report does not carry it — so `main` attaches it.
+   * Without this a disagreement caused by ORDER names no order, and the shuffle that found
+   * it is unreproducible: vitest picks its own seed and prints it into a log nobody keeps.
+   */
+  seed?: string;
 }
 
 /** One case's story across the runs, in run order. `null` where the run never reached it. */
@@ -61,6 +68,8 @@ export interface Verdict {
   runSucceeded: boolean[];
   /** Indices of runs that reported no cases at all. A green verdict over nothing is not one. */
   emptyRuns: number[];
+  /** The order each run was given, in run order. Empty entries where nobody chose one. */
+  seeds: (string | undefined)[];
 }
 
 /** A vitest `--reporter=json` file: its `success`, and its `assertionResults` flattened. */
@@ -111,6 +120,7 @@ export function compareRuns(runs: Run[]): Verdict {
     slowest: slowest.slice(0, 10),
     runSucceeded: runs.map((run) => run.success),
     emptyRuns: runs.flatMap((run, i) => (run.cases.length === 0 ? [i] : [])),
+    seeds: runs.map((run) => run.seed),
   };
 }
 
@@ -124,13 +134,29 @@ export function isRed(verdict: Verdict): boolean {
   );
 }
 
-export function report(verdict: Verdict, runs: number): string {
+const DEFAULT_TARGET = "test/e2e";
+const DEFAULT_RUNS = 3;
+
+export function report(verdict: Verdict, runs: number, target: string = DEFAULT_TARGET): string {
   const lines: string[] = [];
   if (verdict.flaky.length > 0) {
     lines.push(`${verdict.flaky.length} case(s) did not answer the same way across ${runs} runs:`);
     for (const c of verdict.flaky) {
       lines.push(`  ${c.name}`);
       lines.push(`    ${c.statuses.map((s) => s ?? "never ran").join(" → ")}`);
+      // The orders those answers came from. Without them a disagreement that is really an
+      // ORDER dependence — the kind shuffling exists to expose — names no order, and the
+      // reader is left bisecting a suite by hand.
+      if (verdict.seeds.some((seed) => seed !== undefined)) {
+        lines.push(`    seeds ${verdict.seeds.map((seed) => seed ?? "?").join(" → ")}`);
+        // The first run that did not pass: the one worth replaying, and the only one of
+        // them that is a question rather than a control.
+        const odd = c.statuses.findIndex((s) => s !== "passed");
+        const seed = verdict.seeds[odd === -1 ? 0 : odd];
+        if (seed !== undefined) {
+          lines.push(`    replay that order: npx vitest run ${target} --sequence.seed=${seed}`);
+        }
+      }
     }
     lines.push("");
     // Said here rather than in a comment nobody reads at 3am: the fix is the case, not
@@ -179,32 +205,38 @@ export function report(verdict: Verdict, runs: number): string {
 
 // --- the part that needs a browser -------------------------------------------------
 
-const DEFAULT_TARGET = "test/e2e";
-const DEFAULT_RUNS = 3;
-
 function main(): void {
   const target = process.argv[2] ?? DEFAULT_TARGET;
   const runs = Number(process.env.FLAKE_RUNS ?? DEFAULT_RUNS);
+  // A fresh base per invocation, so two nights do not sample the same ten orders.
+  const base = Date.now();
   const dir = mkdtempSync(path.join(tmpdir(), "cc-flake-"));
   try {
     const outcomes: Run[] = [];
     for (let i = 0; i < runs; i++) {
       const outFile = path.join(dir, `run-${i}.json`);
-      console.log(`\n=== flake run ${i + 1}/${runs}: ${target} ===`);
+      console.log(`\n=== flake run ${i + 1}/${runs}: ${target} (seed ${base + i}) ===`);
+      // A DIFFERENT order per run, and one this script knows. `vitest.config.ts` shuffles
+      // the file order, which is what lets the comparison below see an order dependence at
+      // all — but left to itself vitest invents a seed and only prints it, so the run that
+      // disagreed could not be run again. Choosing them here makes each order both varied
+      // (a fresh base per invocation, so nights do not repeat) and reproducible.
+      const seed = String(base + i);
       const proc = spawnSync(
         "npx",
-        ["vitest", "run", target, "--reporter=json", `--outputFile=${outFile}`, "--reporter=default"],
+        ["vitest", "run", target, `--sequence.seed=${seed}`,
+         "--reporter=json", `--outputFile=${outFile}`, "--reporter=default"],
         { stdio: "inherit" },
       );
       const run = readRun(JSON.parse(readFileSync(outFile, "utf8")));
       // Belt and braces: the report says whether the SUITE succeeded, the exit code says
       // whether the PROCESS did, and a crash after the report was written is only visible
       // in the second. Neither is allowed to vouch for the other.
-      outcomes.push({ ...run, success: run.success && proc.status === 0 });
+      outcomes.push({ ...run, success: run.success && proc.status === 0, seed });
     }
 
     const verdict = compareRuns(outcomes);
-    console.log("\n" + report(verdict, runs));
+    console.log("\n" + report(verdict, runs, target));
     if (isRed(verdict)) process.exitCode = 1;
     else console.log(`\nAll ${runs} runs succeeded, and every case answered the same way.`);
   } finally {

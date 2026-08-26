@@ -361,6 +361,18 @@ reasonable-looking change wrong**.
   question about what the bundler resolves. `decision-cost.test.ts` measures rather than
   inspects, and counts **port round trips, never milliseconds** — wall clock in CI is a
   flake generator.
+- **`npm test` shuffles the FILE order, and that is not noise to be pinned away**
+  (`sequence.shuffle: { files: true, tests: false }`, `vitest.config.ts`). Order dependence
+  and time dependence fail differently: a case that leans on state an earlier file left
+  behind fails identically every run, so `npm run test:flake` files it under "red, not
+  flaky" and its comparison never sees it. A shuffled order is the only thing that turns it
+  into a disagreement. **Files, never tests** — a file's cases share one browser session and
+  some are deliberately a sequence (choice.test.ts picks a container, then asserts the pick
+  was not remembered), so shuffling those breaks by design rather than by fault. A failure
+  is reproducible: vitest prints `Running tests with seed N`, and `--sequence.seed=N`
+  replays it. Keep it off the mutation config — Stryker decides each mutant from one run,
+  and `stryker.config.mjs` names `vitest.mutation.config.ts` precisely so that run inherits
+  nothing that varies.
 - **Revert-verify every regression test — back the fix out, watch it go red, restore it**
   (editor undo, **not** `git checkout`, which discards uncommitted work). This suite
   shipped false greens twice: three e2e tests passed with auto-temp entirely broken, and
