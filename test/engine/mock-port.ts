@@ -35,8 +35,11 @@ export interface TabProps {
   windowId?: number | undefined;
 }
 
-// Resolve after pending microtasks so floated async callbacks (maybeQueue/tryRemove) settle.
-const flushMicrotasks = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
+// Yield a turn, so floated async callbacks (maybeQueue/tryRemove) settle. A macrotask
+// boundary rather than the microtask drain the old name claimed: everything this mock
+// awaits resolves on the microtask queue, so one turn drains all of it — but a caller
+// reading the name would have believed something narrower than what it does.
+const yieldTurn = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 
 export interface MockPort {
   port: BrowserPort;
@@ -341,19 +344,19 @@ export function aFakeBrowser(): MockPort {
     async opensTab(props) {
       const tab = makeTab(props);
       for (const h of onTabCreatedHs) h(tab);
-      await flushMicrotasks();
+      await yieldTurn();
       return tab;
     },
     async closesTab(tab) {
       openTabs.delete(tab.id);
       for (const h of onTabRemovedHs) h(tab.id);
-      await flushMicrotasks();
+      await yieldTurn();
     },
     async updatesTab(tab, info) {
       // Reflect the updated tab into the mock's map so getTab sees the new URL.
       openTabs.set(tab.id, tab);
       for (const h of onTabUpdatedHs) h(tab, info);
-      await flushMicrotasks();
+      await yieldTurn();
     },
     macAssigns: (url, value) => void macMap.set(url, value),
     macIsAbsent: (on) => void (macThrows = on),
@@ -374,16 +377,16 @@ export function aFakeBrowser(): MockPort {
     },
     async receivesCommand(name) {
       for (const h of commandHs) h(name);
-      await flushMicrotasks();
+      await yieldTurn();
     },
     async clicksAction(tab) {
       for (const h of actionClickedHs) h(tab);
-      await flushMicrotasks();
+      await yieldTurn();
     },
     activeTabIs(tab) {
       activeTab = tab;
     },
-    settle: flushMicrotasks,
+    settle: yieldTurn,
   };
 }
 
@@ -402,7 +405,7 @@ export function aFakeClock(): { clock: Clock; advance(ms: number): Promise<void>
   return {
     clock,
     async advance(ms) {
-      await flushMicrotasks(); // let pending async work (e.g. the startup sweep) schedule its timers
+      await yieldTurn(); // let pending async work (e.g. the startup sweep) schedule its timers
       const target = now + ms;
       for (;;) {
         let next: [number, { dueAt: number; fn: () => void }] | null = null;
@@ -413,7 +416,7 @@ export function aFakeClock(): { clock: Clock; advance(ms: number): Promise<void>
         timers.delete(next[0]);
         now = next[1].dueAt;
         next[1].fn();
-        await flushMicrotasks(); // let async callbacks (queryTabs/removeIdentity) settle
+        await yieldTurn(); // let async callbacks (queryTabs/removeIdentity) settle
       }
       now = target;
     },
