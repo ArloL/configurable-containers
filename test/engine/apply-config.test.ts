@@ -120,6 +120,53 @@ describe("applying a stored config without a restart", () => {
     expect(browser.registeredScripts.map((s) => s.js[0]!.code)).toEqual(["a();"]);
   });
 
+  // The third way two applies overlap, and the one the queue did not cover:
+  // `background.ts`'s tail calls `injectScripts()` to register the config it loaded, and a
+  // `cc-config-apply` from the editor is a MESSAGE — it does not wait for the tail. The
+  // window is small and self-healing, but "every snippet injected twice until the next
+  // apply" is not a thing to leave to a comment when the queue already exists.
+  //
+  // Reachable because a config that does not parse makes startup OPEN the editor, so the
+  // page that can send that message is up while the tail is still running.
+  it("registers each snippet once when a Save meets the startup injection", async () => {
+    const browser = aFakeBrowser();
+    const scripted = `rules:\n  - match: a.example\n    scripts:\n      - { run: "a();" }\n`;
+    const bg = await startTheBackground(browser, aFakeClock(), parseConfig(scripted));
+    await browser.port.writeStored(CONFIG_STORAGE_KEY, scripted);
+
+    // The interleaving is STATED rather than inherited. Left to the mock's own timing the
+    // two serialise by accident — `applyOnce` awaits `readStored` first, so the injection is
+    // always a tick ahead and registers before the apply reaches its unregister — and this
+    // case passed with the fix backed out. Firefox makes no such promise: these are IPC
+    // round trips. Holding registration open puts both callers past their unregister at the
+    // same time, which is the window itself.
+    const release = browser.stallScriptRegistration();
+    const both = Promise.all([bg.injectScripts(), browser.receivesMessage({ type: CONFIG_APPLY })]);
+    await browser.settle();
+    release();
+    await both;
+
+    expect(browser.registeredScripts.map((s) => s.js[0]!.code)).toEqual(["a();"]);
+  });
+
+  // The queue must not be strandable: `injectScripts` deliberately does NOT swallow a
+  // registration failure the way `applyOnce` does — the tail is the one caller, and a
+  // browser that refuses to register is worth an unhandled rejection there — so a rejected
+  // link becomes the head of the chain. The next apply has to run anyway.
+  it("keeps applying after a startup injection that failed", async () => {
+    const browser = aFakeBrowser();
+    const scripted = `rules:\n  - match: a.example\n    scripts:\n      - { run: "a();" }\n`;
+    const bg = await startTheBackground(browser, aFakeClock(), parseConfig(scripted));
+    await browser.port.writeStored(CONFIG_STORAGE_KEY, scripted);
+
+    browser.scriptRegistrationFails("no permission");
+    await expect(bg.injectScripts()).rejects.toThrow("no permission");
+
+    browser.scriptRegistrationFails(null);
+    expect(await browser.receivesMessage({ type: CONFIG_APPLY })).toEqual({});
+    expect(browser.registeredScripts.map((s) => s.js[0]!.code)).toEqual(["a();"]);
+  });
+
   it("publishes to sync after a save, and never after an adoption", async () => {
     const browser = aFakeBrowser();
     const published: string[] = [];

@@ -87,23 +87,8 @@ confirm the call sites still resolve.
 
 ---
 
-The entries below came out of one sweep of the cold base on 2026-08-26, against
-`0131954` with every gate green (`npm test` 910 passed / 1 skipped on 140.14.0esr,
-`test:coverage` 866 passed, typecheck, lint and `audit` clean). None of them is a red
-test — that is the point of writing them down.
-
-## A startup script injection is not serialised against a Save (2026-08-26)
-
-`applyStored` runs applies through the `applying` chain because `scripts.apply`
-unregisters what the previous one registered, and two in flight interleave into
-unregister, unregister, register, register — every snippet registered and injected twice
-until the next apply. `wireBackground`'s comment names two ways in: a double-clicked Save,
-and a Save meeting an adoption.
-
-There is a third. `background.injectScripts()` calls `scripts.apply(config)` directly, off
-the chain. The async tail awaits it before `configSync.start()`, so adoption cannot race
-it — but a `cc-config-apply` from the editor is a message, and messages do not wait for
-the tail. The window is small (browser startup, with the editor already open, which
-happens when the stored config does not parse and startup opens it) and self-heals on the
-next apply. Routing it through `applyStored` would close it; whether that is worth doing,
-or worth only a comment saying the window is known, is the call.
+A sweep of the cold base on 2026-08-26 (against `0131954`, every gate green) filed seven
+entries here. None was a red test — that was the point of writing them down — and all seven
+are now resolved, which is why nothing follows this line. The three above it are not that
+kind of entry: each is a decision already taken and priced, kept so the next reader does
+not re-take it.
