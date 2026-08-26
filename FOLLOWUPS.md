@@ -92,30 +92,6 @@ The entries below came out of one sweep of the cold base on 2026-08-26, against
 `test:coverage` 866 passed, typecheck, lint and `audit` clean). None of them is a red
 test — that is the point of writing them down.
 
-## The retained-state inventory cannot see an array (2026-08-26)
-
-`test/fitness/retained-state.test.ts` scans `src/` for `new Set` / `new Map` and requires
-a written bound for each. Three session-lived collections are arrays and are therefore
-invisible to it:
-
-- `src/engine/pause.ts` `recordings` — capped at `MAX_RECORDINGS` by `arm()`, fine.
-- `src/engine/script-injector.ts` `live` — replaced wholesale by each `apply`, fine.
-- **`Recording.hosts`, inside those recordings — uncapped.** `record()` pushes one row per
-  distinct host seen while a container is armed and `persist()`s the whole pause state on
-  each new one. A container armed and forgotten grows it for as long as browsing
-  continues, in `storage.local`, which is the one place here that survives a browser
-  restart. Every bounded structure in that file dies with the background; this one does
-  not.
-
-The file's own closing note says the list exists "for the fifth" — the per-navigation
-structure someone adds assuming the background restarts. That fifth is already here and
-the scan cannot see it. Widening `DECLARATION` to arrays is the obvious move and is not
-free: `src/` has ten-odd per-call `const out: T[] = []` builders that would each need a
-row saying "one call", which is the noise that gets a fitness function deleted. The
-narrower question is whether a recording wants a host cap; the inventory question is
-separate and can be answered by pinning the collections that outlive a call, however they
-are spelled.
-
 ## `npm run test:flake` can report agreement over no runs at all (2026-08-26)
 
 `scripts/flake-check.ts` reads `Number(process.env.FLAKE_RUNS ?? DEFAULT_RUNS)`. `NaN` (a

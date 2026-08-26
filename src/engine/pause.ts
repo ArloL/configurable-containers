@@ -11,6 +11,22 @@ export const PAUSE_STORAGE_KEY = "pauseState";
 // A cap on how many recordings are kept, so the list stays readable.
 export const MAX_RECORDINGS = 10;
 
+// A cap on how many distinct hosts ONE recording names, and the only bound in this file
+// that is about memory rather than readability.
+//
+// Everything else CC keeps dies with the browser. This does not: `record()` appends a row
+// per distinct host seen while a container is armed and `persist()`s the whole pause state
+// on each new one, into storage.local. A container armed and forgotten therefore grows a
+// stored array for as long as browsing continues — the one structure here that a restart
+// does not empty.
+//
+// 200 is two orders of magnitude above a real payment or SSO chain, which is a handful of
+// hops. Reaching it means the recording stopped being the flow the user armed for, and that
+// flow is at the TOP of a first-seen-ordered list, so the rows worth reading are the ones
+// kept. Past the cap the recording also stops writing at all, which is the other half of
+// what it costs to leave one running.
+export const MAX_RECORDED_HOSTS = 200;
+
 export interface RecordedHost {
   host: string;
   hits: number; // main_frame hops that resolved to this host
@@ -26,7 +42,11 @@ export interface Recording {
   container: string;
   startedAt: number;
   endedAt: number | null; // null while running
-  hosts: RecordedHost[]; // first-seen order
+  hosts: RecordedHost[]; // first-seen order, at most MAX_RECORDED_HOSTS of them
+  // Distinct hosts seen after the cap was reached. Optional because a recording written by
+  // a build without the cap has no such field, and refusing those on hydrate would throw
+  // the user's history away over a key they never had.
+  dropped?: number;
 }
 
 export interface PauseState {
@@ -76,6 +96,7 @@ function isRecording(v: unknown): v is Recording {
     typeof r.container === "string" &&
     typeof r.startedAt === "number" &&
     (r.endedAt === null || typeof r.endedAt === "number") &&
+    (r.dropped === undefined || typeof r.dropped === "number") &&
     Array.isArray(r.hosts)
   );
 }
@@ -249,6 +270,14 @@ export function createPause(opts: { port: BrowserPort; clock: Clock }): Pause {
         // Deliberately no write: a seven-hop bounce would be seven storage writes from the
         // blocking path. `disarm` flushes, so a finished recording's counts are accurate; a
         // background killed mid-flow loses the hops since the last new host.
+        return;
+      }
+      if (open.hosts.length >= MAX_RECORDED_HOSTS) {
+        // Counted, not dropped in silence. A list a reader takes for the whole flow and
+        // that quietly is not would be the silent wrong answer this cap exists to avoid —
+        // rules written from it would miss the host that actually broke. Not persisted
+        // here for the reason above; `disarm` flushes it with the hit counts.
+        open.dropped = (open.dropped ?? 0) + 1;
         return;
       }
       open.hosts.push({ host, hits: 1, wouldHave: wouldHaveLabel(decision) });

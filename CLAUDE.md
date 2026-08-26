@@ -64,6 +64,18 @@ reasonable-looking change wrong**.
   counterfactual, and **before the non-GET declination**, because a paused POST must raise
   no F9 toast — nothing went unapplied, the user turned routing off. It adds nothing to
   `handled` and never cancels.
+
+  **Its recordings are the ONE thing CC keeps that outlives the browser**, so they are the
+  one place a cap is not optional. Everything else here dies with the background context;
+  the pause state is in `storage.local`, and `record()` appends a row per distinct host and
+  `persist()`s the whole state on each new one. A container armed and forgotten therefore
+  grew a stored array, and wrote it from the blocking path, for as long as browsing
+  continued. `MAX_RECORDED_HOSTS` bounds both — and the hosts past it are **counted into
+  `Recording.dropped`**, not dropped in silence: rules are written from that list, and one a
+  reader takes for the whole flow while it quietly is not is the same silent wrong answer a
+  half-parsed config would be. `dropped` is optional in the type and lenient in
+  `isRecording` because a recording stored before the cap has no such key, and refusing
+  those on hydrate would throw the user's history away.
 - **Two arming paths, one `arm()`.** The toolbar button takes its container from the `Tab`
   Firefox passes to `browserAction.onClicked`; the options page names one and the
   background validates it. **WebDriver cannot click a `browser_action`**, so logic living

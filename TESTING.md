@@ -464,16 +464,27 @@ mutant no other case catches.
     a Save and by a sync adoption alike. Restarting to apply one takes back the single step
     of a save that nothing can observe, and on a temporarily installed extension on 140 ESR
     it does not come back at all.
-  - **What the background page keeps** (`retained-state.test.ts`) — every `Set` and `Map`
-    in `src/`, each with a written bound. No other gate asks this: the L3 cases drive tens
-    of navigations and `npm test` restarts the world between files, so a structure that
-    gains an entry per navigation and loses none is invisible to all of them — F10's shape,
-    silent and only visible over time. An
+  - **What the background page keeps** (`retained-state.test.ts`) — every growable
+    collection in `src/`, each with a written bound. No other gate asks this: the L3 cases
+    drive tens of navigations and `npm test` restarts the world between files, so a
+    structure that gains an entry per navigation and loses none is invisible to all of them
+    — F10's shape, silent and only visible over time. An
     inventory rather than a measurement, because counting retained bytes means either
     exporting a closure's privates to be counted or timing a heap. Four structures are
     recorded as growing with nothing emptying them, and all four are fine: each holds one
     short string or number, fed by something rarer than browsing. The list is there for
     the fifth.
+
+    It read `new Set` / `new Map` only until 2026-08-26, so an **array was invisible to
+    it** — and the fifth it was written for was already present and unseeable:
+    `Recording.hosts`, uncapped, and the one collection here that `storage.local` carries
+    across a browser restart. The scan now reads a binding (`new Set`, `new Map`, `= [`)
+    **and a field initialised empty in an object literal** (`hosts: []`), which is the
+    spelling that no declaration-site scan would ever have found. The reach costs it the
+    dozen per-call `const out: T[] = []` builders in `src/`; those are listed as bare keys
+    in `PER_CALL`, because a row earns its place through its `bound` column and "one call"
+    is not something a reader has to weigh. Widening it is what surfaced the cap that
+    `MAX_RECORDED_HOSTS` now applies.
   - **The e2e discipline** (`e2e-discipline.test.ts`) — no `driver` in a case, no fixed
     wait, no read-then-compare on an immediate reader, no hand-rolled deadline loop. Each
     has one named exception and nothing else. It exists because the migration that
