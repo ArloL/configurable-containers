@@ -223,6 +223,49 @@ describe("engine — reopen/stay/leaveAlone + F1 guard", () => {
     expect(browser.openedTabs).toHaveLength(1);
   });
 
+  it("a redirect hop to an unmatched OTHER site stays in the one throwaway opened for the chain", async () => {
+    const browser = aFakeBrowser();
+    const tmp1 = browser.addContainerNamed({ name: "tmp1" });
+    const tab = browser.existingTab({ url: "https://kottke.org/", cookieStoreId: tmp1.cookieStoreId });
+    const suffix = sequentialTmpSuffixes();
+    suffix(); // tmp1 above was issued by this counter
+    createEngine({ port: browser.port, config: { rules: [], groups: [] }, deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: suffix });
+
+    await browser.navigates(aNavigationTo({ requestId: "10", tabId: tab.id, url: "https://linked.test/a" }));
+    const newTab = [...browser.openTabs.values()].find((t) => t.id !== tab.id)!;
+    newTab.url = "about:blank"; // pre-commit for the whole redirect chain, as in real Firefox
+    await browser.navigates(aNavigationTo({ requestId: "11", tabId: newTab.id, url: "https://linked.test/a" }));
+
+    // A 302 to ANOTHER site, on the same requestId. Resolved on its own it is an unmatched
+    // site and buys a throwaway — but one click must not buy one per hop (tmp2 -> tmp3), and
+    // the user never sees an intermediate hop.
+    const hop = await browser.navigates(aNavigationTo({ requestId: "11", tabId: newTab.id, url: "https://hop.test/b" }));
+
+    expect(hop).toBeUndefined();
+    expect(browser.createdContainers.map((c) => c.name)).toEqual(["tmp2"]);
+    expect(browser.openedTabs).toHaveLength(1);
+  });
+
+  it("a redirect hop to another site in the SAME container is not reopened into it again", async () => {
+    const browser = aFakeBrowser();
+    // One rule, two hosts: the hop crosses a site boundary without changing container.
+    const config = parseConfig("rules:\n  - match: [github.com, github.dev]\n    open: GitHub\n");
+    browser.addContainerNamed({ name: "GitHub" });
+    const tab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
+    createEngine({ port: browser.port, config, deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
+
+    await browser.navigates(aNavigationTo({ requestId: "10", tabId: tab.id, url: "https://github.com/x" }));
+    const newTab = [...browser.openTabs.values()].find((t) => t.id !== tab.id)!;
+    newTab.url = "about:blank";
+    await browser.navigates(aNavigationTo({ requestId: "11", tabId: newTab.id, url: "https://github.com/x" }));
+
+    const hop = await browser.navigates(aNavigationTo({ requestId: "11", tabId: newTab.id, url: "https://github.dev/x" }));
+
+    expect(hop).toBeUndefined(); // already correctly contained — no second tab, no churn
+    expect(browser.openedTabs).toHaveLength(1);
+    expect(browser.closedTabIds).toEqual([]);
+  });
+
   it("routes a redirect hop that leaves the site the tab was reopened for — the SSO callback home", async () => {
     const browser = aFakeBrowser();
     const sonar = browser.addContainerNamed({ name: "SonarCloud" });

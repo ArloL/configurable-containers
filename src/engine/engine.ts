@@ -49,16 +49,21 @@ async function buildNavContext(
   d: WebRequestDetails,
   tab: Tab,
   registry: ContainerRegistry,
-  port: BrowserPort
+  port: BrowserPort,
+  // The url a tab we reopened is mid-navigation to, on a redirect hop of that navigation.
+  // Such a tab reads about:blank like any other pre-commit tab, but unlike one we know both
+  // halves of `current`: the container is ours, and the page it stands for is the url we
+  // opened the tab to load. Supplying it is what lets `resolve` answer "already correctly
+  // contained" for a hop within one rule (github.com -> github.dev), instead of reopening a
+  // tab into the container it is already in.
+  guardedFrom?: string
 ): Promise<NavContext> {
   // A pre-commit tab ("about:blank", or "" when brand new) has no `current`, even though
   // its container is known: the disposable path needs the site the tab was ON, and that is
   // genuinely unknown here. Naming the container instead parks a middle-clicked link in its
   // opener's throwaway.
-  const current =
-    tab.url && tab.url !== "about:blank"
-      ? { url: tab.url, container: await registry.toRef(tab.cookieStoreId) }
-      : null;
+  const standsOn = tab.url && tab.url !== "about:blank" ? tab.url : guardedFrom;
+  const current = standsOn ? { url: standsOn, container: await registry.toRef(tab.cookieStoreId) } : null;
 
   // Read once for both questions below, and only while the tab is pre-commit: after that
   // it is the stale pointer F14 is about.
@@ -138,6 +143,25 @@ export function namesAConfiguredContainer(decision: Declinable): boolean {
   return decision.kind === "choice" || decision.into.kind === "permanent";
 }
 
+// May a redirect hop of a navigation we reopened a tab for be acted on?
+//
+// Only when it names a container of its own. A hop crossing to an unmatched site resolves,
+// like any unmatched site, to a fresh throwaway — and one click must not buy one per hop:
+// that is `tmp1 -> tmp2 -> tmp3` on a single redirect chain, the bug the requestId latch was
+// added for. The user never sees an intermediate hop, so there is no browsing session there
+// to isolate; there is only the one the tab was opened with.
+//
+// A configured container is the other case. The chain's destination is a page the user WILL
+// see, and its rule says where that site's session lives — the SSO return hop
+// (sonarcloud.io -> github.com/login/oauth -> back) landing in the identity provider's
+// container, logged out, is what ignoring it costs. `temporary` is excluded whether it came
+// from the disposable path or from an explicit `open: Temporary`: both mean "isolate from
+// what came before", and within one navigation there is nothing yet to isolate from.
+function aHopBuysNoThrowaway(decision: Decision): boolean {
+  if (decision.kind === "choice") return false;
+  return !(decision.kind === "reopen" && decision.into.kind !== "temporary");
+}
+
 export function createEngine(opts: EngineOptions): Engine {
   const { port, config, deps, onChoice, pause } = opts;
   const registry = createRegistry(port, opts.tmpSuffix ?? defaultSuffix());
@@ -160,11 +184,12 @@ export function createEngine(opts: EngineOptions): Engine {
   //     (load aborted, user typed elsewhere) would let the guard absorb the next navigation,
   //     leaving that site unrouted inside the container we reopened INTO.
   //   matched by site, not exact url — Firefox rewrites the url first on an HSTS upgrade.
-  //     The site is kept once the requestId is known and checked on every hop: a redirect
-  //     chain crossing to ANOTHER site is still one navigation, and absorbing it left the
-  //     new site unrouted in the container we opened for the old one. That is every SSO
-  //     return hop — sonarcloud.io -> github.com/login/oauth -> back — landing the callback
-  //     in the identity provider's container, where the session it needs does not exist.
+  //
+  // The site is kept alongside the requestId, because the two answer different halves of a
+  // hop. A hop that stays on the awaited site is absorbed outright. A hop that LEAVES it is
+  // still the same navigation, but it is also a different site arriving in a container that
+  // was chosen for the old one, so it is resolved like any other navigation — with one thing
+  // the engine adds on top, `aHopBuysNoThrowaway` below.
   const reopenedNav = new Map<number, { awaiting: string; requestId?: string }>();
 
   // Tabs whose pending top-level navigation is a `view-source:` load.
@@ -264,26 +289,40 @@ export function createEngine(opts: EngineOptions): Engine {
 
     // F1: the navigation we reopened this tab to perform, from its first request through
     // every redirect hop of it that stays on the site it was reopened for.
+    //
+    // `guardedFrom` carries the rest to the decision: a hop that has left that site is
+    // resolved, but as a hop rather than as a fresh navigation.
+    let guardedFrom: string | undefined;
     const ours = reopenedNav.get(d.tabId);
     if (ours) {
       if (deps.sameSite(ours.awaiting, d.url)) {
         // Its own first request: adopt the requestId, so the hops of THIS navigation are
-        // told apart from a later one to the same site.
+        // told apart from a later navigation to the same site.
         if (ours.requestId === undefined) {
           reopenedNav.set(d.tabId, { awaiting: ours.awaiting, requestId: d.requestId });
           return;
         }
         if (ours.requestId === d.requestId) return; // a redirect hop, still on our site
+        reopenedNav.delete(d.tabId); // a later navigation: route it normally
+      } else if (ours.requestId === d.requestId) {
+        guardedFrom = ours.awaiting; // our navigation, now at another site
+      } else {
+        reopenedNav.delete(d.tabId); // the awaited navigation never came
       }
-      // A hop off our site, or a later navigation, or the awaited one never came: route it.
-      reopenedNav.delete(d.tabId);
     }
 
     const tab = await port.getTab(d.tabId);
     if (!tab) return; // raced away — fail open
-    const nav = await buildNavContext(d, tab, registry, port);
+    const nav = await buildNavContext(d, tab, registry, port, guardedFrom);
 
     const decision = resolve(nav, config, deps);
+
+    // Before the pause record, which describes what routing WOULD have done: a hop we are
+    // not going to act on has no counterfactual to report.
+    if (guardedFrom !== undefined) {
+      if (aHopBuysNoThrowaway(decision)) return; // the chain stays where it was opened
+      reopenedNav.delete(d.tabId); // acted on: the tab it guarded is about to be superseded
+    }
 
     // The user armed this container: record what routing would have done, do nothing. Each
     // boundary is required by something specific:
