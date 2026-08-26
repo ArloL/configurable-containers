@@ -76,6 +76,21 @@ jobs:
       - name: Mutate the resolver, the matcher and the same-site check
         run: npm run test:mutation
 
+      # Stryker writes this on every run and, until now, the runner was torn down with it
+      # still inside: a browsable per-mutant report — the mutated source, what each survivor
+      # changed, which tests ran — that nobody could ever open. The clear-text table in the
+      # log is a score; this is the thing you need the moment a mutant survives.
+      #
+      # `always()`, because the run that fails is exactly the run worth reading, and a
+      # failing step would otherwise skip its own evidence.
+      - name: Keep the mutation report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mutation-report
+          path: reports/mutation/
+          retention-days: 14
+
   flake:
     name: e2e determinism (sample ${{ matrix.sample }})
     runs-on: ubuntu-latest

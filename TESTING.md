@@ -293,6 +293,17 @@ mutant no other case catches.
   refactor can introduce an *equivalent* mutant honestly, which should file an issue for
   someone to name in a comment, not block a merge.
 
+  The nightly keeps the HTML report as an artifact (`mutation-report`, 14 days, uploaded on
+  failure too — the failing run is the one worth reading). It is per-mutant and browsable:
+  the mutated source, what each survivor changed, which tests ran against it. Stryker wrote
+  it on every run before this and the runner was torn down with it still inside, so the only
+  thing that ever survived was the score. The same job also names its `reporters` in
+  `vitest.mutation.config.ts` — not for the reporting, but because vitest adds
+  `github-actions` when none are configured and `GITHUB_ACTIONS=true`, and that reporter
+  APPENDS a job summary per test run. Stryker ends one per mutant, so the summary carried
+  1152 reports with 2302 ❌ marks on it — where a failing run means a mutant was KILLED, so
+  a green 100% job rendered as a wall of red.
+
   Two narrowings give the number meaning. Only the **pure** modules are mutated: the
   stateful ones fail under mutation as "the mock does not model that" as often as "nothing
   tests this". And only the levels that **own** each module may kill its mutants
