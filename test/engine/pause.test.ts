@@ -1,11 +1,23 @@
 import { describe, it, expect } from "vitest";
 import { aFakeBrowser, aFakeClock } from "./mock-port";
-import { createPause, MAX_RECORDED_HOSTS, PAUSE_STORAGE_KEY, type PauseState } from "../../src/engine/pause";
+import {
+  createPause,
+  MAX_RECORDED_HOSTS,
+  MAX_RECORDED_URLS_PER_HOST,
+  PAUSE_STORAGE_KEY,
+  VARIED,
+  type PauseState,
+} from "../../src/engine/pause";
 import type { Decision } from "../../src/resolver/types";
 
 const intoTemporary: Decision = { kind: "reopen", into: { kind: "temporary" } };
 const intoWork: Decision = { kind: "reopen", into: { kind: "permanent", name: "Work" } };
 const noAction: Decision = { kind: "stay" };
+
+// A top-level navigation as the engine hands it over. Almost every hop is a GET; a POST is
+// the one no rule can move, which is why the record keeps the method at all.
+const get = (url: string) => ({ url, method: "GET" });
+const post = (url: string) => ({ url, method: "POST" });
 
 describe("pause — arming", () => {
   it("arms a real container, names it, and shows the count on the badge", async () => {
@@ -112,56 +124,141 @@ describe("pause — recording", () => {
     return { browser, pause, csid: shop.cookieStoreId };
   }
 
-  it("records the host and the action it would have taken", async () => {
+  it("records the host, the URL as a pasteable pattern, and the action it would have taken", async () => {
     const { pause, csid } = await anArmedPause();
 
-    pause.record(csid, "https://payment.acme.test/3ds?token=secret", intoTemporary);
+    pause.record(csid, get("https://payment.acme.test/3ds?token=secret"), intoTemporary);
 
     expect(pause.snapshot().recordings[0]!.hosts).toEqual([
-      { host: "payment.acme.test", hits: 1, wouldHave: "a new temporary container" },
+      {
+        host: "payment.acme.test",
+        hits: 1,
+        wouldHave: "a new temporary container",
+        urls: [
+          {
+            pattern: "*://payment.acme.test/3ds*",
+            hits: 1,
+            methods: ["GET"],
+            wouldHave: "a new temporary container",
+          },
+        ],
+        dropped: 0,
+      },
     ]);
+  });
+
+  it("collapses repeats of ONE url, so a redirect loop is a hit count rather than a list", async () => {
+    const { pause, csid } = await anArmedPause();
+
+    for (let i = 0; i < 4; i++) pause.record(csid, get("https://login.ms.test/authorize?try=" + i), intoTemporary);
+
+    // The query is not part of the pattern, so four hops that differ only there are one
+    // row — the same collapse the host row does, one level down.
+    expect(pause.snapshot().recordings[0]!.hosts[0]!.urls).toEqual([
+      { pattern: "*://login.ms.test/authorize*", hits: 4, methods: ["GET"], wouldHave: "a new temporary container" },
+    ]);
+  });
+
+  it("records the method, because a POST is the hop no rule can move", async () => {
+    const { pause, csid } = await anArmedPause();
+
+    pause.record(csid, get("https://github.com/login/oauth/authorize"), noAction);
+    pause.record(csid, post("https://github.com/login/oauth/authorize"), noAction);
+
+    // `tabs.create` issues a GET, so a `reopen` for a request with a body is declined (F9)
+    // however right the rule is. Reading POST off the row is what says the rule written
+    // there has to be `inherit`/`ignore`.
+    expect(pause.snapshot().recordings[0]!.hosts[0]!.urls[0]).toEqual({
+      pattern: "*://github.com/login/oauth/authorize*",
+      hits: 2,
+      methods: ["GET", "POST"],
+      wouldHave: "no action",
+    });
+  });
+
+  it("stops claiming one answer for a host whose URLs resolved differently", async () => {
+    const { pause, csid } = await anArmedPause();
+
+    pause.record(csid, get("https://github.com/some/repo"), intoWork);
+    pause.record(csid, get("https://github.com/login/oauth/authorize"), noAction);
+
+    // What a path-scoped rule looks like from the outside, and the whole reason the URL rows
+    // exist. A host row still saying "Work" would send the reader to write the one rule that
+    // breaks the sign-in.
+    const [row] = pause.snapshot().recordings[0]!.hosts;
+    expect(row!.wouldHave).toBe(VARIED);
+    expect(row!.urls.map((u) => [u.pattern, u.wouldHave])).toEqual([
+      ["*://github.com/some/repo*", "Work"],
+      ["*://github.com/login/oauth/authorize*", "no action"],
+    ]);
+  });
+
+  it("keeps a host's single answer when every URL under it agrees", async () => {
+    const { pause, csid } = await anArmedPause();
+
+    pause.record(csid, get("https://github.com/a"), intoWork);
+    pause.record(csid, get("https://github.com/b"), intoWork);
+
+    expect(pause.snapshot().recordings[0]!.hosts[0]!.wouldHave).toBe("Work");
+  });
+
+  it("keeps the host row for a URL no pattern can name", async () => {
+    const { pause, csid } = await anArmedPause();
+
+    // An IPv6 literal cannot be a pattern's host. Storing the URL raw would put text next to
+    // a Copy button that the config editor then refuses.
+    pause.record(csid, get("http://[::1]/admin"), intoTemporary);
+
+    expect(pause.snapshot().recordings[0]!.hosts[0]).toMatchObject({ host: "[::1]", hits: 1, urls: [] });
   });
 
   it("collapses a bounce into one row and counts the hops", async () => {
     const { pause, csid } = await anArmedPause();
 
-    for (let i = 0; i < 7; i++) pause.record(csid, `https://login.ms.test/step${i}`, intoTemporary);
+    for (let i = 0; i < 7; i++) pause.record(csid, get(`https://login.ms.test/step${i}`), intoTemporary);
 
     // The deduplication is what turns a twelve-hop Microsoft bounce into the handful of
     // lines a config is actually written from; the redirection-limit=0 workaround
     // produces the raw chain and leaves that collapse to the reader.
-    expect(pause.snapshot().recordings[0]!.hosts).toEqual([
-      { host: "login.ms.test", hits: 7, wouldHave: "a new temporary container" },
-    ]);
+    const [row] = pause.snapshot().recordings[0]!.hosts;
+    expect(row).toMatchObject({ host: "login.ms.test", hits: 7 });
+    // The collapse holds at the host. The URLs below it stay separate rows, because seven
+    // paths at one host is precisely what a path-scoped rule is written from.
+    expect(row!.urls).toHaveLength(7);
   });
 
   it("keeps first-seen order and records hops it would NOT have moved", async () => {
     const { pause, csid } = await anArmedPause();
 
-    pause.record(csid, "https://shop.test/cart", noAction);
-    pause.record(csid, "https://payment.acme.test/", intoWork);
+    pause.record(csid, get("https://shop.test/cart"), noAction);
+    pause.record(csid, get("https://payment.acme.test/"), intoWork);
 
     // "Was it even needed?" is only answerable if the untouched hops are visible too —
     // the ones carrying a real target are then the ones that stand out.
-    expect(pause.snapshot().recordings[0]!.hosts).toEqual([
-      { host: "shop.test", hits: 1, wouldHave: "no action" },
-      { host: "payment.acme.test", hits: 1, wouldHave: "Work" },
+    expect(pause.snapshot().recordings[0]!.hosts.map((h) => [h.host, h.wouldHave])).toEqual([
+      ["shop.test", "no action"],
+      ["payment.acme.test", "Work"],
     ]);
   });
 
-  it("stores no path and no query — a checkout URL carries session tokens", async () => {
+  it("stores no query — a checkout URL's is where the session token is", async () => {
     const { browser, pause, csid } = await anArmedPause();
 
-    pause.record(csid, "https://payment.acme.test/confirm?session=SECRET123", intoTemporary);
+    pause.record(csid, get("https://payment.acme.test/confirm?session=SECRET123"), intoTemporary);
     await browser.settle();
 
-    expect(JSON.stringify(await browser.port.readStored(PAUSE_STORAGE_KEY))).not.toContain("SECRET123");
+    // The path IS stored now, because a rule is written at one. The query is not, and the
+    // pattern's trailing `*` is what lets a path-only rule still match the URL that carried
+    // it.
+    const stored = JSON.stringify(await browser.port.readStored(PAUSE_STORAGE_KEY));
+    expect(stored).not.toContain("SECRET123");
+    expect(stored).toContain("*://payment.acme.test/confirm*");
   });
 
   it("ignores a navigation in a container that is not armed", async () => {
     const { pause } = await anArmedPause();
 
-    pause.record("firefox-container-77", "https://elsewhere.test/", intoTemporary);
+    pause.record("firefox-container-77", get("https://elsewhere.test/"), intoTemporary);
 
     expect(pause.snapshot().recordings[0]!.hosts).toEqual([]);
   });
@@ -169,7 +266,7 @@ describe("pause — recording", () => {
   it("writes through when a new host appears, so a config save cannot destroy the record", async () => {
     const { browser, pause, csid } = await anArmedPause();
 
-    pause.record(csid, "https://payment.acme.test/", intoTemporary);
+    pause.record(csid, get("https://payment.acme.test/"), intoTemporary);
     await browser.settle();
 
     // A record held only in memory is lost with the background context, and the flow worth
@@ -197,7 +294,7 @@ describe("pause — the host cap", () => {
     const { pause, csid } = await anArmedPause();
 
     for (let i = 0; i < MAX_RECORDED_HOSTS + 3; i++) {
-      pause.record(csid, `https://host${i}.test/`, intoTemporary);
+      pause.record(csid, get(`https://host${i}.test/`), intoTemporary);
     }
 
     const recording = pause.snapshot().recordings[0]!;
@@ -210,7 +307,7 @@ describe("pause — the host cap", () => {
     const { pause, csid } = await anArmedPause();
 
     for (let i = 0; i < MAX_RECORDED_HOSTS + 3; i++) {
-      pause.record(csid, `https://host${i}.test/`, intoTemporary);
+      pause.record(csid, get(`https://host${i}.test/`), intoTemporary);
     }
 
     // Rules get written FROM this list. A reader who takes a capped list for the whole of
@@ -222,7 +319,7 @@ describe("pause — the host cap", () => {
   it("leaves `dropped` unset while the recording is under the cap", async () => {
     const { pause, csid } = await anArmedPause();
 
-    pause.record(csid, "https://payment.acme.test/", intoTemporary);
+    pause.record(csid, get("https://payment.acme.test/"), intoTemporary);
 
     expect(pause.snapshot().recordings[0]!.dropped).toBeUndefined();
   });
@@ -230,12 +327,12 @@ describe("pause — the host cap", () => {
   it("still counts hops on a host it already holds after the cap is reached", async () => {
     const { pause, csid } = await anArmedPause();
 
-    for (let i = 0; i < MAX_RECORDED_HOSTS + 1; i++) pause.record(csid, `https://host${i}.test/`, intoTemporary);
-    pause.record(csid, "https://host0.test/again", intoTemporary);
+    for (let i = 0; i < MAX_RECORDED_HOSTS + 1; i++) pause.record(csid, get(`https://host${i}.test/`), intoTemporary);
+    pause.record(csid, get("https://host0.test/again"), intoTemporary);
 
     // The cap is on distinct hosts, not on the recording: a bounce through a host already
     // named is still the evidence the user armed for.
-    expect(pause.snapshot().recordings[0]!.hosts[0]).toEqual({
+    expect(pause.snapshot().recordings[0]!.hosts[0]).toMatchObject({
       host: "host0.test",
       hits: 2,
       wouldHave: "a new temporary container",
@@ -245,16 +342,49 @@ describe("pause — the host cap", () => {
   it("writes nothing more once the cap is reached", async () => {
     const { browser, pause, csid } = await anArmedPause();
 
-    for (let i = 0; i < MAX_RECORDED_HOSTS; i++) pause.record(csid, `https://host${i}.test/`, intoTemporary);
+    for (let i = 0; i < MAX_RECORDED_HOSTS; i++) pause.record(csid, get(`https://host${i}.test/`), intoTemporary);
     await browser.settle();
     const before = JSON.stringify(await browser.port.readStored(PAUSE_STORAGE_KEY));
 
-    for (let i = 0; i < 50; i++) pause.record(csid, `https://overflow${i}.test/`, intoTemporary);
+    for (let i = 0; i < 50; i++) pause.record(csid, get(`https://overflow${i}.test/`), intoTemporary);
     await browser.settle();
 
     // The other half of what an abandoned recording cost: every new host was a write of the
     // whole pause state from the blocking path. Past the cap there is nothing new to write.
     expect(JSON.stringify(await browser.port.readStored(PAUSE_STORAGE_KEY))).toBe(before);
+  });
+
+  it("stops the URL list at its own cap, and counts what it did not record", async () => {
+    const { pause, csid } = await anArmedPause();
+
+    for (let i = 0; i < MAX_RECORDED_URLS_PER_HOST + 5; i++) {
+      pause.record(csid, get(`https://shop.test/product/${i}`), intoTemporary);
+    }
+
+    // A URL row grows with BROWSING, not with the handful of hops a flow makes, which is why
+    // its cap is far below the host one — and why it is counted rather than silent for the
+    // same reason `dropped` is on the recording.
+    const [row] = pause.snapshot().recordings[0]!.hosts;
+    expect(row!.urls).toHaveLength(MAX_RECORDED_URLS_PER_HOST);
+    expect(row!.dropped).toBe(5);
+    // The hops past it still count at the host, so `×N` does not lie either.
+    expect(row!.hits).toBe(MAX_RECORDED_URLS_PER_HOST + 5);
+  });
+
+  it("writes the URL cap through once, not on every hop past it", async () => {
+    const { browser, pause, csid } = await anArmedPause();
+    for (let i = 0; i <= MAX_RECORDED_URLS_PER_HOST; i++) {
+      pause.record(csid, get(`https://shop.test/product/${i}`), intoTemporary);
+    }
+    await browser.settle();
+    const before = browser.storageWrites;
+
+    for (let i = 0; i < 20; i++) pause.record(csid, get(`https://shop.test/past/${i}`), intoTemporary);
+    await browser.settle();
+
+    // Every write here comes off the blocking path. A capped recording that still wrote per
+    // navigation would cost the most in exactly the session that overran it.
+    expect(browser.storageWrites).toBe(before);
   });
 
   it("keeps a recording stored by a build that had no cap", async () => {
@@ -274,6 +404,47 @@ describe("pause — the host cap", () => {
     // Validating `dropped` as required would read every pre-cap recording as corrupt and
     // drop the user's history over a key they never had.
     expect(pause.snapshot().recordings[0]!.hosts[0]!.host).toBe("old.test");
+    // And a host row from before URL detail existed is UPGRADED rather than trusted as it
+    // stands: `record()` and the options page both read `urls`, and an undefined one would
+    // throw — in `record()`'s case inside the blocking handler, where a throw is a
+    // navigation that never completes.
+    expect(pause.snapshot().recordings[0]!.hosts[0]).toEqual({
+      host: "old.test",
+      hits: 4,
+      wouldHave: "no action",
+      urls: [],
+      dropped: 0,
+    });
+  });
+
+  it("drops a row of the wrong shape and keeps the rest of the recording", async () => {
+    const browser = aFakeBrowser();
+    await browser.port.writeStored(PAUSE_STORAGE_KEY, {
+      armed: [],
+      recordings: [
+        {
+          id: "1",
+          cookieStoreId: "firefox-container-1",
+          container: "tmp3",
+          startedAt: 1,
+          endedAt: null,
+          hosts: [
+            "not a host row",
+            { host: "pay.test", hits: 1, wouldHave: "no action", urls: [{ pattern: 7 }] },
+          ],
+        },
+        "not a recording",
+      ],
+    });
+    const pause = createPause({ port: browser.port, clock: aFakeClock().clock });
+
+    await pause.hydrate();
+
+    const [recording, ...rest] = pause.snapshot().recordings;
+    expect(rest).toEqual([]);
+    expect(recording!.hosts).toEqual([
+      { host: "pay.test", hits: 1, wouldHave: "no action", urls: [], dropped: 0 },
+    ]);
   });
 
   it("refuses a stored recording whose dropped count is not a number", async () => {
@@ -300,7 +471,11 @@ describe("pause — flushing the hit counts", () => {
     const pause = createPause({ port: browser.port, clock: aFakeClock().clock });
     await pause.arm(shop.cookieStoreId);
 
-    for (let i = 0; i < 3; i++) pause.record(shop.cookieStoreId, `https://login.ms.test/${i}`, intoTemporary);
+    // One URL, hit three times — a redirect loop rather than three pages. A different path
+    // each time is a new row, which IS new information and does write.
+    for (let i = 0; i < 3; i++) {
+      pause.record(shop.cookieStoreId, get(`https://login.ms.test/authorize?hop=${i}`), intoTemporary);
+    }
     await browser.settle();
     // Repeat hops deliberately do not write — seven storage writes from the blocking
     // path is the cost that buys. So the flush has to happen somewhere, and disarm is

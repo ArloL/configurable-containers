@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import fc from "fast-check";
-import { hostMatcher, matches, matcherToPatterns, patternMatcher, regexMatcher } from "../../src/matcher/matcher";
+import { hostMatcher, matches, matcherToPatterns, patternForUrl, patternMatcher, regexMatcher } from "../../src/matcher/matcher";
 
 // Generate simple lowercase ASCII hostnames of 2–4 labels.
 const label = fc.stringMatching(/^[a-z]{1,6}$/);
@@ -70,6 +70,29 @@ describe("matcher — properties across the three grammars", () => {
   // The totality property above, restated for the two grammars that reach an engine of
   // their own — a compiled path glob and a compiled regex. A throw inside the blocking
   // handler is not a wrong answer, it is a navigation that never completes.
+  // What the pause record promises when it offers a pattern for copying: paste it into
+  // `match:` unchanged and the navigation it was built from routes. Both halves are the
+  // property — that the parser accepts it at all, and that it then answers true — and
+  // neither is checkable from the string alone.
+  it("a pattern built from a URL parses, and matches that URL", () => {
+    fc.assert(fc.property(arbUrl, (url) => {
+      const pattern = patternForUrl(url);
+      expect(pattern).not.toBeNull();
+      expect(matches(patternMatcher(pattern!), url)).toBe(true);
+    }));
+  });
+
+  // And it never reaches past the host it came from. A widening here is a rule the user
+  // pasted believing it named one site.
+  it("a pattern built from a URL matches no other host", () => {
+    fc.assert(fc.property(arbUrl, arbUrl, (from, other) => {
+      const pattern = patternMatcher(patternForUrl(from)!);
+      if (matches(pattern, other)) {
+        expect(new URL(other).hostname.replace(/\.$/, "")).toBe(new URL(from).hostname.replace(/\.$/, ""));
+      }
+    }));
+  });
+
   it("totality: a pattern or regex matcher answers a boolean for any string", () => {
     const arbMatcher = fc.oneof(
       fc.constantFrom("*://*/*", "https://*.example.com/*", "http://example.com/work/*")

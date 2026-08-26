@@ -240,7 +240,11 @@ describe("restart — a paused container", () => {
     browser.existingTab({ url: "https://shop.test/", cookieStoreId: shop.cookieStoreId });
     let session = await startTheBackground(browser, clock.clock, workConfig());
     await session.pause.arm(shop.cookieStoreId);
-    session.pause.record(shop.cookieStoreId, "https://payment.acme.test/", { kind: "reopen", into: { kind: "temporary" } });
+    session.pause.record(
+      shop.cookieStoreId,
+      { url: "https://payment.acme.test/", method: "GET" },
+      { kind: "reopen", into: { kind: "temporary" } }
+    );
     await browser.settle();
 
     // Every config save calls runtime.reload(), and reviewing a recording is what leads to
@@ -252,7 +256,11 @@ describe("restart — a paused container", () => {
 
     // The dedupe set is rebuilt from the stored recording, so a host the previous session
     // already recorded must not come back as a second row.
-    session.pause.record(shop.cookieStoreId, "https://payment.acme.test/again", { kind: "reopen", into: { kind: "temporary" } });
+    session.pause.record(
+      shop.cookieStoreId,
+      { url: "https://payment.acme.test/again", method: "GET" },
+      { kind: "reopen", into: { kind: "temporary" } }
+    );
     expect(session.pause.snapshot().recordings[0]!.hosts).toHaveLength(1);
   });
 

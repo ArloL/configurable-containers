@@ -67,6 +67,12 @@ export interface MockPort {
   notifications: NotificationSpec[];
   registeredScripts: RegisterContentScriptDetails[];
   badgeText: string;
+  /**
+   * How many times storage.local was written. The pause records from inside the blocking
+   * handler, so what it does NOT write is part of its contract: counting is the only way to
+   * assert a write did not happen, since the value written is the same either way.
+   */
+  storageWrites: number;
 
   // The engine floats its notification rather than awaiting it, so a test asserting on
   // notifications must settle first.
@@ -144,6 +150,7 @@ export function aFakeBrowser(): MockPort {
   // storage.local. Lives on the BROWSER, not the background session — it is what a restart
   // is allowed to still find. Held as JSON text, as the real one is.
   const stored = new Map<string, string>();
+  let storageWrites = 0;
 
   function makeTab(props: TabProps): Tab {
     const id = ++tabId;
@@ -292,6 +299,7 @@ export function aFakeBrowser(): MockPort {
       return raw === undefined ? undefined : JSON.parse(raw);
     },
     async writeStored(key, value) {
+      storageWrites++;
       stored.set(key, JSON.stringify(value));
     },
   };
@@ -338,6 +346,10 @@ export function aFakeBrowser(): MockPort {
     // freeze a test's view at construction time.
     get badgeText() {
       return badgeText;
+    },
+    // A getter for the same reason.
+    get storageWrites() {
+      return storageWrites;
     },
     existingTab: makeTab,
     addContainerNamed: (props) => makeIdentity({ name: props.name, color: props.color ?? "blue", icon: props.icon ?? "circle" }),

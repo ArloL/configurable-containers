@@ -228,3 +228,51 @@ export function matcherToPatterns(m: Matcher): string[] {
       throw new Error(`a regex match has no URL-pattern form: ${JSON.stringify(m.source)}`);
   }
 }
+
+// The longest path a generated pattern carries. The result stays a pattern that MATCHES the
+// URL it came from — a prefix plus the trailing `*` — so truncation only widens it, and a
+// path longer than this is not one a rule is written at character by character. The cap is
+// here rather than at the caller because the record it feeds is written to disk on every
+// navigation of an armed container, and an unbounded path is an unbounded row.
+export const MAX_PATTERN_PATH = 200;
+
+// The match pattern for ONE observed URL: its host and path, and nothing else. `null` for
+// anything `matches()` would answer false for anyway (a non-http(s) url) and for a host no
+// pattern can carry (an IPv6 literal — `canonicalHost` refuses the colons), so what this
+// returns always parses back through `patternMatcher`.
+//
+// Four narrowings, each of which the obvious version gets wrong:
+//
+//   - **`*://`, not the scheme seen.** HSTS rewrites the scheme before webRequest is told
+//     about the navigation, so which one was observed is an accident of when the upgrade
+//     landed. `*` is http+https, which is what the shorthand means too.
+//   - **The host loses its port.** A match pattern's host cannot carry one, and CC does not
+//     match on it either: `https://company.com:8443/` matches `company.com`.
+//   - **A trailing `*`, which is the QUERY.** A pattern's path is anchored at both ends, so
+//     `/login/oauth/authorize` alone does not answer `/login/oauth/authorize?client_id=…`,
+//     and that is every OAuth entry point there is.
+//   - **The query itself is dropped**, never pasted into the pattern: it is where session
+//     tokens and authorization codes live, and this text is offered for copying out of a
+//     record written during a checkout.
+//
+// A literal `*` in the path becomes a wildcard, since a match pattern has no escape for one.
+// That widens the result at that host and cannot be prevented — which is why the record
+// shows the pattern it copies rather than deriving it out of sight.
+export function patternForUrl(url: string): string | null {
+  const u = httpUrl(url);
+  if (u === null) return null;
+  // Read outside the try, which is what keeps the guard above load-bearing: fold this into
+  // it and a null `u` throws INSIDE the catch's reach, so the two failures — "not an http
+  // url" and "not a hostname a pattern can carry" — become indistinguishable and the guard
+  // can be deleted without a test noticing.
+  const path = u.pathname.slice(0, MAX_PATTERN_PATH);
+  let host: string;
+  try {
+    // `canonicalHost` strips the trailing dot itself — the URL parser keeps it in
+    // `hostname`, and `https://x.com./` and `https://x.com/` are the same site.
+    host = canonicalHost(u.hostname);
+  } catch {
+    return null;
+  }
+  return `*://${host}${path}*`;
+}

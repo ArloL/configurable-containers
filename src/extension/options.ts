@@ -173,29 +173,32 @@ function renderRecording(recording: PauseStatusResponse["recordings"][number]): 
   box.append(head);
 
   for (const row of recording.hosts) {
-    const line = document.createElement("div");
-    line.className = "cc-pause-row";
-
-    const copy = document.createElement("button");
-    copy.dataset.ccHost = row.host;
-    copy.textContent = "Copy";
     // The host, and nothing else. Choosing between inherit / ignore / open is a judgement
     // about what a domain IS to the user, which CC cannot make. This removes the typo, not
-    // the decision.
-    copy.addEventListener("click", () => void navigator.clipboard.writeText(row.host));
+    // the decision. The same holds one level down: a URL row copies a `match:` value, never
+    // a rule.
+    box.append(copyRow("cc-pause-host", row.host, `${row.host} ×${row.hits} — ${row.wouldHave}`));
 
-    const label = document.createElement("span");
-    label.className = "cc-pause-host";
-    label.textContent = ` ${row.host} ×${row.hits} — ${row.wouldHave}`;
+    for (const url of row.urls) {
+      // The methods are shown unconditionally. "GET" on most rows is the background against
+      // which the POST stands out, and a rule written at a POST can only be inherit/ignore —
+      // `tabs.create` issues a GET, so an `open:` there is declined (F9) however right it is.
+      const methods = url.methods.join("/");
+      box.append(
+        copyRow("cc-pause-url", url.pattern, `${url.pattern} ×${url.hits} ${methods} — ${url.wouldHave}`)
+      );
+    }
 
-    line.append(copy, label);
-    box.append(line);
+    // The URL list under a host is capped too, and counted for the same reason as the host
+    // list below: rules are written from these rows, so a reader has to know when they are
+    // not the whole of what CC saw at that host.
+    if (row.dropped) {
+      box.append(note(`… and ${plural(row.dropped, "more URL")} at ${row.host} seen but not recorded — the per-host cap was reached.`));
+    }
   }
 
   if (recording.hosts.length === 0) {
-    const empty = document.createElement("p");
-    empty.textContent = "Nothing seen yet.";
-    box.append(empty);
+    box.append(note("Nothing seen yet."));
   }
 
   // The host list is capped (MAX_RECORDED_HOSTS in src/engine/pause.ts). Saying so is the
@@ -204,12 +207,39 @@ function renderRecording(recording: PauseStatusResponse["recordings"][number]): 
   // here on purpose — importing it would pull the background's pause module, and with it
   // the engine, into the options bundle.
   if (recording.dropped) {
-    const more = document.createElement("p");
-    more.className = "cc-pause-host";
-    more.textContent = `… and ${recording.dropped} more host${recording.dropped === 1 ? "" : "s"} seen but not recorded — the per-recording cap was reached.`;
-    box.append(more);
+    box.append(note(`… and ${plural(recording.dropped, "more host")} seen but not recorded — the per-recording cap was reached.`));
   }
   return box;
+}
+
+function plural(n: number, noun: string): string {
+  return `${n} ${noun}${n === 1 ? "" : "s"}`;
+}
+
+// One click-to-copy line. What it copies is the first thing its label says, so the button
+// and the text next to it can never come to mean different things.
+function copyRow(className: string, copied: string, label: string): HTMLElement {
+  const line = document.createElement("div");
+  line.className = "cc-pause-row";
+
+  const copy = document.createElement("button");
+  copy.dataset.ccCopy = copied;
+  copy.textContent = "Copy";
+  copy.addEventListener("click", () => void navigator.clipboard.writeText(copied));
+
+  const text = document.createElement("span");
+  text.className = className;
+  text.textContent = ` ${label}`;
+
+  line.append(copy, text);
+  return line;
+}
+
+function note(text: string): HTMLElement {
+  const p = document.createElement("p");
+  p.className = "cc-pause-note";
+  p.textContent = text;
+  return p;
 }
 
 async function renderPause(): Promise<void> {

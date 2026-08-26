@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { hostMatcher, matches, matcherToPatterns, patternMatcher, regexMatcher } from "../../src/matcher/matcher";
+import {
+  hostMatcher,
+  matches,
+  matcherToPatterns,
+  patternForUrl,
+  patternMatcher,
+  regexMatcher,
+  MAX_PATTERN_PATH,
+} from "../../src/matcher/matcher";
 
 const bandcamp = hostMatcher("bandcamp.com");
 const mailGoogle = hostMatcher("mail.google.com");
@@ -280,5 +288,69 @@ describe("regexMatcher / matches — the escape hatch", () => {
     expect(() => regexMatcher("(")).toThrow(/not a valid regular expression/);
     expect(() => regexMatcher("[z-a]")).toThrow(/not a valid regular expression/);
     expect(() => regexMatcher("")).toThrow(/not a valid regular expression: empty/);
+  });
+});
+
+// The other direction: a URL the pause recorder saw, restated as the `match:` value that
+// would route it. The record hands the result straight to the user's clipboard, so what it
+// produces has to be a pattern the parser accepts and one that answers true for the URL it
+// came from — the two properties the props file fuzzes.
+describe("patternForUrl", () => {
+  it("keeps the host and the path, which is the whole point of recording a URL", () => {
+    // The case this exists for: GitHub's OAuth hand-off has to be routed differently from
+    // the rest of github.com, and a record naming only the host cannot say so.
+    expect(patternForUrl("https://github.com/login/oauth/authorize?client_id=abc&state=xyz"))
+      .toBe("*://github.com/login/oauth/authorize*");
+  });
+
+  it("drops the query, which is where the token in a recorded checkout lives", () => {
+    expect(patternForUrl("https://pay.test/confirm?session=SECRET123")).toBe("*://pay.test/confirm*");
+  });
+
+  it("ends in a wildcard, so the pattern still answers the URL's own query", () => {
+    // A pattern's path is anchored at BOTH ends. Without the trailing `*` the pattern built
+    // from an OAuth entry point would not match that entry point.
+    const url = "https://github.com/login/oauth/authorize?client_id=abc";
+    expect(matches(patternMatcher(patternForUrl(url)!), url)).toBe(true);
+  });
+
+  it("says `*://` rather than the scheme it saw, because HSTS rewrites that before we look", () => {
+    expect(patternForUrl("http://example.com/x")).toBe("*://example.com/x*");
+    expect(patternForUrl("https://example.com/x")).toBe("*://example.com/x*");
+  });
+
+  it("canonicalizes the host and drops the port, which no pattern can carry", () => {
+    expect(patternForUrl("https://BandCamp.COM./a")).toBe("*://bandcamp.com/a*");
+    expect(patternForUrl("https://münchen.de/a")).toBe("*://xn--mnchen-3ya.de/a*");
+    // A port is not part of a host here either: `https://company.com:8443/` matches
+    // `company.com`, so a pattern naming the port would be narrower than the rule it feeds.
+    expect(patternForUrl("http://localhost:8443/a")).toBe("*://localhost/a*");
+  });
+
+  it("gives a bare URL the root path, not an empty one", () => {
+    expect(patternForUrl("https://example.com")).toBe("*://example.com/*");
+  });
+
+  it("answers null for anything routing never sees", () => {
+    expect(patternForUrl("about:blank")).toBeNull();
+    expect(patternForUrl("moz-extension://abc/options.html")).toBeNull();
+    expect(patternForUrl("not a url")).toBeNull();
+  });
+
+  it("answers null for a host no pattern can name, rather than a string that will not parse", () => {
+    // An IPv6 literal carries colons, which the pattern grammar's host cannot. Returning
+    // the string anyway would put text in the record that the config editor then rejects.
+    expect(patternForUrl("http://[::1]/x")).toBeNull();
+  });
+
+  it("truncates a very long path, and the result still matches the URL it came from", () => {
+    const path = "/" + "a".repeat(MAX_PATTERN_PATH * 2);
+    const url = `https://example.com${path}`;
+    const pattern = patternForUrl(url)!;
+
+    // A prefix plus the trailing `*`: wider than the URL, never narrower, and bounded —
+    // the record it feeds is written to disk on every navigation of an armed container.
+    expect(pattern).toBe(`*://example.com${path.slice(0, MAX_PATTERN_PATH)}*`);
+    expect(matches(patternMatcher(pattern), url)).toBe(true);
   });
 });
