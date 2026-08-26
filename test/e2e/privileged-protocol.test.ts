@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { launch, navigateToContainerTab, openExtensionPage, ccExtensionUrl, type Session } from "../../harness/firefox";
 import type { Page } from "../../harness/browser/index";
+import "../../harness/browser/matchers";
 
 const OPTIONS_URL = ccExtensionUrl("options.html");
 
@@ -39,7 +40,12 @@ describe("what a privileged page answers (real Firefox)", () => {
     expect(await save.getAttribute("id")).toBe("cc-save"); // Get Element Attribute
     expect(await save.textContent()).toContain("Save"); // Get Element Property
     expect(await save.innerText()).toContain("Save"); // Get Element Text
-    expect(await options.locator("#cc-config").inputValue()).not.toBe(""); // a textarea's value
+    // A textarea's value — through the matcher, because this is the one read here that
+    // races the PAGE rather than the protocol: the editor fills #cc-config from
+    // storage.local after it renders, measured empty on one first read in twelve on
+    // 140 ESR. `toHaveValue` polls Get Element Property, which is the command this case
+    // exists to exercise either way.
+    await expect(options.locator("#cc-config")).not.toHaveValue("");
   });
 
   // Deliberately NOT asserted here: that an injected script is refused. Measured on
