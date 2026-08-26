@@ -117,6 +117,29 @@ describe("retrying matchers", () => {
     expect(reads).toBe(1);
   });
 
+  // The reader is given a zero budget because the waiting is the MATCHER's job, so it gives
+  // up the instant the element is not resolvable. Reading that as a verdict means a matcher
+  // that waits for an element's text but not for the element — and a page reached by url is
+  // routinely there before its document is. It cost a red run in CI on #cc-sync.
+  it("waits for the element itself, not only for what it says", async () => {
+    const locator = locatorOn({
+      elements: (n) => (n < 3 ? [] : [anElement({ getText: async () => "Saved" })]),
+    });
+    await expect(locator).toHaveText("Saved", { timeout: 5_000 });
+  });
+
+  // …and an element that never turns up is a failure in BOTH directions. Reporting it as
+  // "the condition did not hold" would make `.not` pass for a page that rendered nothing.
+  it("fails an element that never appears, negated or not", async () => {
+    const missing = () => locatorOn({ elements: () => [] });
+    await expect(expect(missing()).toHaveText("Saved", { timeout: 0 })).rejects.toThrow(
+      /no element matched/,
+    );
+    await expect(expect(missing()).not.toHaveText("", { timeout: 0 })).rejects.toThrow(
+      /no element matched/,
+    );
+  });
+
   // "expected Saved, got Saving…" is the whole diagnosis; a matcher that only says it
   // timed out has thrown the useful half away.
   it("reports what it last saw when it gives up", async () => {

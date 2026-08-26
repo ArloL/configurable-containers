@@ -28,6 +28,11 @@ const RETRYABLE = [
   seleniumError.ElementClickInterceptedError,
 ];
 
+// Thrown when a poll runs out of budget, and only then. A matcher polling a locator has to
+// tell "the element is not in the document YET" from "the driver is gone", and the two
+// arrive at the same `catch`.
+export class PollTimeoutError extends Error {}
+
 export function isRetryable(e: unknown): boolean {
   return RETRYABLE.some((kind) => e instanceof kind);
 }
@@ -46,7 +51,7 @@ export async function poll<T>(opts: PollOpts, attempt: () => Promise<T | typeof 
     }
     // Checked after the attempt, so a zero timeout still tries once.
     if (Date.now() >= deadline) {
-      throw new Error(
+      throw new PollTimeoutError(
         `${opts.what} timed out after ${Date.now() - started}ms\n${await opts.diagnose()}`,
       );
     }
