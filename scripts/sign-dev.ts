@@ -76,9 +76,10 @@ export function signArgs(
     "unlisted",
     "--upload-source-code",
     sourceArchive,
-    // Reviewer notes only — an unlisted add-on has no listing page. They name the version
-    // and BUILD_TIMESTAMP this build was made against, and the --dev flag without which a
-    // rebuild produces the listed identity instead.
+    // The same listing copy the listed channel gets, plus reviewer notes naming this
+    // build's version, its BUILD_TIMESTAMP and the --dev flag without which a rebuild
+    // produces the listed identity instead. The copy shows nowhere public on an unlisted
+    // add-on, which is the point: it is where the copy can be read before it goes out.
     "--amo-metadata",
     metadataPath,
   ];
