@@ -314,6 +314,19 @@ reasonable-looking change wrong**.
   follows it; the other order leaves the two disagreeing until the browser restarts, which is
   the silent divergence this replaced.
 
+  **Everything that touches the REGISTRATIONS goes through the one queue** (`enqueue`), not
+  just `applyStored`. `scripts.apply` unregisters what the previous one registered, so two
+  in flight interleave into unregister, unregister, register, register — every snippet
+  registered twice and injected twice, for the life of the browser, and the first handle
+  leaked with no one holding it. Three ways in, not two: a double-clicked Save, a Save
+  meeting a config-sync adoption, and a Save meeting the STARTUP injection —
+  `background.ts`'s tail calls `injectScripts()`, and a `cc-config-apply` message does not
+  wait for the tail. That third one is reachable because a config that does not parse makes
+  startup open the editor. `injectScripts` registers the config already in memory rather
+  than re-reading storage, which is why it is not simply `applyStored`, and it deliberately
+  does NOT swallow a registration failure the way `applyOnce` does — the tail is its only
+  caller. Hence `enqueue`'s `then(work, work)`: a rejected link must not strand the queue.
+
   The reason it is not `runtime.reload()` any more: that is the only step of a save nothing
   can observe, and on a **temporarily installed** extension on 140.14.0esr it never comes
   back — the old background goes on routing by the old config while the editor says "Saved".
@@ -577,6 +590,15 @@ reasonable-looking change wrong**.
   redirector-closer) had their first listener silently dropped, so pause's disarm-on-empty
   and auto-temp's bug-1586612 path were unwired in every composed-background case. Never
   relax these.
+
+  **What it does NOT model is latency, and that can make a case pass for the wrong reason.**
+  Everything here resolves on the microtask queue, so two async paths interleave in whatever
+  fixed order their await counts give them: `applyOnce` awaits `readStored` before touching
+  the registrations and `injectScripts` does not, so the injection always won and a case
+  written on that timing passed with the serialisation removed. Firefox makes no such
+  promise — these are IPC round trips. `stallScriptRegistration()` holds registration open
+  so a case can put both callers past their unregister at once and STATE the interleaving it
+  is about. Reach for it whenever a case is about two things overlapping.
 - **`test/engine/restart.ts` retires a dead session TWICE — `aSessionClock` for its
   timers, `aSessionPort` for its listeners** — because `mock-port` is additive like
   Firefox, so re-wiring *adds* handlers rather than replacing them. Without the clock

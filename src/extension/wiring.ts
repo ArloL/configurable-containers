@@ -160,12 +160,23 @@ export function wireBackground(opts: WiringOptions): Background {
   // Applies run one at a time. They are not reentrant: `scripts.apply` unregisters what the
   // previous one registered, so two in flight can interleave into unregister, unregister,
   // register, register — every snippet registered twice, injected twice, forever. Two are
-  // reachable from a double-clicked Save, or from a Save meeting an adoption.
+  // reachable from a double-clicked Save, from a Save meeting an adoption, and from a Save
+  // meeting the STARTUP injection — `background.ts`'s tail applies the config it loaded, and
+  // a `cc-config-apply` message does not wait for that tail. Small window (the editor has to
+  // be open already, which is what a config that does not parse arranges) and it self-heals
+  // on the next apply, but it costs nothing to close and the queue is the thing that closes
+  // it. So the queue takes any work that touches the registrations, not only `applyOnce`.
   let applying: Promise<ConfigApplyResponse> = Promise.resolve({});
 
-  function applyStored(): Promise<ConfigApplyResponse> {
-    applying = applying.then(applyOnce, applyOnce);
+  function enqueue(work: () => Promise<ConfigApplyResponse>): Promise<ConfigApplyResponse> {
+    // `then(work, work)` on both settlements: a rejected link must not strand the queue, and
+    // one apply's failure is not the next one's answer.
+    applying = applying.then(work, work);
     return applying;
+  }
+
+  function applyStored(): Promise<ConfigApplyResponse> {
+    return enqueue(applyOnce);
   }
 
   async function applyOnce(): Promise<ConfigApplyResponse> {
@@ -205,8 +216,14 @@ export function wireBackground(opts: WiringOptions): Background {
     async resumeTmpSuffix() {
       n = Math.max(n, highestTmpSuffix((await port.queryIdentities()).map((c) => c.name)));
     },
+    // The config `background.ts` loaded is already in `config` (through `useConfig`), so
+    // this registers rather than re-reading storage — but it goes through the same queue,
+    // because what must not overlap is the REGISTRATION work, whoever asked for it.
     async injectScripts() {
-      await scripts.apply(config);
+      await enqueue(async () => {
+        await scripts.apply(config);
+        return {};
+      });
     },
     engine,
     pause,

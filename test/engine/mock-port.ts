@@ -105,6 +105,18 @@ export interface MockPort {
   tabCreationFails(on: boolean): void;
   /** Firefox rejects contentScripts.register — a bad match pattern, a missing permission. */
   scriptRegistrationFails(message: string | null): void;
+  /**
+   * Holds every `registerContentScript` open until the returned function is called.
+   *
+   * Registration is the one call in this mock whose LATENCY is load-bearing. Everything
+   * here resolves on the microtask queue, so two apply paths interleave in whatever fixed
+   * order their await counts happen to give them — and `applyOnce` has one more await
+   * (`readStored`) than the startup injection does, so the injection always won the race
+   * and a test written on that timing passed with the serialisation removed. In Firefox
+   * these are real IPC round trips with no such guarantee. Stalling makes the interleaving
+   * something a case states rather than inherits.
+   */
+  stallScriptRegistration(): () => void;
   activeTabIs(tab: Tab): void;
   cookieIn(storeId: string, name: string): Cookie | null;
 }
@@ -125,6 +137,7 @@ export function aFakeBrowser(): MockPort {
   let macThrows = false;
   let createTabThrows = false;
   let registerScriptThrows: string | null = null;
+  let registrationGate: Promise<void> | null = null;
   // Listeners are LISTS, one per event, because `browser.*.addListener` is additive: Firefox
   // calls every listener, in registration order. The mock held one slot per event until
   // 2026-08-24, and it cost what a "last registration wins" mock would be expected to cost —
@@ -260,6 +273,9 @@ export function aFakeBrowser(): MockPort {
       return cookieStore.get(details.storeId)?.get(details.name) ?? null;
     },
     async registerContentScript(details: RegisterContentScriptDetails): Promise<RegisteredContentScript> {
+      // Before the throw and before the push: a caller stalled here has ALREADY finished
+      // unregistering, which is the half of the window a second apply can walk into.
+      if (registrationGate) await registrationGate;
       if (registerScriptThrows !== null) throw new Error(registerScriptThrows);
       registeredScripts.push(details);
       // Removed by identity rather than by value: a config may name the same snippet twice,
@@ -374,6 +390,14 @@ export function aFakeBrowser(): MockPort {
     macIsAbsent: (on) => void (macThrows = on),
     tabCreationFails: (on) => void (createTabThrows = on),
     scriptRegistrationFails: (message) => void (registerScriptThrows = message),
+    stallScriptRegistration() {
+      let release: () => void = () => {};
+      registrationGate = new Promise<void>((resolve) => (release = resolve));
+      return () => {
+        registrationGate = null;
+        release();
+      };
+    },
     cookieIn: (storeId, name) => cookieStore.get(storeId)?.get(name) ?? null,
     async receivesMessage(msg, from) {
       if (messageHs.length === 0) throw new Error("no onMessage handler registered");
