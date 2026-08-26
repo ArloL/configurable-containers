@@ -724,6 +724,21 @@ reasonable-looking change wrong**.
   bad paragraph. And an **unknown `{{…}}` throws** rather than shipping the braces — the
   hand-pasted notes this replaced told a reviewer to rebuild at `<version>` with
   `BUILD_TIMESTAMP=<value>`, which nobody substituted and which no checksum could match.
+
+  Because that upload happens on **every push to main**, prose in `amo/` that has gone
+  stale is drift that gets PUBLISHED rather than merely sitting in the repo. Two claims in
+  `reviewer-notes.txt` are therefore pinned by `test/extension/amo-metadata.test.ts`
+  against what they describe. **The PERMISSIONS bullets are an exact set against
+  `extensions/cc/manifest.json`** — `test/fitness/manifest.test.ts` already stops a
+  permission arriving without a caller, but nothing stopped one arriving without an
+  explanation, and `webNavigation` and `notifications` had both done exactly that. It is
+  exact in the other direction too: a bullet outliving its permission tells a reviewer the
+  add-on asks for something it does not. The parser reads the `- <names> — <why>` heads of
+  the section under the bare `PERMISSIONS` heading, and **throws** when that heading or a
+  bullet's em dash is missing, because a parser that quietly found nothing would compare
+  two empty sets and pass. **And the Node version is the one the workflows really set** —
+  the notes said "Needs Node 22+" while every workflow said 24, `package.json` declares no
+  `engines`, and the whole point of that paragraph is a reviewer reproducing the checksum.
 - **Never derive a dev version from the clock** — `YYMM.DD.HHMM` outranks every
   `YYMM.0.<micro>` for the rest of the month, so one local build would own the update
   channel. Nothing enforces this; it is a rule for whoever sets `VERSION`.
