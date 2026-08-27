@@ -189,79 +189,118 @@ export function isRed(verdict: Verdict): boolean {
 const DEFAULT_TARGET = "test/e2e";
 const DEFAULT_RUNS = 3;
 
-export function report(verdict: Verdict, runs: number, target: string = DEFAULT_TARGET): string {
-  const lines: string[] = [];
-  // Said before anything else, because everything below it is a summary of no evidence.
-  if (verdict.runSucceeded.length < 2) {
-    lines.push(`NOTHING WAS COMPARED: ${verdict.runSucceeded.length} run(s).`);
-    lines.push("A comparison needs two runs to be one. Nothing here agreed, because there");
-    lines.push("was nothing for it to agree with. Check FLAKE_RUNS: an empty value and a");
-    lines.push("typo both read as a loop that never executes.");
-  }
-  if (verdict.flaky.length > 0) {
-    lines.push(`${verdict.flaky.length} case(s) did not answer the same way across ${runs} runs:`);
-    for (const c of verdict.flaky) {
-      lines.push(`  ${c.name}`);
-      lines.push(`    ${c.statuses.map((s) => s ?? "never ran").join(" → ")}`);
-      // The orders those answers came from. Without them a disagreement that is really an
-      // ORDER dependence — the kind shuffling exists to expose — names no order, and the
-      // reader is left bisecting a suite by hand.
-      if (verdict.seeds.some((seed) => seed !== undefined)) {
-        lines.push(`    seeds ${verdict.seeds.map((seed) => seed ?? "?").join(" → ")}`);
-        // The first run that did not pass: the one worth replaying, and the only one of
-        // them that is a question rather than a control.
-        const odd = c.statuses.findIndex((s) => s !== "passed");
-        const seed = verdict.seeds[odd === -1 ? 0 : odd];
-        if (seed !== undefined) {
-          lines.push(`    replay that order: npx vitest run ${target} --sequence.seed=${seed}`);
-        }
-      }
-    }
-    lines.push("");
+// `report` is a sequence of independent sections, and each one below answers a question of
+// its own: what the reader is looking at, what disagreed, what did not run, what died as a
+// whole, what is simply red, and what was slow. They are separate functions because that is
+// what they are — nothing here reads a decision another section made.
+
+// Said before anything else, because everything below it is a summary of no evidence.
+function nothingCompared(verdict: Verdict): string[] {
+  if (verdict.runSucceeded.length >= 2) return [];
+  return [
+    `NOTHING WAS COMPARED: ${verdict.runSucceeded.length} run(s).`,
+    "A comparison needs two runs to be one. Nothing here agreed, because there",
+    "was nothing for it to agree with. Check FLAKE_RUNS: an empty value and a",
+    "typo both read as a loop that never executes.",
+  ];
+}
+
+// The orders a disagreement came from. Without them a disagreement that is really an ORDER
+// dependence — the kind shuffling exists to expose — names no order, and the reader is left
+// bisecting a suite by hand.
+function seedLines(verdict: Verdict, c: CaseHistory, target: string): string[] {
+  if (!verdict.seeds.some((seed) => seed !== undefined)) return [];
+  const lines = [`    seeds ${verdict.seeds.map((seed) => seed ?? "?").join(" → ")}`];
+  // The first run that did not pass: the one worth replaying, and the only one of them
+  // that is a question rather than a control.
+  const odd = c.statuses.findIndex((s) => s !== "passed");
+  const seed = verdict.seeds[odd === -1 ? 0 : odd];
+  if (seed !== undefined) lines.push(`    replay that order: npx vitest run ${target} --sequence.seed=${seed}`);
+  return lines;
+}
+
+function disagreements(verdict: Verdict, runs: number, target: string): string[] {
+  if (verdict.flaky.length === 0) return [];
+  return [
+    `${verdict.flaky.length} case(s) did not answer the same way across ${runs} runs:`,
+    ...verdict.flaky.flatMap((c) => [
+      `  ${c.name}`,
+      `    ${c.statuses.map((s) => s ?? "never ran").join(" → ")}`,
+      ...seedLines(verdict, c, target),
+    ]),
+    "",
     // Said here rather than in a comment nobody reads at 3am: the fix is the case, not
     // the runner. Every "flaky" case in this suite so far has been a real race — a probe
     // reply beating a navigation commit, an assertion made before the probe reported.
-    lines.push("A disagreement is a race in the case, not noise to be retried away.");
-    lines.push("See TESTING.md's e2e section for the ones this harness has already had.");
-  }
-  for (const i of verdict.emptyRuns) {
-    lines.push("");
-    lines.push(`Run ${i + 1} of ${runs} reported NO CASES AT ALL.`);
-    lines.push("Agreement over nothing is not agreement. Look at that run's own output:");
-    lines.push("nothing here can tell you why a suite did not collect.");
-  }
+    "A disagreement is a race in the case, not noise to be retried away.",
+    "See TESTING.md's e2e section for the ones this harness has already had.",
+  ];
+}
 
+function collectedNothing(verdict: Verdict, runs: number): string[] {
+  return verdict.emptyRuns.flatMap((i) => [
+    "",
+    `Run ${i + 1} of ${runs} reported NO CASES AT ALL.`,
+    "Agreement over nothing is not agreement. Look at that run's own output:",
+    "nothing here can tell you why a suite did not collect.",
+  ]);
+}
+
+// A run that failed as a whole while its cases agreed. The two branches are one question —
+// did EVERY run die, or only some — and they are here together because the first is the
+// shape that used to read green.
+function diedAsAWhole(verdict: Verdict, runs: number): string[] {
   const broken = verdict.runSucceeded.flatMap((ok, i) => (ok ? [] : [i]));
   // `broken.length > 0` as well as `=== runs`: over zero runs the two are equal and empty,
   // and the dead-`beforeAll` speech below would be printed about runs that never happened.
-  if (broken.length > 0 && broken.length === runs && verdict.flaky.length === 0 && verdict.failing.length === 0) {
-    lines.push("");
-    lines.push(`All ${runs} runs failed as a whole, and NO CASE says why.`);
-    // The shape this exists for, spelled out because it is the one that used to read green.
-    lines.push("That is what a dead `beforeAll` looks like: it records the cases it owns as");
-    lines.push('"skipped", which is what a deliberate it.skip looks like too — so every run');
-    lines.push("agrees, case by case, while none of them ran. `launch()` is a beforeAll in");
-    lines.push("every e2e file: no Firefox, no geckodriver, no harness server, no mac/");
-    lines.push("checkout. Read the first run's output, not this summary.");
-  } else if (broken.length > 0 && verdict.flaky.length === 0) {
-    lines.push("");
-    lines.push(
-      `${broken.length} of ${runs} runs failed as a whole while every case agreed: ` +
-        `run(s) ${broken.map((i) => i + 1).join(", ")}.`,
-    );
-    lines.push("A hook or a teardown that dies SOMETIMES — a race no per-case comparison");
-    lines.push("can see, because the cases it takes down are recorded as skipped.");
+  if (broken.length === 0 || verdict.flaky.length > 0) return [];
+  if (broken.length === runs && verdict.failing.length === 0) {
+    return [
+      "",
+      `All ${runs} runs failed as a whole, and NO CASE says why.`,
+      // The shape this exists for, spelled out because it is the one that used to read green.
+      "That is what a dead `beforeAll` looks like: it records the cases it owns as",
+      '"skipped", which is what a deliberate it.skip looks like too — so every run',
+      "agrees, case by case, while none of them ran. `launch()` is a beforeAll in",
+      "every e2e file: no Firefox, no geckodriver, no harness server, no mac/",
+      "checkout. Read the first run's output, not this summary.",
+    ];
   }
+  return [
+    "",
+    `${broken.length} of ${runs} runs failed as a whole while every case agreed: ` +
+      `run(s) ${broken.map((i) => i + 1).join(", ")}.`,
+    "A hook or a teardown that dies SOMETIMES — a race no per-case comparison",
+    "can see, because the cases it takes down are recorded as skipped.",
+  ];
+}
 
-  if (verdict.failing.length > 0) {
-    lines.push("");
-    lines.push(`${verdict.failing.length} case(s) failed in every run — red, not flaky:`);
-    for (const name of verdict.failing) lines.push(`  ${name}`);
-  }
-  lines.push("");
-  lines.push("Slowest cases by their worst run:");
-  for (const c of verdict.slowest) lines.push(`  ${(c.worstMs / 1000).toFixed(1)}s  ${c.name}`);
-  return lines.join("\n");
+function red(verdict: Verdict): string[] {
+  if (verdict.failing.length === 0) return [];
+  return [
+    "",
+    `${verdict.failing.length} case(s) failed in every run — red, not flaky:`,
+    ...verdict.failing.map((name) => `  ${name}`),
+  ];
+}
+
+function slowest(verdict: Verdict): string[] {
+  return [
+    "",
+    "Slowest cases by their worst run:",
+    ...verdict.slowest.map((c) => `  ${(c.worstMs / 1000).toFixed(1)}s  ${c.name}`),
+  ];
+}
+
+export function report(verdict: Verdict, runs: number, target: string = DEFAULT_TARGET): string {
+  return [
+    ...nothingCompared(verdict),
+    ...disagreements(verdict, runs, target),
+    ...collectedNothing(verdict, runs),
+    ...diedAsAWhole(verdict, runs),
+    ...red(verdict),
+    ...slowest(verdict),
+  ].join("\n");
 }
 
 // --- the part that needs a browser -------------------------------------------------
