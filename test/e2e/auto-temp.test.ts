@@ -133,11 +133,15 @@ describe("auto-temp startup sweep (real Firefox)", () => {
     const url = `http://work.example:${new URL(firefox.serverUrl).port}/?cb=sweep-${Date.now()}`;
     const observer = await navigateToContainerTab(firefox.browser, url);
 
-    await awaitTab(
+    const swept = await awaitTab(
       observer.page,
       (tab) => tab.url === "about:newtab" && tab.container.startsWith("tmp"),
       10_000,
     );
+    // The prefix is what the wait can look for; the digits are what make the container one
+    // of ours. `tmpwork` is a name a user's own config can open, and a sweep that landed
+    // the new-tab page in one would satisfy the poll above and mean the opposite.
+    expect(swept.container).toMatch(/^tmp\d+$/);
     await awaitTabs(
       observer.page,
       (tabs) => !tabs.some((tab) => tab.url === "about:newtab" && tab.cookieStoreId === "firefox-default"),

@@ -38,6 +38,10 @@ describe("redirector auto-close (real Firefox, CC + probe)", () => {
     // redirect.example resolves to `stay`, so the tab loads where it was opened and keeps
     // its id — and this reply is itself the observation that it was ever there.
     const opened = await openTab(relay, `http://redirect.example:${serverPort}/`);
+    // The id is what the wait watches leave. Without one its predicate holds of any tab
+    // list at all, so the case would pass green on a tab that never opened — which is the
+    // failure the file comment above says this reply exists to rule out.
+    expect(opened.id).toBeGreaterThan(0);
 
     await awaitTabs(relay, (tabs) => !tabs.some((tab) => tab.id === opened.id));
   });
