@@ -9,10 +9,12 @@ import {
   type PauseState,
 } from "../../src/engine/pause";
 import type { Decision } from "../../src/resolver/types";
+import type { PauseStatusResponse } from "../../src/extension/pause-protocol";
 
 const intoTemporary: Decision = { kind: "reopen", into: { kind: "temporary" } };
 const intoWork: Decision = { kind: "reopen", into: { kind: "permanent", name: "Work" } };
 const noAction: Decision = { kind: "stay" };
+const intoDefault: Decision = { kind: "reopen", into: { kind: "default" } };
 
 // A top-level navigation as the engine hands it over. Almost every hop is a GET; a POST is
 // the one no rule can move, which is why the record keeps the method at all.
@@ -97,8 +99,8 @@ describe("pause — arming", () => {
 
     await pause.hydrate();
 
-    // Every config save calls runtime.reload(), so this is the ordinary path, not a
-    // crash-recovery one.
+    // The armed set cannot be read inside the blocking handler, so this is the ordinary
+    // path — a browser restart, not crash recovery.
     expect(pause.isPaused(shop.cookieStoreId)).toBe(true);
     expect(browser.badgeText).toBe("1");
   });
@@ -112,6 +114,42 @@ describe("pause — arming", () => {
 
     // A corrupt value must not be able to leave a container unrouted.
     expect(pause.snapshot()).toEqual({ armed: [], recordings: [] });
+  });
+
+  it("takes the two halves of the stored state separately, and each entry on its own", async () => {
+    const browser = aFakeBrowser();
+    await browser.port.writeStored(PAUSE_STORAGE_KEY, {
+      armed: ["firefox-container-1", 7],
+      recordings: "gone",
+    });
+    const pause = createPause({ port: browser.port, clock: aFakeClock().clock });
+
+    await pause.hydrate();
+
+    // A half-written state is what a browser killed mid-persist leaves, and the half that
+    // survived is the one that keeps a container unrouted. Dropping it with the other half
+    // would resume routing in a container the user paused.
+    expect(pause.snapshot()).toEqual({ armed: ["firefox-container-1"], recordings: [] });
+    expect(browser.badgeText).toBe("1");
+  });
+
+  it("keeps the recordings when the armed half is the one that is wrong", async () => {
+    const browser = aFakeBrowser();
+    await browser.port.writeStored(PAUSE_STORAGE_KEY, {
+      armed: "none",
+      recordings: [
+        { id: "1", cookieStoreId: "firefox-container-1", container: "tmp3", startedAt: 1, endedAt: 2, hosts: [] },
+      ],
+    });
+    const pause = createPause({ port: browser.port, clock: aFakeClock().clock });
+
+    await pause.hydrate();
+
+    // The other direction of the same split. A recording is the only thing CC keeps that
+    // outlives the browser, and it is what a rule gets written from — dropping the whole
+    // history because the flag beside it was unreadable throws away the work.
+    expect(pause.snapshot().recordings).toHaveLength(1);
+    expect(browser.badgeText).toBe("");
   });
 });
 
@@ -225,6 +263,17 @@ describe("pause — recording", () => {
     // The collapse holds at the host. The URLs below it stay separate rows, because seven
     // paths at one host is precisely what a path-scoped rule is written from.
     expect(row!.urls).toHaveLength(7);
+  });
+
+  it("names the default container in words, since it has no name of its own", async () => {
+    const { pause, csid } = await anArmedPause();
+
+    // An `inherit` rule on a tab with nothing to inherit from resolves here. The record is
+    // read to decide whether a rule was needed, and a blank where the target belongs reads
+    // as a row that failed to record rather than as one whose target is the default.
+    pause.record(csid, get("https://docs.example/a"), intoDefault);
+
+    expect(pause.snapshot().recordings[0]!.hosts[0]!.wouldHave).toBe("the default container");
   });
 
   it("keeps first-seen order and records hops it would NOT have moved", async () => {
@@ -430,7 +479,10 @@ describe("pause — the host cap", () => {
           endedAt: null,
           hosts: [
             "not a host row",
-            { host: "pay.test", hits: 1, wouldHave: "no action", urls: [{ pattern: 7 }] },
+            // Object-shaped but missing the fields a row is: the options page renders
+            // `host` and `hits` straight, so a row without them is not a partial row.
+            { host: "pay.test", hits: "many", wouldHave: "no action" },
+            { host: "pay.test", hits: 1, wouldHave: "no action", urls: ["not a url row", { pattern: 7 }] },
           ],
         },
         "not a recording",
@@ -445,6 +497,23 @@ describe("pause — the host cap", () => {
     expect(recording!.hosts).toEqual([
       { host: "pay.test", hits: 1, wouldHave: "no action", urls: [], dropped: 0 },
     ]);
+  });
+
+  it("keeps a stored drop count, which is the whole point of having written it down", async () => {
+    const browser = aFakeBrowser();
+    await browser.port.writeStored(PAUSE_STORAGE_KEY, {
+      armed: [],
+      recordings: [
+        { id: "1", cookieStoreId: "firefox-container-9", container: "tmp3", startedAt: 1, endedAt: 2, hosts: [], dropped: 12 },
+      ],
+    });
+    const pause = createPause({ port: browser.port, clock: aFakeClock().clock });
+
+    await pause.hydrate();
+
+    // A recording is read back long after the browser that wrote it: a count that survived
+    // the write and not the read tells the reader the list is complete when it is not.
+    expect(pause.snapshot().recordings[0]!.dropped).toBe(12);
   });
 
   it("refuses a stored recording whose dropped count is not a number", async () => {
@@ -578,5 +647,150 @@ describe("pause — the toolbar button", () => {
     // A silent no-op is the worst outcome for a control reached for under time pressure.
     expect(pause.isPaused("firefox-default")).toBe(false);
     expect(browser.notifications[0]!.message).toContain("default container");
+  });
+});
+
+describe("pause — arming twice, and disarming what is not there", () => {
+  it("treats a second arm of the same container as the state it already is in", async () => {
+    const browser = aFakeBrowser();
+    const shop = browser.addContainerNamed({ name: "tmp3" });
+    const pause = createPause({ port: browser.port, clock: aFakeClock().clock });
+
+    await pause.arm(shop.cookieStoreId);
+    const again = await pause.arm(shop.cookieStoreId);
+
+    // The toolbar and the options page can both be looking at one container, so the second
+    // arm is a real sequence rather than a mistake. Opening a second recording for it would
+    // split one flow's hosts across two rows and leave `running()` picking whichever came
+    // first.
+    expect(again).toEqual({ ok: true, container: "tmp3" });
+    expect(pause.snapshot().recordings).toHaveLength(1);
+  });
+
+  it("says so rather than reporting success when the container was not paused", async () => {
+    const browser = aFakeBrowser();
+    const shop = browser.addContainerNamed({ name: "tmp3" });
+    const pause = createPause({ port: browser.port, clock: aFakeClock().clock });
+
+    expect(await pause.disarm(shop.cookieStoreId)).toEqual({ ok: false, reason: "It was not paused." });
+  });
+
+  it("disarms a container whose recording is gone, naming what it can", async () => {
+    const browser = aFakeBrowser();
+    // The armed set outlives its recording: `clearAll` empties the list, and the cap drops
+    // the oldest. Refusing to disarm here would leave the container unrouted with nothing
+    // in the options page to turn it off with.
+    await browser.port.writeStored(PAUSE_STORAGE_KEY, { armed: ["firefox-container-1"], recordings: [] });
+    const pause = createPause({ port: browser.port, clock: aFakeClock().clock });
+    await pause.hydrate();
+
+    expect(await pause.disarm("firefox-container-1")).toEqual({ ok: true, container: "that container" });
+    expect(pause.isPaused("firefox-container-1")).toBe(false);
+    expect(browser.badgeText).toBe("");
+  });
+});
+
+describe("pause — the options page's questions", () => {
+  const status = (pause: ReturnType<typeof createPause>) =>
+    pause.handleMessage({ type: "cc-pause-status" }) as Promise<PauseStatusResponse>;
+
+  it("lists a container's hosts once each, and counts a tab that has none", async () => {
+    const browser = aFakeBrowser();
+    const shop = browser.addContainerNamed({ name: "tmp3" });
+    browser.existingTab({ url: "https://shop.test/cart", cookieStoreId: shop.cookieStoreId });
+    browser.existingTab({ url: "https://shop.test/pay", cookieStoreId: shop.cookieStoreId });
+    browser.existingTab({ url: "about:blank", cookieStoreId: shop.cookieStoreId });
+    const pause = createPause({ port: browser.port, clock: aFakeClock().clock });
+
+    const row = (await status(pause)).containers[0]!;
+
+    // The host list identifies the container; repeating "shop.test" three times pushes the
+    // one host that would tell them apart off the end of the row. The blank tab still
+    // counts, because the container is occupied either way.
+    expect(row.hosts).toEqual(["shop.test"]);
+    expect(row.tabCount).toBe(3);
+  });
+
+  it("refuses a toggle that names no container", async () => {
+    const browser = aFakeBrowser();
+    const pause = createPause({ port: browser.port, clock: aFakeClock().clock });
+
+    // The one message in CC that names a container instead of deriving it from the sender.
+    expect(await pause.handleMessage({ type: "cc-pause-toggle" })).toEqual({
+      ok: false,
+      message: "No container named.",
+    });
+  });
+
+  it("declines a cc-pause- message it does not know, synchronously", async () => {
+    const browser = aFakeBrowser();
+    const pause = createPause({ port: browser.port, clock: aFakeClock().clock });
+
+    // The wiring dispatches the whole `cc-pause-` PREFIX here, so an unknown one under it
+    // reaches this handler rather than the wiring's own fallthrough. Asserted un-awaited:
+    // `await` would flatten a Promise<undefined> to undefined and pass either way.
+    expect(pause.handleMessage({ type: "cc-pause-nonsense" })).toBeUndefined();
+  });
+});
+
+describe("pause — what a failing browser call must not break", () => {
+  it("records nothing for a url the parser refuses", async () => {
+    const browser = aFakeBrowser();
+    const shop = browser.addContainerNamed({ name: "tmp3" });
+    const pause = createPause({ port: browser.port, clock: aFakeClock().clock });
+    await pause.arm(shop.cookieStoreId);
+
+    pause.record(shop.cookieStoreId, { url: "not a url", method: "GET" }, noAction);
+
+    // The engine only ever hands this http(s), so the guard is for the seam rather than for
+    // a case it has: `record` is called from inside the blocking handler and returns void,
+    // so a throw here is a navigation that never completes, not a missing row.
+    expect(pause.snapshot().recordings[0]!.hosts).toEqual([]);
+  });
+
+  it("keeps the row in memory when the write that would have saved it fails", async () => {
+    const browser = aFakeBrowser();
+    const shop = browser.addContainerNamed({ name: "tmp3" });
+    const pause = createPause({ port: browser.port, clock: aFakeClock().clock });
+    await pause.arm(shop.cookieStoreId);
+    browser.storageWritesFail(true);
+
+    pause.record(shop.cookieStoreId, get("https://pay.test/checkout"), intoWork);
+    await browser.settle();
+
+    // `record` is called from inside the blocking handler and floats the write, so a
+    // storage failure here would otherwise be an unhandled rejection ON A NAVIGATION. What
+    // is lost is the write, not the row: the next new host writes the whole state again.
+    expect(pause.snapshot().recordings[0]!.hosts[0]!.host).toBe("pay.test");
+  });
+
+  it("survives a storage write that fails under the toolbar button", async () => {
+    const browser = aFakeBrowser();
+    const shop = browser.addContainerNamed({ name: "tmp3" });
+    const tab = browser.existingTab({ url: "https://shop.test/", cookieStoreId: shop.cookieStoreId });
+    const pause = createPause({ port: browser.port, clock: aFakeClock().clock });
+    browser.storageWritesFail(true);
+
+    await browser.clicksAction(tab);
+    await browser.settle();
+
+    // The click handler floats its promise, as everything reached from a browser event
+    // here does. Without the catch this is an unhandled rejection, and in Firefox that is
+    // the background context taking the failure rather than the feature.
+    expect(pause.isPaused(shop.cookieStoreId)).toBe(true);
+  });
+
+  it("survives a storage write that fails while disarming an emptied container", async () => {
+    const browser = aFakeBrowser();
+    const shop = browser.addContainerNamed({ name: "tmp3" });
+    const tab = browser.existingTab({ url: "https://shop.test/", cookieStoreId: shop.cookieStoreId });
+    const pause = createPause({ port: browser.port, clock: aFakeClock().clock });
+    await pause.arm(shop.cookieStoreId);
+    browser.storageWritesFail(true);
+
+    await browser.closesTab(tab);
+    await browser.settle();
+
+    expect(browser.notifications).toEqual([]);
   });
 });
