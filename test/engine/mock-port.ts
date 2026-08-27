@@ -103,8 +103,30 @@ export interface MockPort {
   macAssigns(url: string, value: unknown): void;
   macIsAbsent(on: boolean): void;
   tabCreationFails(on: boolean): void;
-  /** Firefox rejects contentScripts.register — a bad match pattern, a missing permission. */
-  scriptRegistrationFails(message: string | null): void;
+  /**
+   * Firefox rejects `tabs.remove` for a tab that has already gone — the id is stale by the
+   * time the call lands. Every caller here floats its promise, so what the rejection reaches
+   * is a `.catch`, and an unarranged one leaves those uncovered.
+   */
+  tabRemovalFails(on: boolean): void;
+  /** storage.local rejects — quota, or a disk that has stopped answering. */
+  storageWritesFail(on: boolean): void;
+  /** `notifications.create` rejects — the permission is absent, or the OS refused it. */
+  notificationsFail(on: boolean): void;
+  /**
+   * `tabs.get` rejects. Firefox answers "Invalid tab ID" for a tab closed between the
+   * request reaching webRequest and the lookup landing, which is a race the engine does not
+   * catch: the throw goes to Firefox, which fails the navigation open.
+   */
+  tabLookupFails(on: boolean): void;
+  /**
+   * Firefox rejects contentScripts.register — a bad match pattern, a missing permission.
+   * A string is thrown as an `Error` carrying it; `null` stops the failing. Any other value
+   * is thrown AS IT IS, which is the case a bundled `catch (e)` has to survive: a rejection
+   * crossing the extension's sandbox boundary need not arrive as an `Error`, and reading
+   * `.message` off one that did not is a second throw inside the handler.
+   */
+  scriptRegistrationFails(reason: unknown): void;
   /**
    * Holds every `registerContentScript` open until the returned function is called.
    *
@@ -136,7 +158,11 @@ export function aFakeBrowser(): MockPort {
   let containerId = 0;
   let macThrows = false;
   let createTabThrows = false;
-  let registerScriptThrows: string | null = null;
+  let removeTabThrows = false;
+  let writeStoredThrows = false;
+  let notifyThrows = false;
+  let getTabThrows = false;
+  let registerScriptThrows: unknown = null;
   let registrationGate: Promise<void> | null = null;
   // Listeners are LISTS, one per event, because `browser.*.addListener` is additive: Firefox
   // calls every listener, in registration order. The mock held one slot per event until
@@ -159,6 +185,7 @@ export function aFakeBrowser(): MockPort {
   let activeTab: Tab | null = null;
   let badgeText = "";
   const cookieStore = new Map<string, Map<string, Cookie>>(); // storeId -> name -> cookie
+  const secureCookies = new Set<string>(); // "<storeId>\u0000<name>" for each Secure cookie set
   const registeredScripts: RegisterContentScriptDetails[] = [];
   // storage.local. Lives on the BROWSER, not the background session — it is what a restart
   // is allowed to still find. Held as JSON text, as the real one is.
@@ -200,6 +227,7 @@ export function aFakeBrowser(): MockPort {
       beforeNavigateHs.push(h);
     },
     async getTab(id) {
+      if (getTabThrows) throw new Error(`Invalid tab ID: ${id}`);
       return openTabs.get(id) ?? null;
     },
     async createTab(props) {
@@ -218,6 +246,7 @@ export function aFakeBrowser(): MockPort {
     },
     async removeTab(id) {
       closedTabIds.push(id);
+      if (removeTabThrows) throw new Error("removeTab failed");
       const wasOpen = openTabs.delete(id);
       // Firefox fires tabs.onRemoved for a tab closed through tabs.remove just as for one
       // the user closed. Without this a tab CC itself closed — a reopen superseding its
@@ -267,16 +296,26 @@ export function aFakeBrowser(): MockPort {
       seededCookies.push(details);
       const jar = cookieStore.get(details.storeId) ?? new Map<string, Cookie>();
       jar.set(details.name, { name: details.name, value: details.value ?? "" });
+      if (details.secure === true) secureCookies.add(`${details.storeId}\u0000${details.name}`);
       cookieStore.set(details.storeId, jar);
     },
+    // Fidelity: a set that SUCCEEDS does not mean the next get answers. `cookies.get` is
+    // asked with the navigation's url, and Firefox will not hand a Secure cookie to an
+    // http one — the seeder's config names the cookie's own https url, so a rule matching
+    // both schemes reaches exactly this. A mock that always answered read that as "the
+    // cookie is on the wire" and spliced a header the browser would never have sent.
     async getCookie(details: GetCookieDetails) {
+      const secure = secureCookies.has(`${details.storeId}\u0000${details.name}`);
+      if (secure && details.url.startsWith("http:")) return null;
       return cookieStore.get(details.storeId)?.get(details.name) ?? null;
     },
     async registerContentScript(details: RegisterContentScriptDetails): Promise<RegisteredContentScript> {
       // Before the throw and before the push: a caller stalled here has ALREADY finished
       // unregistering, which is the half of the window a second apply can walk into.
       if (registrationGate) await registrationGate;
-      if (registerScriptThrows !== null) throw new Error(registerScriptThrows);
+      if (registerScriptThrows !== null) {
+        throw typeof registerScriptThrows === "string" ? new Error(registerScriptThrows) : registerScriptThrows;
+      }
       registeredScripts.push(details);
       // Removed by identity rather than by value: a config may name the same snippet twice,
       // and unregistering one handle must leave the other injecting.
@@ -300,6 +339,7 @@ export function aFakeBrowser(): MockPort {
       return `moz-extension://test/${path}`;
     },
     async notify(n) {
+      if (notifyThrows) throw new Error("notify failed");
       notifications.push(n);
     },
     onActionClicked(h) {
@@ -316,6 +356,7 @@ export function aFakeBrowser(): MockPort {
     },
     async writeStored(key, value) {
       storageWrites++;
+      if (writeStoredThrows) throw new Error("writeStored failed");
       stored.set(key, JSON.stringify(value));
     },
   };
@@ -389,7 +430,11 @@ export function aFakeBrowser(): MockPort {
     macAssigns: (url, value) => void macMap.set(url, value),
     macIsAbsent: (on) => void (macThrows = on),
     tabCreationFails: (on) => void (createTabThrows = on),
-    scriptRegistrationFails: (message) => void (registerScriptThrows = message),
+    tabRemovalFails: (on) => void (removeTabThrows = on),
+    storageWritesFail: (on) => void (writeStoredThrows = on),
+    notificationsFail: (on) => void (notifyThrows = on),
+    tabLookupFails: (on) => void (getTabThrows = on),
+    scriptRegistrationFails: (reason) => void (registerScriptThrows = reason),
     stallScriptRegistration() {
       let release: () => void = () => {};
       registrationGate = new Promise<void>((resolve) => (release = resolve));
