@@ -149,9 +149,15 @@ describe("a process that abandons the browser it launched", () => {
 
   const ended = (proc: ChildProcess): Promise<unknown> => new Promise((r) => proc.once("exit", r));
 
+  // Both cases assert the pid before waiting on it, and it is not ceremony: `isRunning`
+  // answers false for a pid nobody holds, so `gone(undefined)` — a harness that stopped
+  // printing the pid — passes instantly, on a browser nothing ever looked at. Alive-before
+  // is not available here the way it is below: these holders exit at once, so the reaper
+  // may have done its work already.
   it("takes it down on a clean exit", async () => {
     const proc = abandon("process.exit(0);");
     const pid = await browserPidOf(proc);
+    expect(pid).toBeGreaterThan(0);
 
     await ended(proc);
 
@@ -161,6 +167,7 @@ describe("a process that abandons the browser it launched", () => {
   it("takes it down when it dies of an unhandled throw", async () => {
     const proc = abandon('throw new Error("worker crashed");');
     const pid = await browserPidOf(proc);
+    expect(pid).toBeGreaterThan(0);
 
     await ended(proc);
 
