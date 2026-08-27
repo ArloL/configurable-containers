@@ -50,7 +50,9 @@ export default defineConfig({
         "src/extension/choice.ts",
         "src/extension/options.ts",
       ],
-      reporter: ["text", "html"],
+      // lcov is what SonarCloud imports (sonar.javascript.lcov.reportPaths). Without it the
+      // scan still succeeds and reports 0% coverage, which is worse than no gate at all.
+      reporter: ["text", "html", "lcov"],
       reportsDirectory: "reports/coverage",
       thresholds: {
         // Floors, a point or two under what the suite measures today — not targets.
