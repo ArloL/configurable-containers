@@ -11,6 +11,7 @@ import {
   findLatestListedRelease,
   latestListedRelease,
   planFor,
+  releaseTag,
   versionFromTag,
   type Release,
 } from "../../scripts/verify-reproducible";
@@ -174,4 +175,21 @@ describe("what the job refuses to attempt", () => {
     expect("problem" in plan).toBe(false);
     expect((plan as { xpi: { name: string } }).xpi.name).toBe("configurable-containers-2608.0.101.xpi");
   });
+});
+
+describe("the tag the job is told to reproduce", () => {
+  it("takes a release tag as it is cut", () => {
+    expect(releaseTag("v2608.0.101")).toBe("v2608.0.101");
+    expect(releaseTag("v2608.27.1430")).toBe("v2608.27.1430");
+  });
+
+  // The tag becomes a path segment in `gh api`, so anything that can leave that segment
+  // fetches a different release — or a different endpoint — and the job then reports on
+  // whatever came back as though it were the release it was asked about.
+  it.each(["v2608.0.101/../../../user", "v2608.0.101?per_page=1", "../releases", "2608.0.101", ""])(
+    "refuses %j, which does not address the release it names",
+    (raw) => {
+      expect(() => releaseTag(raw)).toThrow(/not a release tag/);
+    },
+  );
 });

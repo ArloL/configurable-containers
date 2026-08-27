@@ -89,6 +89,20 @@ export function versionFromTag(tag: string): string {
 }
 
 /**
+ * The tag reaches `gh api` as a PATH SEGMENT, so what it may hold is not a matter of
+ * taste: one carrying "../" or "?" addresses an endpoint other than the release this job
+ * believes it is checking, and a gate that reproduced something else reports green either
+ * way. Every tag this repo has cut is CalVer, so the shape is stated exactly rather than
+ * as a blocklist of the characters that would escape.
+ */
+export function releaseTag(raw: string): string {
+  if (!/^v\d+\.\d+\.\d+$/.test(raw)) {
+    throw new Error(`not a release tag: ${JSON.stringify(raw)} (expected v<YYMM>.<day>.<micro>)`);
+  }
+  return raw;
+}
+
+/**
  * The timestamp the release was built with, out of the notes release.yaml writes. Nobody
  * can derive it — a zip records mtimes and the source archive has no .git to read one
  * from — so it is published in the body and this is the only place it comes from.
@@ -146,7 +160,8 @@ const OWNER_REPO = "ArloL/configurable-containers";
  * comes back empty is how this gate spent four weeks green and inert.
  */
 function fetchRelease(tag: string): Release {
-  const json = execFileSync("gh", ["api", `repos/${OWNER_REPO}/releases/tags/${tag}`], { encoding: "utf8" });
+  const endpoint = `repos/${OWNER_REPO}/releases/tags/${releaseTag(tag)}`;
+  const json = execFileSync("gh", ["api", endpoint], { encoding: "utf8" });
   return JSON.parse(json) as Release;
 }
 
