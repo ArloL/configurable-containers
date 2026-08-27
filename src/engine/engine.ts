@@ -279,6 +279,93 @@ export function createEngine(opts: EngineOptions): Engine {
 
   port.onBeforeRequest((d) => inTurn(d.tabId, () => navigate(d)));
 
+  // F1: is this request the navigation we reopened this tab to perform?
+  //
+  // Three answers, and each is a shipped bug if it comes back wrong. `absorb` means the
+  // request IS that navigation — its own first request, or a redirect hop still on the site
+  // it was reopened for — and letting it route again is `tmp1 -> tmp2 -> tmp3` on one click.
+  // A `from` means it WAS that navigation and has since LEFT that site: it is resolved like
+  // any other, but as a hop, with the awaited url standing in for the `about:blank` the tab
+  // still reads as. Absorbing that case outright left every SSO return hop unrouted in the
+  // identity provider's container. Neither means the marker is not about this request.
+  //
+  // Stays here rather than in a sibling: it is a `Map` the blocking handler reads, keyed on
+  // a navigation, and its life is that of `handled` and `viewSourceNav`.
+  function ourNavigation(d: WebRequestDetails): { absorb: boolean; from?: string } {
+    const ours = reopenedNav.get(d.tabId);
+    if (!ours) return { absorb: false };
+
+    if (!deps.sameSite(ours.awaiting, d.url)) {
+      // Off the awaited site. Still ours if it is the same navigation; otherwise the one we
+      // were waiting for never came, and the marker would load the NEXT navigation unrouted
+      // inside the container we had just reopened into.
+      if (ours.requestId === d.requestId) return { absorb: false, from: ours.awaiting };
+      reopenedNav.delete(d.tabId);
+      return { absorb: false };
+    }
+
+    // Its own first request: adopt the requestId, so the hops of THIS navigation are told
+    // apart from a later navigation to the same site.
+    if (ours.requestId === undefined) {
+      reopenedNav.set(d.tabId, { awaiting: ours.awaiting, requestId: d.requestId });
+      return { absorb: true };
+    }
+    if (ours.requestId === d.requestId) return { absorb: true }; // a redirect hop, still on our site
+    reopenedNav.delete(d.tabId); // a later navigation: route it normally
+    return { absorb: false };
+  }
+
+  // F9 — `tabs.create` can only issue a GET, so reopening a navigation with a body drops it
+  // silently. Leave it where it is and say so. The routing answer was right; the EFFECT is
+  // what cannot be performed losslessly.
+  //
+  // The decline is unconditional; only the toast is selective. Tying the two together would
+  // make "say less" mean "route differently".
+  function declinePost(d: WebRequestDetails, tab: Tab, decision: Decision): boolean {
+    if (decision.kind !== "reopen" && decision.kind !== "choice") return false;
+    if (d.method === "GET") return false;
+    if (namesAConfiguredContainer(decision)) {
+      // Floated, never awaited: a navigation must not wait on a toast, and a toast that
+      // cannot be raised must not break routing.
+      void announceDeclined(d, tab, decision).catch((e) => console.warn("[engine] notify failed", e));
+    }
+    return true;
+  }
+
+  // Everything above this is deciding; this is doing. Both effects defer to MAC first (F7)
+  // and take `handled` BEFORE the async effect, so a re-fire of the same request cancels
+  // rather than acting twice.
+  async function perform(
+    d: WebRequestDetails,
+    tab: Tab,
+    key: string,
+    decision: Decision,
+  ): Promise<BlockingResponse | void> {
+    switch (decision.kind) {
+      case "leaveAlone":
+      case "stay":
+        return;
+
+      case "choice":
+        if (await macOwns(port, d.url)) return; // F7 defer
+        handled.add(key);
+        onChoice(decision.options, { tabId: d.tabId, url: d.url });
+        return { cancel: true };
+
+      case "reopen":
+        if (await macOwns(port, d.url)) return; // F7 defer
+        handled.add(key); // guard BEFORE the async effects
+        try {
+          await reopen(tab, d.url, decision.into);
+        } catch (e) {
+          handled.delete(key); // fail open, so the navigation can be retried
+          console.warn("[engine] reopen failed", e);
+          return;
+        }
+        return { cancel: true };
+    }
+  }
+
   async function navigate(d: WebRequestDetails): Promise<BlockingResponse | void> {
     if (d.type !== "main_frame") return;
     if (!/^https?:/.test(d.url)) return;
@@ -292,29 +379,9 @@ export function createEngine(opts: EngineOptions): Engine {
     const key = d.requestId + "+" + d.url;
     if (handled.has(key)) return { cancel: true };
 
-    // F1: the navigation we reopened this tab to perform, from its first request through
-    // every redirect hop of it that stays on the site it was reopened for.
-    //
-    // `guardedFrom` carries the rest to the decision: a hop that has left that site is
-    // resolved, but as a hop rather than as a fresh navigation.
-    let guardedFrom: string | undefined;
-    const ours = reopenedNav.get(d.tabId);
-    if (ours) {
-      if (deps.sameSite(ours.awaiting, d.url)) {
-        // Its own first request: adopt the requestId, so the hops of THIS navigation are
-        // told apart from a later navigation to the same site.
-        if (ours.requestId === undefined) {
-          reopenedNav.set(d.tabId, { awaiting: ours.awaiting, requestId: d.requestId });
-          return;
-        }
-        if (ours.requestId === d.requestId) return; // a redirect hop, still on our site
-        reopenedNav.delete(d.tabId); // a later navigation: route it normally
-      } else if (ours.requestId === d.requestId) {
-        guardedFrom = ours.awaiting; // our navigation, now at another site
-      } else {
-        reopenedNav.delete(d.tabId); // the awaited navigation never came
-      }
-    }
+    const ours = ourNavigation(d);
+    if (ours.absorb) return;
+    const guardedFrom = ours.from;
 
     const tab = await port.getTab(d.tabId);
     if (!tab) return; // raced away — fail open
@@ -346,45 +413,11 @@ export function createEngine(opts: EngineOptions): Engine {
       return;
     }
 
-    // F9 — tabs.create can only issue a GET, so reopening a navigation with a body drops
-    // it silently. Leave it where it is and say so. Before macOwns (no reason to ask about
-    // a navigation we will not act on) and before handled.add (adds no state, so it fails
-    // open).
-    if ((decision.kind === "reopen" || decision.kind === "choice") && d.method !== "GET") {
-      // The decline is unconditional; only the toast is selective. Tying the two together
-      // would make "say less" mean "route differently".
-      if (namesAConfiguredContainer(decision)) {
-        // Floated, never awaited: a navigation must not wait on a toast, and a toast that
-        // cannot be raised must not break routing.
-        void announceDeclined(d, tab, decision).catch((e) => console.warn("[engine] notify failed", e));
-      }
-      return; // no cancel — the POST proceeds in the tab's current container
-    }
+    // Before macOwns (no reason to ask about a navigation we will not act on) and before
+    // handled.add (adds no state, so it fails open).
+    if (declinePost(d, tab, decision)) return; // no cancel — the POST proceeds where it is
 
-    switch (decision.kind) {
-      case "leaveAlone":
-      case "stay":
-        return;
-
-      case "choice":
-        if (await macOwns(port, d.url)) return; // F7 defer
-        handled.add(key);
-        onChoice(decision.options, { tabId: d.tabId, url: d.url });
-        return { cancel: true };
-
-      case "reopen": {
-        if (await macOwns(port, d.url)) return; // F7 defer
-        handled.add(key); // guard BEFORE the async effects
-        try {
-          await reopen(tab, d.url, decision.into);
-        } catch (e) {
-          handled.delete(key); // fail open, so the navigation can be retried
-          console.warn("[engine] reopen failed", e);
-          return;
-        }
-        return { cancel: true };
-      }
-    }
+    return await perform(d, tab, key, decision);
   }
 
   return { reopen };

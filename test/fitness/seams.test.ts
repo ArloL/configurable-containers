@@ -47,7 +47,7 @@ describe("fitness — the pure modules stay pure", () => {
     expect(imports).toEqual([
       'src/matcher/matcher.ts — import type { Rule, Group } from "../resolver/types";',
       'src/psl/same-site.ts — import { parse } from "tldts";',
-      'src/resolver/resolve.ts — import type { Config, ContainerRef, Decision, Deps, NavContext } from "./types";',
+      'src/resolver/resolve.ts — import type { Action, Config, ContainerRef, Decision, Deps, NavContext } from "./types";',
       'src/resolver/resolve.ts — import { TEMPORARY } from "./types";',
     ]);
   });
