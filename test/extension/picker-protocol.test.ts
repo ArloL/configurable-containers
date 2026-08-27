@@ -96,6 +96,7 @@ describe("choiceIntent: the choice page's keyboard grammar", () => {
     expect(intent("ArrowDown", 1)).toEqual({ kind: "focus", index: 0 });
     expect(intent("ArrowUp", -1)).toEqual({ kind: "focus", index: 1 });
     expect(intent("ArrowUp", 0)).toEqual({ kind: "focus", index: 1 });
+    expect(intent("ArrowUp", 1)).toEqual({ kind: "focus", index: 0 });
     expect(intent("Home", 1)).toEqual({ kind: "focus", index: 0 });
     expect(intent("End", 0)).toEqual({ kind: "focus", index: 1 });
   });

@@ -13,6 +13,11 @@ rules:
       - { name: s, url: "https://seed.example/", value: "1" }
   - match: pocket.example
     ignore: true
+  - match: flag.example
+    open: Work
+    cookies:
+      - { name: f, url: "https://flag.example/" }
+      - { name: sec, url: "https://flag.example/", value: "1", secure: true }
 `);
 
 function headers(over: Partial<HeadersDetails> = {}): HeadersDetails {
@@ -89,5 +94,24 @@ describe("cookie-seeder", () => {
     const blockingResponse = await browser.sendsHeaders(headers({ tabId: 999 })); // no such tab
     expect(browser.seededCookies).toEqual([]);
     expect(blockingResponse).toBeUndefined();
+  });
+});
+
+describe("cookie-seeder — a set that the browser will not hand back", () => {
+  it("splices only the cookies the request's own url can carry", async () => {
+    const browser = aFakeBrowser();
+    const tab = browser.existingTab({ url: "http://flag.example/", cookieStoreId: "firefox-container-9" });
+    createCookieSeeder({ port: browser.port, config, deps: { matchRule } });
+
+    const blockingResponse = await browser.sendsHeaders(
+      headers({ tabId: tab.id, url: "http://flag.example/" }),
+    );
+
+    // Both are set — the spec names its own https url and TC sets unconditionally — but the
+    // Secure one is not readable for an http navigation, and a header claiming otherwise
+    // sends a cookie the browser itself would have withheld. A valueless cookie is still
+    // a cookie: `f=` is what the site's own `document.cookie = "f="` writes.
+    expect(browser.seededCookies.map((c) => c.name)).toEqual(["f", "sec"]);
+    expect(blockingResponse).toEqual({ requestHeaders: [{ name: "Cookie", value: "f=" }] });
   });
 });

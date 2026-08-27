@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { aFakeBrowser, aFakeClock } from "./mock-port";
-import { createDisposer } from "../../src/engine/disposer";
+import { createDisposer, EMPTY_SINCE_KEY } from "../../src/engine/disposer";
 
 const GRACE = 300_000;
 const GC_INTERVAL_MS = 600_000;
@@ -131,5 +131,28 @@ describe("disposer — GC sweep + startup", () => {
     await browser.closesTab(onlyTabInTheThrowaway);
     await advance(GC_INTERVAL_MS + GRACE); // grace fires (removes); a GC tick also elapses
     expect(browser.removedContainers).toEqual([throwaway.cookieStoreId]); // exactly one
+  });
+});
+
+describe("disposer — a stored note that is not one", () => {
+  it("takes each container's note on its own, and restarts the grace for the rest", async () => {
+    const { browser, clock, advance } = aBrowserWithFakeClock();
+    const corrupt = browser.addContainerNamed({ name: "tmp1" });
+    const expired = browser.addContainerNamed({ name: "tmp2" });
+    // Written by a build that stored something else, or by a half-completed write. The
+    // grace is the only thing standing between an empty throwaway and its logins going,
+    // so a value that is not a timestamp must read as "no note" — which restarts the
+    // grace — and never as a time already past.
+    await browser.port.writeStored(EMPTY_SINCE_KEY, {
+      [corrupt.cookieStoreId]: "just now",
+      [expired.cookieStoreId]: -GRACE,
+    });
+
+    createDisposer({ port: browser.port, clock, graceMs: GRACE });
+    await advance(0);
+
+    expect(browser.removedContainers).toEqual([expired.cookieStoreId]);
+    await advance(GRACE);
+    expect(browser.removedContainers).toEqual([expired.cookieStoreId, corrupt.cookieStoreId]);
   });
 });

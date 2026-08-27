@@ -248,3 +248,36 @@ describe("auto-temp — onTabUpdated fallback path", () => {
     expect(browser.createdContainers).toHaveLength(1);
   });
 });
+
+describe("auto-temp — the startup sweep meeting the events it races", () => {
+  it("keeps browsing when the sweep's own containerize fails", async () => {
+    const { browser } = setup();
+    browser.existingTab({ url: "about:newtab", cookieStoreId: "firefox-default" });
+    browser.tabCreationFails(true);
+    createAutoTemp({ port: browser.port });
+    await flush();
+
+    // The sweep is a floated promise: without its catch a rejected `tabs.create` is an
+    // unhandled rejection during startup, and the tab it was moving is left where it is
+    // with the identity already minted.
+    expect(browser.createdContainers).toHaveLength(1);
+    expect(browser.closedTabIds).toEqual([]);
+  });
+
+  it("does not containerize a tab an event took over while the sweep was mid-flight", async () => {
+    const { browser } = setup();
+    const swept = browser.existingTab({ url: "about:newtab", cookieStoreId: "firefox-default" });
+    const overtaken = browser.existingTab({ url: "about:newtab", cookieStoreId: "firefox-default" });
+    createAutoTemp({ port: browser.port });
+
+    // The sweep is parked on queryTabs with both tabs in its list. `updatesTab` dispatches
+    // to the listener synchronously, as Firefox does, so this lands first — and by the time
+    // the sweep reaches `overtaken` it holds a stale Tab whose real one has been superseded.
+    // `processed` is what stops it minting a second throwaway for it.
+    void browser.updatesTab(overtaken, { status: "complete" });
+    await flush();
+
+    expect(browser.createdContainers).toHaveLength(2);
+    expect(browser.closedTabIds).toEqual([overtaken.id, swept.id]);
+  });
+});

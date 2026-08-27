@@ -104,3 +104,21 @@ describe("redirector-closer", () => {
     expect(browser.closedTabIds).toEqual([tab.id]); // exactly one close
   });
 });
+
+describe("redirector-closer — a close that fails", () => {
+  it("leaves the tab where it is rather than taking the timer's callback down", async () => {
+    const browser = aFakeBrowser();
+    const { clock, advance } = aFakeClock();
+    const tab = browser.existingTab({ url: "https://t.co/abc", cookieStoreId: "firefox-default" });
+    createRedirectorCloser({ port: browser.port, clock, config, deps: { matchRule }, delayMs: DELAY });
+    browser.tabRemovalFails(true);
+
+    await browser.updatesTab(tab, { status: "complete" });
+    await advance(DELAY);
+
+    // The tab id is two seconds stale by the time this fires, so `tabs.remove` rejecting is
+    // the ordinary outcome, not a fault. The callback runs inside the clock's timer, where
+    // a rejection has nowhere to go.
+    expect(browser.openTabs.has(tab.id)).toBe(true);
+  });
+});
