@@ -1,4 +1,4 @@
-import type { Config, ContainerRef, Decision, Deps, NavContext } from "./types";
+import type { Action, Config, ContainerRef, Decision, Deps, NavContext } from "./types";
 import { TEMPORARY } from "./types";
 
 // Do two references denote the same container? Throwaways carry no identity in L1, so any
@@ -43,44 +43,53 @@ function disposablePath(nav: NavContext, config: Config, deps: Deps): Decision {
   return { kind: "reopen", into: { kind: "temporary" } };
 }
 
+// `open:` is two actions wearing one key. With one container it names a target; with
+// several it names an ELIGIBILITY SET, which a tab can already satisfy — and being in one
+// of them outranks `default`, since the user put it there.
+function openAction(
+  action: Extract<Action, { kind: "open" }>,
+  current: ContainerRef | null,
+  nav: NavContext,
+  config: Config,
+  deps: Deps,
+): Decision {
+  const { containers, default: def } = action;
+
+  if (containers.length === 1) {
+    if (containers[0] === TEMPORARY) return disposablePath(nav, config, deps);
+    return toward(current, { kind: "permanent", name: containers[0] });
+  }
+
+  if (current?.kind === "permanent" && containers.includes(current.name)) {
+    return { kind: "stay" };
+  }
+  if (def !== undefined) {
+    if (def === TEMPORARY) return disposablePath(nav, config, deps);
+    return toward(current, { kind: "permanent", name: def });
+  }
+  return { kind: "choice", options: containers };
+}
+
 export function resolve(nav: NavContext, config: Config, deps: Deps): Decision {
   const rule = deps.matchRule(nav.targetUrl, config.rules);
   const current = nav.current?.container ?? null;
 
-  if (rule) {
-    const action = rule.action;
-    switch (action.kind) {
-      case "ignore":
-        return { kind: "leaveAlone" };
+  // No rule is the founding premise rather than a fallthrough: anything unmatched is
+  // disposable.
+  if (!rule) return disposablePath(nav, config, deps);
 
-      case "redirector":
-        return { kind: "stay" }; // hop is not isolated
+  const action = rule.action;
+  switch (action.kind) {
+    case "ignore":
+      return { kind: "leaveAlone" };
 
-      case "inherit": {
-        const desired: ContainerRef = nav.initiator ?? current ?? { kind: "default" };
-        return toward(current, desired);
-      }
+    case "redirector":
+      return { kind: "stay" }; // hop is not isolated
 
-      case "open": {
-        const { containers, default: def } = action;
+    case "inherit":
+      return toward(current, nav.initiator ?? current ?? { kind: "default" });
 
-        if (containers.length === 1) {
-          if (containers[0] === TEMPORARY) return disposablePath(nav, config, deps);
-          return toward(current, { kind: "permanent", name: containers[0] });
-        }
-
-        // Multi-open: an eligible container the tab is already in wins over `default`.
-        if (current?.kind === "permanent" && containers.includes(current.name)) {
-          return { kind: "stay" };
-        }
-        if (def !== undefined) {
-          if (def === TEMPORARY) return disposablePath(nav, config, deps);
-          return toward(current, { kind: "permanent", name: def });
-        }
-        return { kind: "choice", options: containers };
-      }
-    }
+    case "open":
+      return openAction(action, current, nav, config, deps);
   }
-
-  return disposablePath(nav, config, deps);
 }
