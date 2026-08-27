@@ -959,3 +959,87 @@ rules:
     expect(browser.openedTabs).toHaveLength(openedSoFar);
   });
 });
+
+// `reopenedNav` guards ONE navigation. Every case above is a hop of it; these two are what
+// happens when it is over — the marker has to stop applying, or the tab it guarded never
+// routes again.
+describe("engine — the reopen guard letting go", () => {
+  it("routes a LATER navigation to the site the tab was reopened for", async () => {
+    const browser = aFakeBrowser();
+    // Path-scoped: the same site answers differently depending on where in it you are, so
+    // "same site as the awaited url" is not enough to leave a navigation alone.
+    const config = parseConfig('rules:\n  - match: "*://shop.test/work*"\n    open: Work\n');
+    browser.addContainerNamed({ name: "Work" });
+    const tab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
+    createEngine({ port: browser.port, config, deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
+
+    await browser.navigates(aNavigationTo({ requestId: "10", tabId: tab.id, url: "https://shop.test/browse" }));
+    const newTab = [...browser.openTabs.values()].find((t) => t.id !== tab.id)!;
+    newTab.url = "about:blank";
+    await browser.navigates(aNavigationTo({ requestId: "11", tabId: newTab.id, url: "https://shop.test/browse" }));
+    newTab.url = "https://shop.test/browse"; // committed: the navigation the marker owned is done
+
+    // A new click, a new requestId, still shop.test. Absorbing it because the site matches
+    // would leave the marker owning this tab for the rest of its life.
+    const later = await browser.navigates(aNavigationTo({ requestId: "12", tabId: newTab.id, url: "https://shop.test/work/a" }));
+
+    expect(later).toEqual({ cancel: true });
+    const work = (await browser.port.queryIdentities()).find((c) => c.name === "Work")!;
+    expect(browser.openedTabs.at(-1)!.cookieStoreId).toBe(work.cookieStoreId);
+  });
+
+  it("shows the choice screen for a hop that leaves the site into a rule offering several", async () => {
+    const browser = aFakeBrowser();
+    const config = parseConfig("rules:\n  - match: figma.example\n    open: [Personal, Work]\n");
+    browser.addContainerNamed({ name: "Personal" });
+    browser.addContainerNamed({ name: "Work" });
+    const tab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
+    const offered: string[][] = [];
+    createEngine({
+      port: browser.port,
+      config,
+      deps,
+      onChoice: (options) => void offered.push(options),
+      pause: noPause,
+      tmpSuffix: sequentialTmpSuffixes(),
+    });
+
+    await browser.navigates(aNavigationTo({ requestId: "10", tabId: tab.id, url: "https://sso.test/go" }));
+    const newTab = [...browser.openTabs.values()].find((t) => t.id !== tab.id)!;
+    newTab.url = "about:blank";
+    await browser.navigates(aNavigationTo({ requestId: "11", tabId: newTab.id, url: "https://sso.test/go" }));
+
+    // The hop leaves sso.test for a rule that names two containers. `aHopBuysNoThrowaway`
+    // vetoes a hop whose only answer is another throwaway; a choice is not one, and asking
+    // is the whole point of a multi-container rule.
+    const hop = await browser.navigates(aNavigationTo({ requestId: "11", tabId: newTab.id, url: "https://figma.example/f" }));
+
+    expect(hop).toEqual({ cancel: true });
+    expect(offered).toEqual([["Personal", "Work"]]);
+  });
+});
+
+describe("engine — the per-tab queue outliving a failed decision", () => {
+  it("hands the throw to Firefox and still decides the next navigation on that tab", async () => {
+    const browser = aFakeBrowser();
+    browser.addContainerNamed({ name: "Work" });
+    const tab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
+    browser.tabLookupFails(true);
+
+    // `tabs.get` rejecting is a race, not a fault: the tab closed between the request
+    // reaching webRequest and the lookup landing. The engine lets it go to Firefox, which
+    // fails the navigation open.
+    await expect(browser.navigates(aNavigationTo({ requestId: "1", tabId: tab.id }))).rejects.toThrow();
+
+    // What the NEXT request waits on is a promise that swallowed that outcome. Without it,
+    // one rejection leaves every later navigation in the tab chained behind a rejected
+    // promise, and the tab stops routing for the life of the browser.
+    browser.tabLookupFails(false);
+    const next = await browser.navigates(aNavigationTo({ requestId: "2", tabId: tab.id }));
+
+    expect(next).toEqual({ cancel: true });
+    const work = (await browser.port.queryIdentities()).find((c) => c.name === "Work")!;
+    expect(browser.openedTabs.at(-1)!.cookieStoreId).toBe(work.cookieStoreId);
+  });
+});

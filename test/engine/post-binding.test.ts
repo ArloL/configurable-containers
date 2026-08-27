@@ -159,3 +159,22 @@ describe("engine — a non-GET navigation is never reopened (F9)", () => {
     expect(browser.notifications).toEqual([]);
   });
 });
+
+describe("engine — a toast that cannot be raised", () => {
+  it("lets the POST through when the notification itself fails", async () => {
+    const browser = aFakeBrowser();
+    const tmp = browser.addContainerNamed({ name: "tmp1" });
+    const tab = browser.existingTab({ url: "https://start.test/", cookieStoreId: tmp.cookieStoreId });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
+    browser.notificationsFail(true);
+
+    const blockingResponse = await browser.navigates(aNavigationTo({ tabId: tab.id }));
+    await browser.settle();
+
+    // The toast is floated out of the blocking handler precisely so it cannot decide a
+    // navigation. Without its catch, a missing `notifications` permission is an unhandled
+    // rejection on every declined form submission.
+    expect(blockingResponse).toBeUndefined();
+    expect(browser.notifications).toEqual([]);
+  });
+});

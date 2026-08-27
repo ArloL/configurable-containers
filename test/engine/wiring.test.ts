@@ -41,6 +41,32 @@ describe("wiring — message dispatch", () => {
   });
 });
 
+describe("wiring — the choice screen", () => {
+  it("opens the choice page for a navigation the engine cannot answer alone", async () => {
+    const browser = aFakeBrowser();
+    browser.addContainerNamed({ name: "Personal" });
+    browser.addContainerNamed({ name: "Work" });
+    const tab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
+    await startTheBackground(browser, aFakeClock(), config);
+
+    const blockingResponse = await browser.navigates({
+      requestId: "1",
+      tabId: tab.id,
+      url: "https://figma.example/f",
+      type: "main_frame",
+      method: "GET",
+    });
+    await browser.settle();
+
+    // The engine hands the options to a callback and does not wait for it — the navigation
+    // is cancelled either way. Wiring that callback to a picker that is constructed AFTER
+    // the engine is what makes the two reachable from each other, and a callback that
+    // floats nothing leaves the user on a cancelled navigation with no page.
+    expect(blockingResponse).toEqual({ cancel: true });
+    expect(browser.openedTabs.at(-1)!.url).toContain("choice.html#");
+  });
+});
+
 describe("wiring — the options page's pause conversation", () => {
   it("lists only containers that have tabs, annotated so a tmp name is identifiable", async () => {
     const browser = aFakeBrowser();
