@@ -32,12 +32,11 @@ export interface EngineOptions {
   deps: Deps;
   onChoice: (options: string[], nav: { tabId: number; url: string }) => void;
   pause: PauseRecorder;
-  tmpSuffix?: () => string;
-}
-
-function defaultSuffix(): () => string {
-  let n = 0;
-  return () => String(++n);
+  // Required, not optional. Auto-temp mints throwaways from a counter of its own, and the
+  // two must be ONE counter or both start at tmp1 and collide on the name identity is
+  // derived from. A default here is a second counter that nothing in the extension asks
+  // for, and an optional field is one a caller forgets to pass.
+  tmpSuffix: () => string;
 }
 
 // F7: a truthy getAssignment means MAC owns this URL, so we back off.
@@ -169,7 +168,7 @@ function aHopBuysNoThrowaway(decision: Decision): boolean {
 
 export function createEngine(opts: EngineOptions): Engine {
   const { port, config, deps, onChoice, pause } = opts;
-  const registry = createRegistry(port, opts.tmpSuffix ?? defaultSuffix());
+  const registry = createRegistry(port, opts.tmpSuffix);
   const handled = new Set<string>();
   // Hosts already warned about a declined non-GET. Lives as long as the background context,
   // which since a config save stopped restarting the extension means until the browser does:

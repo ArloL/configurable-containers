@@ -22,6 +22,11 @@ const deps: Deps = { matchRule, matchGroup, sameSite };
 const noPause: PauseRecorder = { isPaused: () => false, record: () => {} };
 const ignoreChoices = (): void => {};
 
+function sequentialTmpSuffixes(): () => string {
+  let n = 0;
+  return () => String(++n);
+}
+
 // Every port method the engine can await, in call order. Registrations are not counted:
 // they run once at startup, not per navigation.
 function countingPort(port: BrowserPort): { port: BrowserPort; awaited: string[] } {
@@ -59,7 +64,7 @@ describe("fitness — the blocking path's round-trip budget", () => {
     const work = browser.addContainerNamed({ name: "Work" });
     const tab = browser.existingTab({ url: "https://work.example/one", cookieStoreId: work.cookieStoreId });
     const counted = countingPort(browser.port);
-    createEngine({ port: counted.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause });
+    createEngine({ port: counted.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
 
     return browser.navigates(aNavigationTo("https://work.example/two", { tabId: tab.id })).then((response) => {
       expect(response).toBeUndefined(); // stayed put, nothing cancelled
@@ -80,7 +85,7 @@ describe("fitness — the blocking path's round-trip budget", () => {
     const browser = aFakeBrowser();
     const tab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
     const counted = countingPort(browser.port);
-    createEngine({ port: counted.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause });
+    createEngine({ port: counted.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
 
     await browser.navigates(aNavigationTo("https://work.example/", { tabId: tab.id }));
 
@@ -111,6 +116,7 @@ describe("fitness — the blocking path's round-trip budget", () => {
       deps,
       onChoice: ignoreChoices,
       pause: { isPaused: () => true, record: () => {} },
+      tmpSuffix: sequentialTmpSuffixes(),
     });
 
     await browser.navigates(aNavigationTo("https://work.example/", { tabId: tab.id }));
@@ -128,7 +134,7 @@ describe("fitness — the blocking path's round-trip budget", () => {
     const browser = aFakeBrowser();
     const tab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
     const counted = countingPort(browser.port);
-    createEngine({ port: counted.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause });
+    createEngine({ port: counted.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
 
     await browser.navigates(aNavigationTo("https://work.example/", { tabId: tab.id }));
     const reopened = browser.openedTabs.at(-1)!;
