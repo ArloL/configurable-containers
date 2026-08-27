@@ -67,8 +67,23 @@ export function updatesManifest(releases) {
   return JSON.stringify({ addons: { [DEV_ID]: { updates } } }, null, 2) + "\n";
 }
 
+/**
+ * The argument names a directory this script CREATES and writes into, so one that climbs
+ * out of the checkout either drops updates.json where nobody is serving it from or lands
+ * on something that matters. The workflow passes "_site" and nothing legitimate needs to
+ * leave the working tree, so containment is the whole rule.
+ */
+export function outputDir(raw, root = process.cwd()) {
+  const dir = path.resolve(root, raw);
+  const within = path.resolve(root);
+  if (dir !== within && !dir.startsWith(within + path.sep)) {
+    throw new Error(`refusing to write outside the working tree: ${JSON.stringify(raw)}`);
+  }
+  return dir;
+}
+
 function main() {
-  const outDir = process.argv[2] ?? "_site";
+  const outDir = outputDir(process.argv[2] ?? "_site");
 
   const releases = fetchReleases();
   const manifest = updatesManifest(releases);

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { updatesManifest } from "../../scripts/dev-updates.js";
+import { outputDir, updatesManifest } from "../../scripts/dev-updates.js";
 
 interface Release {
   tag_name: string;
@@ -130,5 +130,27 @@ describe("updatesManifest", () => {
       updatesManifest([dev("v2607.0.104", []), dev("v2607.0.106")]),
     );
     expect(updates.map((u) => u.version)).toEqual(["2607.0.106"]);
+  });
+});
+
+describe("where the manifest is written", () => {
+  const root = "/repo";
+
+  it("resolves a relative directory against the working tree", () => {
+    expect(outputDir("_site", root)).toBe("/repo/_site");
+  });
+
+  it("allows the working tree itself", () => {
+    expect(outputDir(".", root)).toBe("/repo");
+  });
+
+  // updates.json is what every dogfooder's Firefox reads to find its next version, so a
+  // path that leaves the checkout either publishes nothing or overwrites something.
+  it.each(["../elsewhere", "/etc", "_site/../../escape"])("refuses %j", (raw) => {
+    expect(() => outputDir(raw, root)).toThrow(/outside the working tree/);
+  });
+
+  it("does not mistake a sibling with the same prefix for a child", () => {
+    expect(() => outputDir("../repo-other", root)).toThrow(/outside the working tree/);
   });
 });
