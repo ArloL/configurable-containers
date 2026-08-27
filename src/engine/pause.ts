@@ -304,13 +304,13 @@ export function createPause(opts: { port: BrowserPort; clock: Clock }): Pause {
 
     // Containers with no tabs are omitted: you cannot arm a flow you are not in, and every
     // throwaway that ever existed would bury the one that matters.
-    const containers: ContainerRow[] = [...hostsByStore.keys()]
-      .filter((csid) => csid === DEFAULT_STORE_ID || named.has(csid))
-      .map((csid) => ({
+    const containers: ContainerRow[] = [...hostsByStore.entries()]
+      .filter(([csid]) => csid === DEFAULT_STORE_ID || named.has(csid))
+      .map(([csid, hosts]) => ({
         cookieStoreId: csid,
         name: named.get(csid) ?? "Default",
         tabCount: tabs.filter((t) => t.cookieStoreId === csid).length,
-        hosts: hostsByStore.get(csid) ?? [],
+        hosts,
         armed: armed.has(csid),
         armable: csid !== DEFAULT_STORE_ID,
         reason: csid === DEFAULT_STORE_ID ? "The default container cannot be paused." : undefined,
