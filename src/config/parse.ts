@@ -142,33 +142,39 @@ function isMapping(v: unknown): v is Record<string, unknown> {
 const GLOB_META = /[*?[]/;
 const PATTERN_SEP = "://";
 
-function toMatcher(entry: unknown, path: string, ctx: Ctx): Matcher {
-  if (isMapping(entry)) {
-    for (const k of Object.keys(entry)) {
-      if (!Object.hasOwn(MATCH_MAPPING_KEYS, k)) {
-        unknownKey(ctx, path, `unknown key "${k}" in ${path} (a regex match is { regex: "…" })`);
-      }
-    }
-    if (typeof entry.regex !== "string") {
-      throw new ConfigError(`${path}.regex must be a string`, { path: `${path}.regex` });
-    }
-    use(ctx, MATCH_FORM_VERSIONS.regex);
-    try {
-      return regexMatcher(entry.regex);
-    } catch (e) {
-      throw new ConfigError(`${path}: ${(e as Error).message}`, { path });
+// Each grammar's builder throws a plain Error, and each owes the reader the same thing: the
+// message, attached to the path in the document it came from. A config error that does not
+// say where is one the user cannot act on.
+function built(path: string, build: () => Matcher): Matcher {
+  try {
+    return build();
+  } catch (e) {
+    throw new ConfigError(`${path}: ${(e as Error).message}`, { path });
+  }
+}
+
+function regexEntry(entry: Record<string, unknown>, path: string, ctx: Ctx): Matcher {
+  for (const k of Object.keys(entry)) {
+    if (!Object.hasOwn(MATCH_MAPPING_KEYS, k)) {
+      unknownKey(ctx, path, `unknown key "${k}" in ${path} (a regex match is { regex: "…" })`);
     }
   }
+  const { regex } = entry;
+  if (typeof regex !== "string") {
+    throw new ConfigError(`${path}.regex must be a string`, { path: `${path}.regex` });
+  }
+  use(ctx, MATCH_FORM_VERSIONS.regex);
+  return built(path, () => regexMatcher(regex));
+}
+
+function toMatcher(entry: unknown, path: string, ctx: Ctx): Matcher {
+  if (isMapping(entry)) return regexEntry(entry, path, ctx);
   if (typeof entry !== "string") {
     throw new ConfigError(`${path}: a match entry is a hostname, a match pattern, or { regex: "…" }`, { path });
   }
   if (entry.includes(PATTERN_SEP)) {
     use(ctx, MATCH_FORM_VERSIONS.pattern);
-    try {
-      return patternMatcher(entry);
-    } catch (e) {
-      throw new ConfigError(`${path}: ${(e as Error).message}`, { path });
-    }
+    return built(path, () => patternMatcher(entry));
   }
   // A glob with no scheme is the near-miss worth naming: `*.example.com` is what someone
   // writes meaning the match pattern, and the hostname parser would blame the wildcard.
@@ -176,11 +182,7 @@ function toMatcher(entry: unknown, path: string, ctx: Ctx): Matcher {
     throw new ConfigError(`${path}: "${entry}" is not a bare hostname — a wildcard needs the full pattern form, as in "*://*.example.com/*"`, { path });
   }
   use(ctx, MATCH_FORM_VERSIONS.host);
-  try {
-    return hostMatcher(entry);
-  } catch (e) {
-    throw new ConfigError(`${path}: ${(e as Error).message}`, { path });
-  }
+  return built(path, () => hostMatcher(entry));
 }
 
 // `firstHost` is what an action-less rule auto-names its container after. Null unless the
@@ -241,6 +243,36 @@ function parseOpen(raw: Record<string, unknown>, path: string): Action {
   return { kind: "open", containers };
 }
 
+// The optional half of a cookie was nine near-identical blocks asking one question — is the
+// key there, and is what it holds the right type — nine times over. As a table it is asked
+// once, and the table is typed against `CookieSpec` so a field added there without a row
+// here fails to compile. The failure that replaces is a silent one: a key accepted by
+// `COOKIE_KEYS` whose value then reaches no cookie.
+//
+// Row order is the order the checks used to run in, so a cookie wrong in two fields still
+// names the same one first.
+interface Checked {
+  expected: string;
+  is: (v: unknown) => boolean;
+}
+
+const STRING: Checked = { expected: "a string", is: (v) => typeof v === "string" };
+const BOOLEAN: Checked = { expected: "a boolean", is: (v) => typeof v === "boolean" };
+
+const COOKIE_FIELDS: Record<Exclude<keyof CookieSpec, "name" | "url">, Checked> = {
+  value: STRING,
+  domain: STRING,
+  path: STRING,
+  firstPartyDomain: STRING,
+  secure: BOOLEAN,
+  httpOnly: BOOLEAN,
+  // Stryker disable next-line ConditionalExpression: the set membership test already
+  // answers false for every non-string; the typeof is what lets `has` be asked at all.
+  sameSite: { expected: "one of no_restriction, lax, strict", is: (v) => typeof v === "string" && SAME_SITE.has(v) },
+  expirationDate: { expected: "a number", is: (v) => typeof v === "number" },
+  partitionKey: { expected: "an object", is: isMapping },
+};
+
 function parseCookie(raw: unknown, path: string, ctx: Ctx): CookieSpec {
   if (!isMapping(raw)) throw new ConfigError(`${path} must be a mapping`, { path });
   for (const k of Object.keys(raw)) {
@@ -258,43 +290,17 @@ function parseCookie(raw: unknown, path: string, ctx: Ctx): CookieSpec {
     spec[key] = v;
   }
 
-  for (const key of ["value", "domain", "path", "firstPartyDomain"] as const) {
-    if (key in raw) {
-      const v = raw[key];
-      if (typeof v !== "string") throw new ConfigError(`${path}.${key} must be a string`, { path: `${path}.${key}` });
-      spec[key] = v;
+  for (const [key, checked] of Object.entries(COOKIE_FIELDS)) {
+    if (!(key in raw)) continue;
+    const v = raw[key];
+    if (!checked.is(v)) {
+      throw new ConfigError(`${path}.${key} must be ${checked.expected}`, { path: `${path}.${key}` });
     }
-  }
-
-  for (const key of ["secure", "httpOnly"] as const) {
-    if (key in raw) {
-      const v = raw[key];
-      if (typeof v !== "boolean") throw new ConfigError(`${path}.${key} must be a boolean`, { path: `${path}.${key}` });
-      spec[key] = v;
-    }
-  }
-
-  if ("sameSite" in raw) {
-    const v = raw.sameSite;
-    // Stryker disable next-line ConditionalExpression: the set membership test already
-    // answers false for every non-string; the typeof is what narrows `v` for the
-    // assignment below.
-    if (typeof v !== "string" || !SAME_SITE.has(v)) {
-      throw new ConfigError(`${path}.sameSite must be one of no_restriction, lax, strict`, { path: `${path}.sameSite` });
-    }
-    spec.sameSite = v as NonNullable<CookieSpec["sameSite"]>;
-  }
-
-  if ("expirationDate" in raw) {
-    const v = raw.expirationDate;
-    if (typeof v !== "number") throw new ConfigError(`${path}.expirationDate must be a number`, { path: `${path}.expirationDate` });
-    spec.expirationDate = v;
-  }
-
-  if ("partitionKey" in raw) {
-    const v = raw.partitionKey;
-    if (!isMapping(v)) throw new ConfigError(`${path}.partitionKey must be an object`, { path: `${path}.partitionKey` });
-    spec.partitionKey = v;
+    // The table's keys are exactly `CookieSpec`'s optional ones, and each row's check is
+    // what makes the value that key's type — but the loop holds the key as a string, and
+    // `Object.assign` is the write that takes one. The per-row narrowing is what the table
+    // replaced, so it is not available here to say it again.
+    Object.assign(spec, { [key]: v });
   }
 
   return spec;
@@ -341,12 +347,9 @@ function parseScripts(raw: unknown, path: string, ctx: Ctx): ScriptSpec[] {
   return raw.map((entry, j) => parseScript(entry, `${path}.scripts[${j}]`, ctx));
 }
 
-function parseRule(raw: unknown, i: number, ctx: Ctx): Rule {
-  const path = `rules[${i}]`;
-  if (!isMapping(raw)) throw new ConfigError(`${path} must be a mapping`, { path });
-
-  // Only the keys this build knows go on: in lenient mode `unknownKey` returns, and what
-  // it lets through must not reach the action count or `parseOpen`.
+// Only the keys this build knows go on: in lenient mode `unknownKey` returns, and what it
+// lets through must not reach the action count or `parseOpen`.
+function knownFields(raw: Record<string, unknown>, path: string, ctx: Ctx): Record<string, unknown> {
   const fields: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(raw)) {
     if (Object.hasOwn(RULE_KEYS, k)) {
@@ -356,70 +359,80 @@ function parseRule(raw: unknown, i: number, ctx: Ctx): Rule {
       unknownKey(ctx, path, `unknown key "${k}" in ${path}`);
     }
   }
-  if (!("match" in fields)) throw new ConfigError(`${path} is missing "match"`, { path });
-  const { matchers, firstHost } = parseMatch(fields.match, path, ctx);
+  return fields;
+}
 
+// A rule with no action names its container after its own first host, which only a bare
+// hostname can answer.
+function autoNamed(firstHost: string | null, path: string): Action {
+  if (firstHost === null) {
+    throw new ConfigError(`${path} has no action and its first match is not a bare hostname, so there is no host to name a container after; add "open:"`, { path });
+  }
+  // The auto-named case lands here too: `- match: tmp1` is a legal hostname.
+  checkContainerName(firstHost, `${path}.match[0]`);
+  return { kind: "open", containers: [firstHost] };
+}
+
+function parseAction(fields: Record<string, unknown>, firstHost: string | null, path: string): Action {
   const present = ACTION_KEYS.filter((k) => k in fields);
   if (present.length > 1) {
     throw new ConfigError(`${path} has more than one action (${present.join(", ")}); a rule has at most one action`, { path });
   }
-
-  let action: Action;
   const chosen = present[0];
-  if (chosen === undefined) {
-    if (firstHost === null) {
-      throw new ConfigError(`${path} has no action and its first match is not a bare hostname, so there is no host to name a container after; add "open:"`, { path });
-    }
-    // The auto-named case lands here too: `- match: tmp1` is a legal hostname.
-    checkContainerName(firstHost, `${path}.match[0]`);
-    action = { kind: "open", containers: [firstHost] }; // auto-name after the first host
-  } else {
-    switch (chosen) {
-      case "inherit":
-        if (fields.inherit !== true) throw new ConfigError(`${path}.inherit must be true`, { path });
-        action = { kind: "inherit" };
-        break;
-      case "ignore":
-        if (fields.ignore !== true) throw new ConfigError(`${path}.ignore must be true`, { path });
-        action = { kind: "ignore" };
-        break;
-      case "redirector":
-        if (fields.redirector !== true) throw new ConfigError(`${path}.redirector must be true`, { path });
-        action = { kind: "redirector" };
-        break;
-      case "open":
-        action = parseOpen(fields, path);
-        break;
-    }
-  }
+  if (chosen === undefined) return autoNamed(firstHost, path);
+  if (chosen === "open") return parseOpen(fields, path);
+  // `inherit`, `ignore` and `redirector` are one shape: a key whose only legal value is
+  // `true`, and whose name IS the kind. An action key added to ACTION_KEYS that is not one
+  // of those fails here rather than silently, since `{ kind: chosen }` has to be an Action.
+  if (fields[chosen] !== true) throw new ConfigError(`${path}.${chosen} must be true`, { path });
+  return { kind: chosen };
+}
 
-  if ("default" in fields) {
-    if (action.kind !== "open" || action.containers.length < 2) {
-      throw new ConfigError(`${path}.default is only valid with a multi-value "open"`, { path: `${path}.default` });
-    }
-    const def = fields.default;
-    if (typeof def !== "string") {
-      throw new ConfigError(`${path}.default must be a container name`, { path: `${path}.default` });
-    }
-    if (!action.containers.includes(def)) {
-      throw new ConfigError(`${path}.default "${def}" is not one of open: [${action.containers.join(", ")}]`, { path: `${path}.default` });
-    }
-    action = { ...action, default: def };
+// `default:` names which of an `open:` list opens without asking — it is what replaces the
+// choice screen, not a preselection on it — so it is an overlay on an action rather than an
+// action of its own.
+function withDefault(action: Action, fields: Record<string, unknown>, path: string): Action {
+  if (!("default" in fields)) return action;
+  if (action.kind !== "open" || action.containers.length < 2) {
+    throw new ConfigError(`${path}.default is only valid with a multi-value "open"`, { path: `${path}.default` });
   }
+  const def = fields.default;
+  if (typeof def !== "string") {
+    throw new ConfigError(`${path}.default must be a container name`, { path: `${path}.default` });
+  }
+  if (!action.containers.includes(def)) {
+    throw new ConfigError(`${path}.default "${def}" is not one of open: [${action.containers.join(", ")}]`, { path: `${path}.default` });
+  }
+  return { ...action, default: def };
+}
 
+// An `ignore` rule is one CC does not act on, so an overlay asking it to seed a cookie or
+// inject a script is a request that could never be honoured. Refused rather than dropped:
+// dropping it is the silent wrong answer, a snippet the user watches for and never sees.
+function refuseOnIgnore(action: Action, key: string, path: string): void {
+  if (action.kind === "ignore") {
+    throw new ConfigError(`${path}.${key} is not allowed on an "ignore" rule`, { path: `${path}.${key}` });
+  }
+}
+
+function parseRule(raw: unknown, i: number, ctx: Ctx): Rule {
+  const path = `rules[${i}]`;
+  if (!isMapping(raw)) throw new ConfigError(`${path} must be a mapping`, { path });
+
+  const fields = knownFields(raw, path, ctx);
+  if (!("match" in fields)) throw new ConfigError(`${path} is missing "match"`, { path });
+  const { matchers, firstHost } = parseMatch(fields.match, path, ctx);
+
+  const action = withDefault(parseAction(fields, firstHost, path), fields, path);
   const out: Rule = { match: matchers, action };
 
   if ("cookies" in fields) {
-    if (action.kind === "ignore") {
-      throw new ConfigError(`${path}.cookies is not allowed on an "ignore" rule`, { path: `${path}.cookies` });
-    }
+    refuseOnIgnore(action, "cookies", path);
     out.cookies = parseCookies(fields.cookies, path, ctx);
   }
 
   if ("scripts" in fields) {
-    if (action.kind === "ignore") {
-      throw new ConfigError(`${path}.scripts is not allowed on an "ignore" rule`, { path: `${path}.scripts` });
-    }
+    refuseOnIgnore(action, "scripts", path);
     // Content scripts register against URL patterns before any navigation, and a regex has
     // no pattern form (`matcher.matcherToPatterns`). Refused here, where the user is looking
     // at the rule: the alternatives are `*://*/*` — their snippet on every page they open —
