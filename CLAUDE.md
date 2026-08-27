@@ -463,6 +463,21 @@ reasonable-looking change wrong**.
   and browsing re-triggers the sweep. `*.realtime.test.ts` is the one thing `npm test`
   does not run (`npm run test:realtime`, nightly), and cases there must **not** pass
   `ccGraceMs`: the point is that the bundle carries the shipped constant.
+- **The coverage gate is at 100% and the thresholds ARE 100** (`npm run test:coverage`,
+  every push; `vitest.coverage.config.ts`). It runs L1–L3 only — an e2e drives a packaged
+  extension in another process and contributes nothing here — over `src/**` minus the three
+  files no deterministic level can reach. A number that is also the floor means new code
+  nothing reaches fails on the push that writes it, and there are exactly two honest ways
+  to answer a red one: write the case, or, where the code cannot be reached from a
+  measured run at all, mark it **at the line** with `/* v8 ignore … -- why */` as
+  `matcher.ts`, `load.ts` and `browser-port.ts`'s notify echo do. Never lower a threshold
+  — the same rule the mutation gate has, for the same reason. Third possibility worth
+  checking first: an unreachable line is often a **dead defence** and the fix is deleting
+  it. Two were, reaching 100 — a `?? []` over a key taken from that same map, and
+  `createEngine`'s own tmp-suffix counter, which no production caller has ever used
+  because auto-temp and the engine must share one (a second counter mints a colliding
+  `tmp1`, and identity is derived from the name). `EngineOptions.tmpSuffix` is required
+  now; keep it that way.
 - **The mutation gate is at 100% and `npm test` does not run it** (`npm run test:mutation`,
   nightly). It mutates only the pure modules — `resolver`, `matcher`, `psl`, `config`,
   `overlays` — and lets only the tests that **own** each of them kill the mutants
@@ -602,7 +617,14 @@ reasonable-looking change wrong**.
   (`onTabRemoved`: pause then the disposer; `onTabUpdated`: auto-temp then the
   redirector-closer) had their first listener silently dropped, so pause's disarm-on-empty
   and auto-temp's bug-1586612 path were unwired in every composed-background case. Never
-  relax these.
+  relax these. `getCookie` carries one more: a `setCookie` that SUCCEEDS does not mean the
+  next get answers, because the seeder sets with the spec's own https url and then asks
+  with the navigation's — Firefox hands no Secure cookie to an http one, and a mock that
+  always answered read that as "already on the wire" and spliced a header the browser
+  would never have sent. The arranged failures (`tabCreationFails`, `tabRemovalFails`,
+  `storageWritesFail`, `notificationsFail`, `tabLookupFails`) are each a real Firefox
+  rejection, and what they reach is a floated promise's `catch`: an unarranged one is an
+  unhandled rejection in the background context rather than a missing feature.
 
   **What it does NOT model is latency, and that can make a case pass for the wrong reason.**
   Everything here resolves on the microtask queue, so two async paths interleave in whatever

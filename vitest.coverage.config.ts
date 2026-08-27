@@ -55,24 +55,23 @@ export default defineConfig({
       reporter: ["text", "html", "lcov"],
       reportsDirectory: "reports/coverage",
       thresholds: {
-        // Floors, a point or two under what the suite measures today — not targets.
-        // Raise them when the number rises; a drop is a file, or a branch of one, that
-        // nothing deterministic reaches any more.
-        statements: 97,
-        branches: 95,
-        functions: 95,
-        lines: 97,
-        // The pure modules the mutation gate also owns are held at 100 here, so a new
-        // branch in them is caught by the fast gate too, on the push that adds it
-        // rather than that night.
-        "src/resolver/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
-        "src/matcher/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
-        "src/psl/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
-        // Added to the mutation gate's scope on 2026-08-24, so held to the same floor
-        // here: a new branch in either is caught on the push that writes it rather than
-        // that night.
-        "src/config/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
-        "src/overlays/**": { statements: 100, branches: 100, functions: 100, lines: 100 },
+        // 100 everywhere, and a floor rather than a target: every line and branch of
+        // `src/` outside the three files above is reached by an L1-L3 case. What that
+        // buys is a failure that NAMES the new code nothing reaches, on the push that
+        // writes it — a threshold set below the measurement absorbs the first few in
+        // silence and only fails once someone has written several.
+        //
+        // Reaching it needed two things a lower bar hides. Code no deterministic level
+        // can reach is marked at the line (`/* v8 ignore … -- why */`, as `matcher.ts`
+        // and `load.ts` already did), so the exception is readable beside the code
+        // instead of being averaged away. And a defence that turned out to be dead was
+        // deleted rather than tested — `hostsByStore.get(csid) ?? []` over a key from
+        // that same map, and `createEngine`'s own tmp-suffix counter, which the one
+        // production caller has always overridden because auto-temp shares its own.
+        statements: 100,
+        branches: 100,
+        functions: 100,
+        lines: 100,
       },
     },
   },

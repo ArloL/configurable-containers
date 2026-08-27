@@ -175,6 +175,11 @@ export function createBrowserPort(): BrowserPort {
       // esbuild folds this to a literal `false` in shipped bundles — the build does not
       // minify (an AMO reviewer reads this file), so `if (false)` is readable proof the
       // branch is dead.
+      /* v8 ignore else -- the else IS the shipped build, and no run that measures coverage
+         has it: the identifier is a compile-time constant, so the two arms belong to two
+         different bundles rather than two paths through one. `test/extension/package.test.ts`
+         is what pins the shipped side, asserting the packaged bundle contains `if (false)`
+         and not the probe's id. */
       if (__CC_NOTIFY_ECHO_TO__ !== "") {
         await browser.runtime.sendMessage(__CC_NOTIFY_ECHO_TO__, { cmd: "cc-notification", ...n });
       }
