@@ -56,10 +56,10 @@ const list = document.getElementById("cc-options")!;
 const items: HTMLElement[] = payload.options.map((container, i) => {
   const hint = hints[i]!; // choiceHints returns one hint per option
   const li = document.createElement("li");
-  li.setAttribute("data-cc-option", "");
-  li.setAttribute("data-key", hint.key);
-  li.setAttribute("data-container", container);
-  if (hint.mnemonic) li.setAttribute("data-mnemonic", hint.mnemonic);
+  li.dataset.ccOption = "";
+  li.dataset.key = hint.key;
+  li.dataset.container = container;
+  if (hint.mnemonic) li.dataset.mnemonic = hint.mnemonic;
   li.setAttribute("role", "option");
   li.setAttribute("aria-selected", "false");
   // Roving tabindex: exactly one option is in the tab order, so Tab leaves the list rather
