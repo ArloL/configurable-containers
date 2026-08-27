@@ -30,13 +30,17 @@ want="${1:-both}"
 
 fetch() {
   local name="$1" product="$2"
-  if [ -x "$dest/$name/firefox" ]; then
+  if [[ -x "$dest/$name/firefox" ]]; then
     echo "$name: already at $dest/$name/firefox ($("$dest/$name/firefox" --version))"
     return
   fi
   mkdir -p "$dest"
   echo "$name: downloading…"
-  curl -fsSL -o "$dest/$name.tar.xz" \
+  # --proto-redir as well as --proto: this url is a REDIRECTOR, and the browser it lands
+  # on is installed and run. Pinning only the first hop leaves the hop that carries the
+  # bytes free to be downgraded.
+  curl --proto '=https' --proto-redir '=https' \
+    --fail --silent --show-error --location --output "$dest/$name.tar.xz" \
     "https://download.mozilla.org/?product=$product&os=linux64&lang=en-US"
   # The archive unpacks to a directory called "firefox" whichever channel it is, so each
   # channel is unpacked on its own and moved into place.
