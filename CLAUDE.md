@@ -368,7 +368,7 @@ reasonable-looking change wrong**.
   navigation, back navigation and the revert into one case. Full notes:
   `docs/superpowers/specs/2026-07-31-youtube-original-audio-design.md` §2.
 
-## Static analysis: two gates, and why the obvious linter is not one
+## Static analysis: three gates, and why the obvious linter is not one
 
 - **`typescript@7` is the Go port, and it exports no JS compiler API** — the package's
   `exports` are `lib/version.cjs` plus `unstable/*`. typescript-eslint builds every
@@ -401,6 +401,19 @@ reasonable-looking change wrong**.
   trustworthy must not install from a mutable cache an earlier run could have poisoned, or
   a tampered build gets certified reproducible. zizmor only reports the pairing on a
   publishing trigger, so the nightly's half was never going to be flagged.
+- **A SonarCloud finding is answered in `sonar-project.properties`, never in the web UI.**
+  Resolving one as "won't fix" there is what the service invites and it loses the only part
+  worth keeping: the reasoning, where a reviewer would see it, in a project that can be
+  recreated. Suppression is per rule and path
+  (`sonar.issue.ignore.multicriteria.<id>.{ruleKey,resourceKey}`), and each id in that file
+  carries the comment saying why. Unlike zizmor — which has **no** suppressions on purpose —
+  a few of these rules are simply wrong about this code, and one of them is wrong in the
+  direction that matters: **`S2871` asks for `localeCompare` behind the `.sort()` in
+  `scripts/package.ts`, and taking that advice breaks reproducible builds**, since that sort
+  is what makes the xpi's entry order the same on every machine and collation is not. The
+  other two are `S4036` (absolute paths for `git`/`gh`/`npm`/`curl` in dev scripts) and
+  `S5332` (the `"http://" + hostish + "/"` in `bareHost`, which parses a string and fetches
+  nothing). Everything else gets fixed.
 - **`?? ""` on a `spawnSync().stdout` is not a dead defence**, whatever the types say:
   `@types/node` declares `string` once an encoding is set, and a spawn that never started
   reports null — which is the case `harness/reaper.ts` exists for. Both sites carry a
