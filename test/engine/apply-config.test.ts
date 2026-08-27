@@ -91,6 +91,34 @@ describe("applying a stored config without a restart", () => {
     expect(await containerForNavigationTo(browser, "https://nomatch.example/", "c")).toBe("Editor");
   });
 
+  it("reports a registration failure that arrives as something other than an Error", async () => {
+    const browser = aFakeBrowser();
+    await startTheBackground(browser, aFakeClock(), parseConfig(WORK_YAML));
+    await browser.port.writeStored(
+      CONFIG_STORAGE_KEY,
+      `rules:\n  - match: nomatch.example\n    open: Editor\n    scripts:\n      - { run: "x();" }\n`,
+    );
+    browser.scriptRegistrationFails({ message: "no matching host permission" });
+
+    // The editor prints whatever comes back, so reading `.message` off a rejection that is
+    // not an Error would throw inside the handler and the save would answer nothing at all.
+    expect(await browser.receivesMessage({ type: CONFIG_APPLY })).toEqual({
+      scriptError: "[object Object]",
+    });
+  });
+
+  it("applies what is in storage when there is nothing in storage", async () => {
+    const browser = aFakeBrowser();
+    await startTheBackground(browser, aFakeClock(), parseConfig(WORK_YAML));
+
+    // Reachable through config-sync's adopt, and through an editor tab left open across a
+    // storage the user cleared. The seed is deliberately NOT the fallback here: by the time
+    // anything applies, storage is the truth, and a build's seed reappearing would be a
+    // second answer to what the config is — silently reinstating rules the user deleted.
+    expect(await browser.receivesMessage({ type: CONFIG_APPLY })).toEqual({});
+    expect(await containerForNavigationTo(browser, "https://work.example/", "e")).toMatch(/^tmp/);
+  });
+
   it("applies the empty config and names the error when the stored text does not parse", async () => {
     const browser = aFakeBrowser();
     await startTheBackground(browser, aFakeClock(), parseConfig(WORK_YAML));
