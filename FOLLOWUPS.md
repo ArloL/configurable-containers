@@ -84,11 +84,3 @@ stale local signature would silently win over the real one. The trigger to re-ch
 Renovate bump of `@types/selenium-webdriver`: grep the new package for the two names, and
 if they are there, delete `harness/selenium-webdriver.d.ts` and let `npm run typecheck`
 confirm the call sites still resolve.
-
----
-
-A sweep of the cold base on 2026-08-26 (against `0131954`, every gate green) filed seven
-entries here. None was a red test — that was the point of writing them down — and all seven
-are now resolved, which is why nothing follows this line. The three above it are not that
-kind of entry: each is a decision already taken and priced, kept so the next reader does
-not re-take it.
