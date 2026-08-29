@@ -44,7 +44,7 @@ describe("options page (real Firefox, CC + probe)", () => {
     let serverPort: string;
 
     beforeAll(async () => {
-      firefox = await launch({ extensions: ["probe", "cc"] });
+      firefox = await launch({ extensions: ["cc"] });
       serverPort = new URL(firefox.serverUrl).port;
     });
 
@@ -185,7 +185,7 @@ describe("options page (real Firefox, CC + probe)", () => {
     let serverPort: string;
 
     beforeAll(async () => {
-      firefox = await launch({ extensions: ["probe", "cc"], configYaml: BROKEN_SEED });
+      firefox = await launch({ extensions: ["cc"], configYaml: BROKEN_SEED });
       serverPort = new URL(firefox.serverUrl).port;
     });
 

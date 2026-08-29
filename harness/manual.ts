@@ -17,10 +17,7 @@ const CONFIG_PATH = path.resolve(HERE, "../configurable-containers.config.yaml")
 async function main() {
   const configYaml = readFileSync(CONFIG_PATH, "utf-8");
   await launch({
-    // `extensions` REPLACES launch()'s ["probe"] default rather than adding to it, so
-    // naming CC alone dropped the probe — and with it the CSID:<store> titles above, and
-    // the notify and decision echoes launch() wires to the probe's id regardless.
-    extensions: ["cc", "probe"],
+    extensions: ["cc"],
     headless: false,
     configYaml,
     localDomains: null, // live sites resolve normally

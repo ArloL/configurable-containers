@@ -18,7 +18,7 @@ describe("auto-temp (real Firefox, CC + probe)", () => {
   let relay: Page;
 
   beforeAll(async () => {
-    firefox = await launch({ extensions: ["probe", "cc"] });
+    firefox = await launch({ extensions: ["cc"] });
     serverPort = new URL(firefox.serverUrl).port;
   });
 
@@ -116,7 +116,7 @@ describe("auto-temp startup sweep (real Firefox)", () => {
   let firefox: Session;
 
   beforeAll(async () => {
-    firefox = await launch({ extensions: ["probe", "cc"], startupUrl: "about:newtab" });
+    firefox = await launch({ extensions: ["cc"], startupUrl: "about:newtab" });
   });
 
   afterAll(async () => {

@@ -15,7 +15,7 @@ describe("redirect binding — an OAuth code flow (real Firefox, CC + probe)", (
   let serverPort: string;
 
   beforeAll(async () => {
-    firefox = await launch({ extensions: ["probe", "cc"] });
+    firefox = await launch({ extensions: ["cc"] });
     serverPort = new URL(firefox.serverUrl).port;
   });
 
@@ -57,7 +57,7 @@ describe("redirect binding — a SAML POST binding (real Firefox, CC + probe)", 
   let serverPort: string;
 
   beforeAll(async () => {
-    firefox = await launch({ extensions: ["probe", "cc"] });
+    firefox = await launch({ extensions: ["cc"] });
     serverPort = new URL(firefox.serverUrl).port;
   });
 

@@ -14,7 +14,7 @@ describe("what a privileged page answers (real Firefox)", () => {
   let options: Page;
 
   beforeAll(async () => {
-    firefox = await launch({ extensions: ["probe", "cc"] });
+    firefox = await launch({ extensions: ["cc"] });
     // The probe's command relay is a DOM event injected into http(s) pages only, so the
     // driver has to be parked on one before anything can ask it to open a page.
     const port = new URL(firefox.serverUrl).port;
