@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Modularity Review</title>
+<style>
+  :root {
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    --font-mono: 'SF Mono', 'Fira Code', 'Fira Mono', Menlo, Consolas, monospace;
+    --max-width: 820px;
+  }
+
+  :root[data-theme="light"] {
+    --bg: #ffffff;
+    --bg-secondary: #f6f8fa;
+    --bg-tertiary: #eef1f5;
+    --text: #1a1a1a;
+    --text-secondary: #4a5568;
+    --text-muted: #718096;
+    --border: #e2e8f0;
+    --accent: #2b6cb0;
+    --accent-light: #ebf4ff;
+    --severity-critical: #c53030;
+    --severity-critical-bg: #fff5f5;
+    --severity-significant: #c05621;
+    --severity-significant-bg: #fffaf0;
+    --severity-minor: #2b6cb0;
+    --severity-minor-bg: #ebf8ff;
+    --table-stripe: #f7fafc;
+    --link: #2b6cb0;
+    --link-hover: #1a4971;
+    --shadow: rgba(0, 0, 0, 0.06);
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #1a1a1a;
+    --bg-secondary: #242424;
+    --bg-tertiary: #2e2e2e;
+    --text: #e2e2e2;
+    --text-secondary: #a0a0a0;
+    --text-muted: #717171;
+    --border: #333333;
+    --accent: #b0b0b0;
+    --accent-light: #2a2a2a;
+    --severity-critical: #fc8181;
+    --severity-critical-bg: #2d1b1b;
+    --severity-significant: #f6ad55;
+    --severity-significant-bg: #2d2415;
+    --severity-minor: #a0a0a0;
+    --severity-minor-bg: #282828;
+    --table-stripe: #222222;
+    --link: #e0c97f;
+    --link-hover: #f0dca0;
+    --shadow: rgba(0, 0, 0, 0.2);
+  }
+
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    margin: 0;
+    padding: 2rem 1.5rem;
+    transition: background 0.3s ease, color 0.3s ease;
+  }
+
+  .container {
+    max-width: var(--max-width);
+    margin: 0 auto;
+  }
+
+  /* Theme toggle */
+  .theme-toggle {
+    position: fixed;
+    top: 1.5rem;
+    right: 1.5rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    color: var(--text);
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+    z-index: 100;
+  }
+
+  .theme-toggle:hover {
+    background: var(--bg-tertiary);
+  }
+
+  /* Typography */
+  h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin: 0 0 0.5rem 0;
+    color: var(--text);
+  }
+
+  h2 {
+    font-size: 1.4rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 2.5rem 0 1rem 0;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+  }
+
+  h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 1.8rem 0 0.6rem 0;
+    color: var(--text);
+  }
+
+  p {
+    margin: 0 0 1rem 0;
+    color: var(--text-secondary);
+  }
+
+  a {
+    color: var(--link);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: border-color 0.2s ease;
+  }
+
+  a:hover {
+    color: var(--link-hover);
+    border-bottom-color: var(--link-hover);
+  }
+
+  /* Metadata */
+  .meta {
+    color: var(--text-muted);
+    font-size: 0.95rem;
+    margin-bottom: 2.5rem;
+  }
+
+  .meta strong {
+    color: var(--text-secondary);
+  }
+
+  /* Tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.5rem 0;
+    font-size: 0.9rem;
+  }
+
+  th {
+    background: var(--bg-secondary);
+    font-weight: 600;
+    text-align: left;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+
+  td {
+    padding: 0.65rem 1rem;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+  }
+
+  tr:nth-child(even) td {
+    background: var(--table-stripe);
+  }
+
+  /* Severity badges */
+  .severity {
+    display: inline-block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.15rem 0.6rem;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .severity-critical {
+    color: var(--severity-critical);
+    background: var(--severity-critical-bg);
+  }
+
+  .severity-significant {
+    color: var(--severity-significant);
+    background: var(--severity-significant-bg);
+  }
+
+  .severity-minor {
+    color: var(--severity-minor);
+    background: var(--severity-minor-bg);
+  }
+
+  /* Issue cards */
+  .issue {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.5rem 2rem;
+    margin: 1.5rem 0;
+    box-shadow: 0 1px 3px var(--shadow);
+  }
+
+  .issue h2 {
+    margin-top: 0;
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+
+  .issue h3 {
+    font-size: 1rem;
+  }
+
+  .issue-meta {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    margin-bottom: 1rem;
+  }
+
+  /* Lists */
+  ul, ol {
+    padding-left: 1.5rem;
+    color: var(--text-secondary);
+  }
+
+  li {
+    margin-bottom: 0.35rem;
+  }
+
+  /* Code */
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.88em;
+    background: var(--bg-tertiary);
+    padding: 0.15rem 0.4rem;
+    border-radius: 3px;
+  }
+
+  /* Horizontal rule */
+  hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 3rem 0 1.5rem 0;
+  }
+
+  /* Footer */
+  .footer {
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    font-style: italic;
+  }
+
+  .footer a {
+    color: var(--text-muted);
+    border-bottom-color: var(--border);
+  }
+
+  .footer a:hover {
+    color: var(--link);
+  }
+
+  /* Print */
+  @media print {
+    .theme-toggle { display: none; }
+    body { padding: 0; }
+    .issue { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+  <span id="theme-icon"></span>
+</button>
+
+<div class="container">
+  <h1>Modularity Review</h1>
+  <div class="meta"><strong>Scope</strong>: Entire codebase — <code>src/</code> (resolver, matcher, psl, overlays, config, engine, extension), <code>harness/</code>, and the <code>test/</code> seams that shape the design<br><strong>Date</strong>: 2026-08-29</div>
+  <h2>Executive Summary</h2>
+  <p>Configurable Containers is a Firefox WebExtension that routes each site into the right container from one user-authored config, replacing what Multi-Account Containers and Temporary Containers do separately. Its <a href="https://coupling.dev/posts/core-concepts/modularity/">modularity</a> is unusually healthy: the routing decision is a pure function, effects sit behind a narrow port, the overlays reuse the router's own <code>matchRule</code> so precedence cannot drift, and the two highest-<a href="https://coupling.dev/posts/dimensions-of-coupling/distance/">distance</a> boundaries in the system — <code>storage.sync</code> across machines and the config YAML across builds — both carry real versioned <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">integration contracts</a>. A fitness suite reads <code>src/</code> as text to keep those properties from eroding.</p>
+  <p>The one genuinely <a href="https://coupling.dev/posts/core-concepts/balance/">unbalanced</a> integration is the pause-and-record feature. A single type, <code>Recording</code>, is simultaneously the in-memory model, the <code>storage.local</code> persisted schema, the message-reply wire type, and the options page's render model — four roles across a realm boundary and a version boundary, in the most <a href="https://coupling.dev/posts/dimensions-of-coupling/volatility/">volatile</a> part of the codebase. It has already broken once (the <code>readRecording</code>/<code>readHost</code>/<code>readUrl</code> normalizers exist because a build that trusted the stored shape would have called <code>.find</code> on <code>undefined</code> inside the blocking handler), and it is the only place in <code>src/</code> with a module-level import cycle.</p>
+  <p>Two conclusions worth stating up front because they run against instinct. The engine's guard family — <code>handled</code>, <code>reopenedNav</code>, <code>viewSourceNav</code>, <code>inTurn</code> — was named as a pain point, and under this model it is <strong>correctly designed</strong>: high <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">strength</a> at the lowest possible distance is <a href="https://coupling.dev/posts/core-concepts/balance/">high cohesion</a>, and extracting a guard into a sibling would raise distance without lowering strength. And the MV2 blocking-<code>webRequest</code> dependency, which would otherwise be the headline finding, is neutralised by low volatility: no migration is planned.</p>
+  <h2>Coupling Overview</h2>
+  <table><thead><tr><th>Integration</th><th><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Strength</a></th><th><a href="https://coupling.dev/posts/dimensions-of-coupling/distance/">Distance</a></th><th><a href="https://coupling.dev/posts/dimensions-of-coupling/volatility/">Volatility</a></th><th><a href="https://coupling.dev/posts/core-concepts/balance/">Balanced?</a></th></tr></thead><tbody>
+  <tr><td><code>engine/pause.ts</code> ↔ <code>extension/pause-protocol.ts</code> ↔ <code>extension/options.ts</code></td><td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Model</a>, trending <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">functional</a></td><td>High — separate realms, separate bundles, plus a time boundary via <code>storage.local</code></td><td>High — the shape changed on 2026-08-26</td><td><strong>No</strong> — Issue 1</td></tr>
+  <tr><td><code>harness/</code> + <code>test/e2e/</code> → the running extension</td><td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Contract</a> — but a contract that carries effects, not causes</td><td>High — separate process, separate add-on, async relay</td><td>High — the named pain point</td><td><strong>No</strong> — Issue 2</td></tr>
+  <tr><td><code>wiring.ts</code> → six siblings via one mutated <code>Config</code> object</td><td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Functional</a> (common coupling), <strong>implicit</strong></td><td>Low — one construction site, one mutation site</td><td>High — config is the core</td><td>Balanced by distance; the <em>implicitness</em> is Issue 3</td></tr>
+  <tr><td><code>config/parse.ts</code> → <code>engine/registry.ts</code> (<code>isThrowawayName</code>)</td><td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Contract</a></td><td>Low, but the layer direction is inverted</td><td>Low — <code>tmp&lt;N&gt;</code> has one shape</td><td>Balanced; direction is Issue 4</td></tr>
+  <tr><td><code>extension/options.ts</code> → <code>engine/pause.ts</code> (<code>PAUSE_STORAGE_KEY</code>)</td><td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Intrusive</a>-adjacent — names another module's private storage key</td><td>Medium — crosses the realm boundary</td><td>Medium</td><td>Marginal — Issue 5</td></tr>
+  <tr><td><code>resolver/resolve.ts</code> → <code>matcher</code>/<code>psl</code> via injected <code>Deps</code></td><td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Contract</a> — <code>Matcher = unknown</code>, fully opaque</td><td>Low, pinned by <code>fitness/seams.test.ts</code></td><td>High (core)</td><td><strong>Yes</strong> — exemplary</td></tr>
+  <tr><td><code>overlays/*</code> → routing via the same <code>matchRule</code></td><td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Contract</a> — one injected function, never a duplicated rule</td><td>Low</td><td>High</td><td><strong>Yes</strong> — exemplary</td></tr>
+  <tr><td><code>engine/engine.ts</code> internal guard family</td><td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Functional</a>, high degree (<a href="https://coupling.dev/posts/related-topics/connascence/">connascence of execution order</a>)</td><td>Lowest possible — one function</td><td>High</td><td><strong>Yes</strong> — <a href="https://coupling.dev/posts/core-concepts/balance/">high cohesion</a>, correctly located</td></tr>
+  <tr><td><code>config/sync-record.ts</code> ↔ another machine's build</td><td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Contract</a> — <code>SyncMeta.v</code>, hash, absent/incomplete/unreadable/ok</td><td>Highest in the system</td><td>Low–medium</td><td><strong>Yes</strong> — the model done exactly right</td></tr>
+  <tr><td><code>config/parse.ts</code> ↔ the user's hand-written YAML</td><td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Contract</a> — <code>CONFIG_VERSION</code>, <code>FEATURE_VERSIONS</code>, gated leniency</td><td>High — an artifact CC does not own, read by builds of different ages</td><td>Medium</td><td><strong>Yes</strong></td></tr>
+  <tr><td><code>engine/engine.ts</code> → MAC via <code>sendExternalMessage</code></td><td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Contract</a> — one method, throws swallowed</td><td>Maximum — another organisation's add-on</td><td>Low</td><td><strong>Yes</strong></td></tr>
+  <tr><td><code>engine/port.ts</code> → Firefox <code>browser.*</code></td><td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Functional</a> — undocumented event ordering, measured facts, known bugs</td><td>Maximum — no coordination, independent release cadence</td><td>Medium–high</td><td><strong>Unbalanceable by nature</strong>; mitigated, see below</td></tr>
+  <tr><td><code>src/engine/*</code> ↔ <code>test/engine/mock-port.ts</code></td><td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Functional</a> — the mock reimplements Firefox's requirements</td><td>Low — same repo, same author</td><td>Medium</td><td>Balanced by distance; leakage noted in Issue 6</td></tr>
+  <tr><td>MV2 blocking <code>webRequest</code> semantics → the whole engine</td><td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Functional</a></td><td>Maximum</td><td><strong>Low</strong> — no migration planned</td><td><strong>Yes</strong> — neutralised by low volatility</td></tr>
+  </tbody></table>
+  <h3>A note on the level of abstraction</h3>
+  <p>The <a href="https://coupling.dev/posts/core-concepts/balance/">balanced coupling model is fractal</a>, so the analysis has to name the level it operates at. This project is one deployable built by one author (324 of 437 commits over two months), so <a href="https://coupling.dev/posts/dimensions-of-coupling/distance/">socio-technical distance</a> is near zero everywhere inside the repository — there is no team boundary to raise the cost of a cross-module change. That materially lowers the severity of most in-repo coupling, and it is why several integrations that would be findings in a multi-team system are recorded above as balanced.</p>
+  <p>The genuinely high-distance boundaries are all <em>external</em>, and all of them are boundaries in time or process rather than in org chart:</p>
+  <ul>
+  <li>Firefox itself (independent release cadence, no coordination)</li>
+  <li>Multi-Account Containers (another organisation's add-on)</li>
+  <li><code>storage.sync</code> (another machine, possibly another build version)</li>
+  <li><code>storage.local</code> (this machine, a <em>future</em> build — a time boundary)</li>
+  <li>the user's config YAML (an artifact the user owns and hand-edits)</li>
+  <li>the background context ↔ the options and choice pages (separate JS realms, separate esbuild outputs, async message passing)</li>
+  </ul>
+  <p>Every issue below sits on one of those.</p>
+  <div class="issue">
+  <h2>Issue: <code>Recording</code> is four types wearing one name</h2>
+  <div class="issue-meta"><strong>Integration</strong>: <code>engine/pause.ts</code> ↔ <code>extension/pause-protocol.ts</code> ↔ <code>extension/options.ts</code> ↔ <code>storage.local</code><br><strong>Severity</strong>: <span class="severity severity-significant">Significant</span></div>
+  <h3>Knowledge Leakage</h3>
+  <p><code>Recording</code>, <code>RecordedHost</code> and <code>RecordedUrl</code> are defined once in <code>src/engine/pause.ts</code> and serve four distinct roles:</p>
+  <ol>
+  <li>the in-memory model <code>record()</code> mutates on the blocking path;</li>
+  <li>the <code>storage.local</code> persisted schema — <code>snapshot()</code> writes <code>PauseState</code> verbatim, so the type <em>is</em> the disk format;</li>
+  <li>the message-reply wire type — <code>PauseStatusResponse.recordings: Recording[]</code> ships it unchanged across the realm boundary;</li>
+  <li>the options page's render model — <code>renderRecording</code> reads <code>.hosts</code>, <code>.urls</code>, <code>.dropped</code>, <code>.wouldHave</code> directly.</li>
+  </ol>
+  <p>This is <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">model coupling</a> at minimum, and it behaves as <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">functional coupling</a>: the persisted form and the rendered form are required to change together, because they are the same declaration.</p>
+  <p>The leakage is already visible in the type itself. <code>RecordedHost.dropped</code> is required while <code>Recording.dropped</code> is optional, and the reason given in the source is purely about what an <em>older build</em> wrote to disk — a persistence concern that has surfaced in a type the render layer also consumes. <code>readRecording</code>/<code>readHost</code>/<code>readUrl</code> exist because the previous <code>isRecording</code> type guard was not enough: a host row written before URL detail existed has no <code>urls</code>, and a build that trusted the stored shape would have called <code>.find</code> on <code>undefined</code> <strong>inside the blocking <code>onBeforeRequest</code> handler</strong>, where a throw is a navigation that never completes.</p>
+  <p>It is also the only module-level import cycle in <code>src/</code>: <code>engine/pause.ts</code> imports four types from <code>extension/pause-protocol.ts</code>, which imports <code>Recording</code> back from <code>engine/pause.ts</code>. Type-only, so no runtime cycle — but a knowledge cycle across a layer boundary the codebase polices hard elsewhere. <code>test/fitness/seams.test.ts</code> forbids exactly this direction for <code>src/resolver</code>, <code>src/matcher</code> and <code>src/psl</code>; no rule covers <code>src/engine</code> reaching into <code>src/extension</code>.</p>
+  <p>A third strand runs through the same module. <code>pause.ts</code> imports <code>targetLabel</code> from <code>engine.ts</code> — the <em>only</em> import that makes <code>pause.ts</code> depend on the engine, and <code>pause.ts</code> is <code>targetLabel</code>'s only external consumer. Sharing that function is right (the record and the F9 toast must use the same words), but its current home means the pause module drags the engine into its dependency graph, and through <code>options.ts</code> into the options page's.</p>
+  <h3>Complexity Impact</h3>
+  <p>Adding a field to a recording row means holding four things at once: what the blocking-path writer does with it, what a normalizer must fill in when an older build's row lacks it, what the message reply now carries, and what the page renders. Adding a field to a <em>render</em> row means asking whether it needs to be persisted — a question the type does not pose, so the default answer is "yes, because it is the same type." That is four units of working memory for a change that ought to need one, and the units are not independent: the normalizer's behaviour depends on the persistence decision, which depends on the render need.</p>
+  <p>The blocking-path constraint sharpens it. <code>record()</code> runs inside <code>onBeforeRequest</code>, so a shape mismatch is not a rendering bug — it is a navigation that never completes. The distance between where a mistake is made (a type declaration read by the options page) and where it is paid (a hung tab) is exactly the <a href="https://coupling.dev/posts/core-concepts/complexity/">unpredictability</a> modular design exists to remove.</p>
+  <h3>Cascading Changes</h3>
+  <ul>
+  <li><strong>Adding a field the page needs to display.</strong> It lands in the persisted schema whether or not it should, and every stored recording written before the change now needs a normalizer arm. This has already happened once, on 2026-08-26, for <code>urls</code> and both <code>dropped</code> counters.</li>
+  <li><strong>Changing how a host row is summarised.</strong> <code>VARIED</code> is currently computed in <code>record()</code> on the blocking path and stored. If the presentation of "this host resolved two ways" changes, the change is to persisted data written under a latency constraint, not to a renderer.</li>
+  <li><strong>Removing or renaming a field.</strong> Every recording on every dogfooder's profile is now unreadable by the normalizer, which silently drops it — losing browsing history the user armed a container specifically to capture.</li>
+  <li><strong>The options page pulling in more of the engine.</strong> <code>engine.ts</code> is currently absent from the options bundle only because esbuild tree-shakes <code>createPause</code> and therefore <code>targetLabel</code>. Any future options-page import that reaches <code>createPause</code> pulls <code>engine.ts</code>, <code>resolve.ts</code>, <code>supersede.ts</code>, <code>registry.ts</code> and <code>port.ts</code> into a page bundle, with no test that would notice.</li>
+  </ul>
+  <h3>Recommended Improvement</h3>
+  <p><strong>Do not decompose further.</strong> Distance is already high — separate realms and a time boundary. Splitting the module would raise it without touching the strength, which is the move that manufactures a distributed monolith in miniature. Reduce <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">strength</a> instead, by giving the boundary the <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">integration contract</a> that <code>sync-record.ts</code> already has for the harder boundary next door.</p>
+  <p>Three moves, none of them large:</p>
+  <ol>
+  <li><strong>Split one type into three.</strong> <code>StoredRecording</code> (what <code>hydrate</code> reads, and the only shape allowed to carry an optional field for backward compatibility), <code>Recording</code> (in-memory, all fields required), and <code>RecordingView</code> (what <code>PauseStatusResponse</code> carries and the page renders). The normalizer already <em>is</em> an <a href="https://coupling.dev/posts/related-topics/domain-driven-design/">anti-corruption layer</a>; it just has no distinct type on its far side, so nothing prevents the disk shape and the render shape drifting into each other. With <code>RecordingView</code> owned by <code>pause-protocol.ts</code>, the import cycle disappears — the protocol module imports nothing from <code>engine/</code>.</li>
+  </ol>
+  <ol>
+  <li><strong>Move <code>targetLabel</code>, <code>namesAConfiguredContainer</code> and <code>Declinable</code> out of <code>engine.ts</code>.</strong> They are presentation of a <code>Decision</code>, which is a resolver concept, not an engine one. A small <code>decision-label.ts</code> beside the resolver removes the <code>pause → engine</code> edge entirely, and with it the tree-shaking dependency that keeps <code>engine.ts</code> out of the options bundle by luck rather than by rule.</li>
+  </ol>
+  <ol>
+  <li><strong>Extend the <code>fitness/seams.test.ts</code> layering rule</strong> to forbid <code>src/engine/**</code> importing from <code>src/extension/**</code>. The rule already exists in the exact shape needed for the pure modules — an exact import inventory rather than a bound — and this is the direction it does not yet cover.</li>
+  </ol>
+  <p><strong>Trade-off.</strong> Three types where there is one is more declaration to read, and two of them will be structurally identical on the day they are written. That cost is real and it is the standard objection to DTOs. It is worth paying here for one specific reason: this shape has already changed under a live install base, the normalizers that absorbed that change exist and are tested, and the next change will arrive the same way. The three types are where the normalizer's job becomes statable in the type system instead of in a comment.</p>
+  </div>
+  <div class="issue">
+  <h2>Issue: the e2e boundary returns effects, never causes</h2>
+  <div class="issue-meta"><strong>Integration</strong>: <code>harness/browser/</code> + <code>test/e2e/</code> → the running extension<br><strong>Severity</strong>: <span class="severity severity-significant">Significant</span></div>
+  <h3>Knowledge Leakage</h3>
+  <p>This is the inverse of the usual finding: the boundary is <em>too</em> thin, and the missing knowledge is diagnostic rather than functional.</p>
+  <p>The e2e layer observes CC only through what the probe extension writes into an http(s) page's DOM — <code>CSID:&lt;store&gt;</code> in the title, <code>data-cc-container</code>, <code>data-cc-containers</code>, <code>data-cc-cookies-here</code>, <code>data-cc-script-at-start</code>. <code>harness/browser/</code>'s <code>PageReport</code> diagnoses the <em>browser</em>: current url, ids present in the document, the tab list with <code>GONE</code> markers, and it is carefully built to survive its own tab being closed. Nothing anywhere reports the <em>extension's</em> reasoning.</p>
+  <p>So the return channel across the highest-distance boundary in the test suite carries CC's <strong>effects</strong> (a tab exists in container X) and never its <strong>causes</strong> (CC resolved <code>reopen → Work</code>, then declined because the method was POST). The <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">contract</a> is clean — which is why this is Significant and not Critical — but it is under-specified for the job it has to do.</p>
+  <h3>Complexity Impact</h3>
+  <p>This is the pain point you named, and it is <a href="https://coupling.dev/posts/core-concepts/complexity/">complexity in the Cynefin sense</a> precisely: the only way to determine why a run failed is to change something and observe what happens. CLAUDE.md already documents the cost — <em>"a bare timeout is that regression's signature, not flake"</em> for the F9 case, and separately that a missing <code>mac/</code> checkout surfaces as a bare <code>ENOENT</code>. A red e2e reading <code>timed out after 30000ms</code> can mean a POST-guard regression that wedged the tab, a dead window handle, a probe relay that went unanswered because the driver was parked on a <code>moz-extension://</code> page, a config that did not apply, a load-dependent race in options-page hydration, or genuine flake.</p>
+  <p>Six candidate causes for one signal is well past the 4±1 units a person holds at once, which is why diagnosis is expensive even though each individual hazard is documented.</p>
+  <h3>Cascading Changes</h3>
+  <ul>
+  <li><strong>Every new e2e case inherits the whole hazard list.</strong> Because the failure signal does not discriminate, a case author must pre-emptively avoid all six causes rather than diagnose the one that fired. That is why <code>test/fitness/e2e-discipline.test.ts</code> has to encode the rules structurally — no <code>driver</code>, no sleep, no read-then-compare, no deadline loop — and why the migration that established those rules left a file breaking every one of them.</li>
+  <li><strong>A change to routing that regresses a guard costs a full timeout per affected case</strong> before anyone learns anything, and the report at the end names a selector, not a decision.</li>
+  <li><strong>The cost compounds under CI load</strong>, where the races are load-dependent and reproduce nowhere else — 40 rounds on an idle machine reproduced the options-page hydration race zero times.</li>
+  </ul>
+  <h3>Recommended Improvement</h3>
+  <p>Widen the contract to carry causes. CC already computes a <code>Decision</code> per navigation and already has one function that renders one into words — <code>targetLabel</code>, whose whole reason for existing is that the F9 toast and the pause record must not drift. A build-time-gated decision log, echoed to the probe the way notifications already are, would let <code>Page.diagnose()</code> answer <em>"CC last decided <code>reopen → Work</code> for <code>https://…</code>, then declined: non-GET"</em> instead of naming a selector that never appeared.</p>
+  <p>The mechanism already exists and is proven: <code>__CC_NOTIFY_ECHO_TO__</code> echoes notifications to the probe for exactly this reason — so that an e2e can observe a toast that lives in no DOM. A decision echo is the same shape one level up.</p>
+  <p>Three constraints that must be respected, all of them already written down in CLAUDE.md:</p>
+  <ul>
+  <li><strong><code>__CC_NOTIFY_ECHO_TO__</code> must be sent <em>after</em> <code>notifications.create</code> resolves</strong>, or a missing permission yields a green test with the feature broken. A decision echo has the same hazard inverted: echo the decision the engine <em>acted on</em>, at the point it acts, not the one it computed.</li>
+  <li><strong>It costs byte-equivalence.</strong> <code>launch()</code> already sets the notify echo unconditionally, so no test build is byte-equivalent to a packaged one. This adds a second such define rather than a first, which is the honest way to price it.</li>
+  <li><strong>It must not be a behaviour seed.</strong> CLAUDE.md rightly forbids a build-time seed that arms a container, because it would make the shipped extension capable of starting with routing disabled. A decision log is read-only and changes no routing — that distinction is what makes it acceptable where the arm seed is not, and it should be stated in the code so the rule is not read as broken.</li>
+  </ul>
+  <p><strong>Trade-off.</strong> One more build-time define, one more thing the probe knows how to receive, and a small amount of engine code on the decision path guarded by a constant esbuild folds away in shipped builds. Against that: the single most expensive activity in the repository — working out what a red e2e means — gets a first-class answer instead of a search. Given that the e2e suite is the only level that sees a real Firefox, and that Firefox is the one dependency whose coupling cannot be rebalanced, improving what that level <em>tells you</em> is the highest-leverage change available.</p>
+  </div>
+  <div class="issue">
+  <h2>Issue: the live <code>Config</code> object's mutation contract is invisible</h2>
+  <div class="issue-meta"><strong>Integration</strong>: <code>extension/wiring.ts</code> → <code>engine</code>, <code>picker</code>, <code>cookie-seeder</code>, <code>redirector-closer</code>, <code>script-injector</code><br><strong>Severity</strong>: <span class="severity severity-minor">Minor</span></div>
+  <h3>Knowledge Leakage</h3>
+  <p><code>wireBackground</code> creates one <code>Config</code> object and fills it in place with <code>Object.assign</code> inside <code>useConfig</code>. Six siblings hold a reference to that same object. The invariant every one of them depends on — <em>this object mutates under you; read it at event time, never at construction</em> — appears nowhere in any type. <code>CookieSeederOptions { config: Config }</code> is indistinguishable from a signature that takes a snapshot.</p>
+  <p>In classic terms this is <strong>common coupling</strong>, which maps to <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">functional coupling</a> in this model, and it is <strong>implicit</strong> — the dangerous half of the <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">implicit/explicit spectrum</a>.</p>
+  <p>Half the failure mode is already closed, and closed well: <code>useConfig</code> spells out <code>{ rules: loaded.rules, groups: loaded.groups }</code> as a <code>Required&lt;Config&gt;</code> so that a key added to <code>Config</code> later fails to compile rather than silently retaining whatever the previous config left. The other half is open: a sibling that destructures <code>const { rules } = config</code> at construction time freezes on the empty config forever, and nothing would catch it — not the compiler, not the coverage gate, and not an L3 case, since the composed-background tests apply a config before navigating.</p>
+  <h3>Complexity Impact</h3>
+  <p>Low, today. All six siblings are correct, all are in one directory, and <code>wiring.ts</code>'s own comment explains the rule at length. The <a href="https://coupling.dev/posts/dimensions-of-coupling/distance/">distance</a> is minimal — one construction site, one mutation site, same file — so high strength here is <a href="https://coupling.dev/posts/core-concepts/balance/">high cohesion</a> and the coupling is balanced. What is not balanced is that the rule survives on prose and reviewer attention rather than on anything mechanical, in the module whose whole job is to be the place startup order cannot drift.</p>
+  <h3>Cascading Changes</h3>
+  <p>The realistic trigger is a seventh sibling. Adding one means reading <code>wiring.ts</code>'s comment and understanding why the object is mutated rather than replaced — and the natural, idiomatic way to write a factory that takes a config is to destructure what it needs. <code>script-injector</code> is the informative exception: it reads the config eagerly, so it takes it as an argument to <code>apply(config)</code> rather than holding a reference, which is exactly the contract form.</p>
+  <h3>Recommended Improvement</h3>
+  <p>Convert the shared object into a contract without moving anything. Hand siblings a <code>getConfig(): Config</code> accessor instead of a <code>config: Config</code> reference. A function cannot be destructured into a stale snapshot, so the rule becomes unstatable-wrongly rather than merely documented. <code>script-injector</code>'s existing <code>apply(config)</code> shape already demonstrates the pattern from the other direction.</p>
+  <p><strong>Trade-off.</strong> A call at each read site rather than a property access, and a small amount of churn across six modules for a bug that has not happened. That is why this is Minor: distance already neutralises the strength, and the recommendation is worth taking opportunistically — when the seventh sibling is written, not before.</p>
+  </div>
+  <div class="issue">
+  <h2>Issue: <code>config/parse.ts</code> reaches down into <code>engine/registry.ts</code></h2>
+  <div class="issue-meta"><strong>Integration</strong>: <code>config/parse.ts</code> → <code>engine/registry.ts</code><br><strong>Severity</strong>: <span class="severity severity-minor">Minor</span></div>
+  <h3>Knowledge Leakage</h3>
+  <p><code>parseConfig</code> imports <code>isThrowawayName</code> from <code>src/engine/registry.ts</code> to refuse a container named <code>tmp&lt;N&gt;</code>. The reason given is sound and the alternative would be worse: <em>"imported rather than restated so the two halves cannot drift."</em> Duplicating the <code>/^tmp(\d+)$/</code> shape is exactly the silent divergence this codebase is built to prevent — on the prefix alone, a user's <code>tmpwork</code> gets deleted by the disposer with its logins in it.</p>
+  <p>The problem is the direction, not the sharing. A pure data layer now depends on an engine module, and the fitness suite cannot see it: <code>seams.test.ts</code> forbids the inverted edge for <code>src/resolver</code>, <code>src/matcher</code> and <code>src/psl</code>, and <code>src/config</code> is not in that list.</p>
+  <p>The consequence is measurable. <code>src/engine/registry.ts</code> is in the <strong>options page bundle</strong>, reached through <code>config/parse.ts</code>, for one seven-line predicate.</p>
+  <h3>Complexity Impact</h3>
+  <p>Minimal. <code>TMP_NAME</code> has one shape, no reason to change, and both halves of the naming contract are documented in each other's terms. <a href="https://coupling.dev/posts/dimensions-of-coupling/volatility/">Volatility is low</a>, which under the balance rule neutralises the imbalance outright.</p>
+  <h3>Cascading Changes</h3>
+  <p>None likely. The one scenario worth naming: if the throwaway naming scheme ever changes — a different prefix, or identity carried somewhere other than the name — the change lands in a file the config parser imports, which is a surprising blast radius for a rename. <code>config/parse</code> refusing <code>tmp&lt;N&gt;</code> and <code>registry</code> minting it are genuinely two halves of one rule, so they should move together; the question is only where "together" is.</p>
+  <h3>Recommended Improvement</h3>
+  <p>Move <code>isThrowawayName</code> and <code>TMP_PREFIX</code> to <code>src/resolver/types.ts</code>, which already owns the other half of this vocabulary — the reserved container name <code>TEMPORARY</code>. Both <code>config/parse</code> and <code>engine/registry</code> then import <em>down</em> rather than one importing sideways into the other, the layer direction becomes statable, and <code>registry.ts</code> leaves the options bundle.</p>
+  <p>Then extend <code>fitness/seams.test.ts</code>'s pure-module import inventory to cover <code>src/config</code>, so the direction is enforced rather than remembered.</p>
+  <p><strong>Trade-off.</strong> It puts a naming policy in a types module, which is a slightly odd home for a regex. The alternative — a <code>src/naming.ts</code> of its own — is a file for two exports. Given <code>resolver/types.ts</code> already declares <code>TEMPORARY</code> with a comment calling it "the reserved container name," the vocabulary is already there and this completes it.</p>
+  </div>
+  <div class="issue">
+  <h2>Issue: the options page knows the background's private storage key</h2>
+  <div class="issue-meta"><strong>Integration</strong>: <code>extension/options.ts</code> → <code>engine/pause.ts</code><br><strong>Severity</strong>: <span class="severity severity-minor">Minor</span></div>
+  <h3>Knowledge Leakage</h3>
+  <p><code>options.ts</code> imports <code>PAUSE_STORAGE_KEY</code> and subscribes to <code>storage.onChanged</code>, filtering on that key to know when to re-render. It is scrupulous about not <em>reading</em> the value — the comment is explicit that the data still arrives through a message so the background stays the only reader of its own storage shape, and that reasoning is correct. But it names a private storage key belonging to another module across the realm boundary, which is <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">intrusive coupling</a> in miniature: the key is an implementation detail of how <code>pause.ts</code> persists, not part of any protocol.</p>
+  <p>A second, verifiable detail. The nearby comment explaining why <code>MAX_RECORDED_HOSTS</code> is <em>not</em> imported says that doing so <em>"would pull the background's pause module, and with it the engine, into the options bundle."</em> Measured against the actual build: <code>src/engine/pause.ts</code> is <strong>already</strong> in the options bundle, via this very import, and <code>src/engine/engine.ts</code> is <strong>not</strong> — esbuild tree-shakes <code>createPause</code> and therefore <code>targetLabel</code>. Importing the constant would cost zero additional bytes.</p>
+  <p>In a codebase where the reasoning is the artifact — where CLAUDE.md exists to record why a reasonable-looking change is wrong — a decision resting on a premise that is measurably false is worth correcting even when the decision itself does no harm.</p>
+  <h3>Complexity Impact</h3>
+  <p>Small and contained. The consequence today is a slightly worse message: the page says "the per-host cap was reached" without naming the number, because naming it was thought to cost the engine.</p>
+  <h3>Cascading Changes</h3>
+  <p>Renaming the storage key breaks the options page's live refresh silently — the subscription simply stops firing, the page stops updating, and nothing fails. Small, but exactly the silent-wrong-answer class this project cares about most.</p>
+  <h3>Recommended Improvement</h3>
+  <p>Move <code>PAUSE_STORAGE_KEY</code> into <code>pause-protocol.ts</code>, which both sides already import and which exists to be the shared vocabulary of this boundary. The key stops being private-and-borrowed and becomes part of the declared protocol, which is what it has been functioning as. This folds naturally into Issue 1's third move, since <code>pause-protocol.ts</code> is being reworked to break the import cycle anyway.</p>
+  <p>Then either correct the bundle comment or delete it — with <code>RecordingView</code> and <code>PAUSE_STORAGE_KEY</code> living in the protocol module, <code>options.ts</code> need not import from <code>src/engine/</code> at all, and the question the comment answers stops arising.</p>
+  <p><strong>Trade-off.</strong> None worth the word. It is a constant moving one file.</p>
+  </div>
+  <h2>What is working, and why it should not be changed</h2>
+  <p>A review that only lists problems misreads a codebase this deliberate. Four things here are <a href="https://coupling.dev/posts/core-concepts/balance/">balanced coupling</a> done correctly, and three of them are load-bearing enough that a future refactor should be checked against them.</p>
+  <p><strong>The engine's guard family is correctly located.</strong> <code>handled</code>, <code>reopenedNav</code>, <code>viewSourceNav</code> and <code>inTurn</code> share <a href="https://coupling.dev/posts/related-topics/connascence/">connascence of execution order</a> — one of the strongest degrees of <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">functional coupling</a> there is — and <code>navigate()</code>'s ordering constraints are each paid for by a named bug. That is very high strength at the lowest distance the system has: one function, adjacent lines. Under the <a href="https://coupling.dev/posts/core-concepts/balance/">balance rule</a> that is <a href="https://coupling.dev/posts/core-concepts/balance/">high cohesion</a>, which is a form of balanced coupling, not a defect. CLAUDE.md's rule that a guard on the engine's own webRequest handling stays in <code>engine.ts</code> is the right call, and the instinct to extract one into a sibling is the wrong one: it would raise distance without lowering strength, converting cohesion into tight coupling. The pain here is essential complexity correctly placed, and it is already pinned behaviourally — <code>test/engine/engine.test.ts</code> asserts the ordering as behaviour ("raises no declination notification for a POST", "shows no choice screen in a paused container, and records that one was due") rather than leaving it to prose alone.</p>
+  <p><strong><code>sync-record.ts</code> is the reference implementation.</strong> Highest distance in the system — another machine, possibly another build version, no coordination, fully async — met with the lowest <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">strength</a>: a versioned meta record, a hash rather than a length, four explicitly distinguished remote states, and a pure <code>reconcile</code> whose two convergence properties are named and defended. This is what Issue 1's boundary should look like when it is done.</p>
+  <p><strong>The <code>Deps</code> injection and the shared <code>matchRule</code>.</strong> <code>resolve()</code> holds matchers as <code>unknown</code> and never interprets them; the overlays take the router's own <code>matchRule</code> as a parameter rather than reimplementing precedence. Both are <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">contract coupling</a> in the most useful sense — one shared function instead of one shared rule — and they are what make the mutation gate reachable at 100% on the pure modules.</p>
+  <p><strong>The unbalanceable coupling is detected rather than denied.</strong> CC depends on Firefox <em>functionally</em> — undocumented event ordering, <code>view-source:</code> reporting the inner url, <code>tabs.create</code> rejecting <code>about:newtab</code>, bug 1586612, the FF153 measurement that <code>onBeforeNavigate</code> precedes the request. That strength cannot be lowered, and Mozilla's distance cannot be closed. The answer taken here is the right one: L4/L5 against a real browser on two channels plus a Nightly tripwire, which converts an unbalanceable coupling into a <em>monitored</em> one. 156.0a1's widening of the privileged-context check took nine cases down at once, which is the tripwire working.</p>
+  <p>One caveat inside that success, and it is the reason Issue 6 is folded in here rather than raised separately: <strong>Firefox facts leak outside the port.</strong> <code>"firefox-default"</code> is spelled independently in four places — twice inline in <code>registry.ts</code>, as <code>DEFAULT_STORE_ID</code> in <code>pause.ts</code>, and in <code>auto-temp.ts</code> and <code>browser-port.ts</code>. <code>supersede.ts</code> owns the <code>EMPTY_PAGES</code> allow-list, <code>sync-record.ts</code> owns Firefox's two quota constants, <code>auto-temp.ts</code> owns bug 1586612, and <code>resolve.ts</code> — a module the fitness suite certifies as pure — carries <code>/^https?:/</code> on <code>current.url</code> because a pre-commit tab reads <code>about:blank</code>. Individually all are justified and documented. Collectively they mean the question <em>"what does CC assume about Firefox?"</em> has no single answer, which is <a href="https://coupling.dev/posts/core-concepts/balance/">low cohesion</a>: high-distance knowledge smeared across low-distance modules. The <code>"firefox-default"</code> literal is the one worth consolidating now, because it is the one that can actually diverge — <code>pause.ts</code> and <code>registry.ts</code> independently spell a value that must be identical, and neither imports the other.</p>
+  <hr>
+  <div class="footer">This analysis was performed using the <a href="https://coupling.dev">Balanced Coupling</a> model by <a href="https://vladikk.com">Vlad Khononov</a>.</div>
+</div>
+
+<script>
+  function getDefaultTheme() {
+    const hour = new Date().getHours();
+    return (hour >= 7 && hour < 19) ? 'light' : 'dark';
+  }
+
+  function setTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('modularity-review-theme', theme);
+    document.getElementById('theme-icon').textContent = theme === 'light' ? '☾' : '☀';
+  }
+
+  function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme');
+    setTheme(current === 'light' ? 'dark' : 'light');
+  }
+
+  const saved = localStorage.getItem('modularity-review-theme');
+  setTheme(saved || getDefaultTheme());
+</script>
+</body>
+</html>
