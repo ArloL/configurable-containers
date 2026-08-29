@@ -15,12 +15,19 @@ file, not against a signed copy: signing repacks the archive, so those hashes
 differ by design.
 
 esbuild bundles three TypeScript entry points into background.js, options.js and
-choice.js. Nothing is minified; everything else is copied verbatim.
+choice.js. Nothing is minified; everything else is copied verbatim, except the
+version (and, on the dev channel, the id, name and update_url) which the packaging
+script stamps into manifest.json.
 
 WHAT IT DOES
 
 Routes each site into a Firefox container per a YAML config the user edits in the
 options page. Unmatched sites open in a fresh temporary container.
+
+That config is mirrored into storage.sync, so an edit on one machine reaches the
+user's other machines. The toolbar button pauses routing in the current container
+and records the sites seen while it is paused, together with the container each
+would have gone to, so the user can write rules from what happened.
 
 PERMISSIONS
 
@@ -32,7 +39,10 @@ PERMISSIONS
   otherwise throws "No permission for cookieStoreId". Also used by the optional
   cookie-seeding feature.
 - contextualIdentities, tabs — create/query/remove containers and tabs.
-- storage — the user's config. storage.local only.
+- storage — storage.local holds the user's config, the pause recordings and the
+  disposer's note of when each temporary container went empty. storage.sync holds
+  a mirror of the config text only, which is what carries it between the user's
+  machines; see WHERE DATA GOES.
 - webNavigation — a "view-source:" load reaches webRequest wearing the INNER url,
   so the blocking listener sees an ordinary GET for the page being printed and
   would reopen it elsewhere, losing the view-source wrapper and taking the source
@@ -52,3 +62,16 @@ src/engine/script-injector.ts passes that string to contentScripts.register().
 The code comes only from their own storage.local config, never the network. No
 eval, no new Function, no remotely loaded code. The shipped default has no
 "scripts" entries.
+
+WHERE DATA GOES
+
+There is no server, and src/ contains no fetch, XMLHttpRequest or sendBeacon call:
+nothing reaches the author or any third party.
+
+One thing leaves the machine. src/extension/config-sync.ts writes the config text
+into storage.sync, chunked under ccConfigMeta and ccConfigPart<N>
+(src/config/sync-record.ts), so Firefox carries it over the user's own Firefox
+Account — end-to-end encrypted, between their machines only. It is on for every
+install and has no toggle; a profile with no account signed in keeps the record
+locally. Nothing else is published there: the pause recordings and the disposer's
+empty-since notes stay in storage.local.
