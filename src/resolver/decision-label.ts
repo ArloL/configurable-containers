@@ -44,3 +44,21 @@ export function namesAConfiguredContainer(decision: Declinable): boolean {
   // or not.
   return decision.kind === "choice" || decision.into.kind === "permanent";
 }
+
+// A decision — ANY decision, not only the two that can be declined — in one short phrase,
+// for a diagnosis rather than for a user. `targetLabel` answers the user's question ("instead
+// of what?"); this answers a test author's ("what did CC decide here?"), so it names the kind
+// as well, and the two that leave a tab where it is are worth distinguishing: `leaveAlone` is
+// "no rule had anything to say" and `stay` is "a rule did, and this tab already satisfies it".
+export function describeDecision(decision: Decision): string {
+  switch (decision.kind) {
+    case "leaveAlone":
+      return "leaveAlone (no rule and nothing to isolate)";
+    case "stay":
+      return "stay (already correctly contained)";
+    case "reopen":
+      return `reopen -> ${targetLabel(decision)}`;
+    case "choice":
+      return `choice -> ${targetLabel(decision)}`;
+  }
+}

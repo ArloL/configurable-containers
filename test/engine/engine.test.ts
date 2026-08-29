@@ -1044,3 +1044,116 @@ describe("engine — the per-tab queue outliving a failed decision", () => {
     expect(browser.openedTabs.at(-1)!.cookieStoreId).toBe(work.cookieStoreId);
   });
 });
+
+// The half of the engine's behaviour nothing outside it could observe until 2026-08-29, and
+// the 2026-08-29 modularity review's second Significant finding: the boundaries around the
+// engine carried its EFFECTS — a tab exists in container X — and never its CAUSES. Six
+// different things make a navigation leave a tab where it is, and from the outside they are
+// one signal. At L4 that is a bare timeout standing for a POST-guard regression, a dead
+// window handle, an unanswered probe relay, a config that never applied and two kinds of
+// race; here it is an assertion.
+//
+// The words matter as much as the fact, because they are what an e2e failure prints. Each
+// case below pins one exit and reads as the sentence a reader would want.
+describe("engine — what it says it did", () => {
+  it("says a navigation was left where it is, and which decision left it", async () => {
+    const browser = aFakeBrowser();
+    const work = browser.addContainerNamed({ name: "Work" });
+    const tab = browser.existingTab({ url: "https://example.com/one", cookieStoreId: work.cookieStoreId });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
+
+    await browser.navigates(aNavigationTo({ tabId: tab.id, url: "https://example.com/two" }));
+
+    expect(browser.decisions).toEqual([
+      {
+        url: "https://example.com/two",
+        method: "GET",
+        tabId: tab.id,
+        decision: { kind: "stay" },
+        outcome: "left where it is",
+      },
+    ]);
+  });
+
+  it("says a navigation was reopened, and into what", async () => {
+    const browser = aFakeBrowser();
+    const tab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
+
+    await browser.navigates(aNavigationTo({ tabId: tab.id }));
+
+    expect(browser.decisions.at(-1)).toMatchObject({
+      decision: { kind: "reopen", into: { kind: "permanent", name: "Work" } },
+      outcome: "reopened",
+    });
+  });
+
+  // The one this exists for. A POST that should have moved and did not leaves the tab
+  // exactly where a POST that was never matched leaves it, and if the guard regresses the
+  // tab wedges and every WebDriver call blocks — "a bare timeout is that regression's
+  // signature, not flake". Now the signature has words.
+  it("says a non-GET was declined, and names the rule that went unapplied", async () => {
+    const browser = aFakeBrowser();
+    const tab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
+
+    await browser.navigates(aNavigationTo({ tabId: tab.id, method: "POST" }));
+
+    expect(browser.decisions.at(-1)).toMatchObject({
+      method: "POST",
+      decision: { kind: "reopen", into: { kind: "permanent", name: "Work" } },
+      outcome: "declined: POST has a body and tabs.create can only issue a GET (F9)",
+    });
+    expect(browser.openedTabs).toEqual([]);
+  });
+
+  // Indistinguishable from the decline by every other signal: the tab does not move either
+  // way, and the difference is whose rule won.
+  it("says MAC was deferred to, rather than reporting nothing happened", async () => {
+    const browser = aFakeBrowser();
+    browser.macAssigns("https://example.com/", { userContextId: 5 });
+    const tab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
+
+    await browser.navigates(aNavigationTo({ tabId: tab.id }));
+
+    expect(browser.decisions.at(-1)).toMatchObject({
+      outcome: "deferred: MAC has an assignment for this url (F7)",
+    });
+  });
+
+  // And the exits that return BEFORE resolving, which carry no decision. They are the ones a
+  // reader mistakes for "CC never saw this navigation at all", so they are echoed too — with
+  // a null decision saying which of the two it is.
+  it("says a view-source load was not routed, with no decision to report", async () => {
+    const browser = aFakeBrowser();
+    const tab = browser.existingTab({ url: "about:blank", cookieStoreId: "firefox-default" });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
+
+    browser.startsNavigating({ tabId: tab.id, url: "view-source:https://example.com/" });
+    await browser.navigates(aNavigationTo({ tabId: tab.id }));
+
+    expect(browser.decisions.at(-1)).toEqual({
+      url: "https://example.com/",
+      method: "GET",
+      tabId: tab.id,
+      decision: undefined,
+      outcome: "not routed: a view-source: load, which reaches webRequest wearing its inner url (F13)",
+    });
+    expect(browser.openedTabs).toEqual([]);
+  });
+
+  // A sub-resource is not a navigation CC declined to route; it is one CC was never asked
+  // about. Echoing those would bury the main_frame hops a reader is looking for under every
+  // image on the page.
+  it("says nothing at all about a request that is not a top-level navigation", async () => {
+    const browser = aFakeBrowser();
+    const tab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
+
+    await browser.navigates(aNavigationTo({ tabId: tab.id, type: "image" }));
+    await browser.navigates(aNavigationTo({ tabId: tab.id, url: "about:config" }));
+
+    expect(browser.decisions).toEqual([]);
+  });
+});

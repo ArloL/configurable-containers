@@ -517,7 +517,7 @@ reasonable-looking change wrong**.
   nothing reaches fails on the push that writes it, and there are exactly two honest ways
   to answer a red one: write the case, or, where the code cannot be reached from a
   measured run at all, mark it **at the line** with `/* v8 ignore … -- why */` as
-  `matcher.ts`, `load.ts` and `browser-port.ts`'s notify echo do. Never lower a threshold
+  `matcher.ts`, `load.ts` and `browser-port.ts`'s two echoes do. Never lower a threshold
   — the same rule the mutation gate has, for the same reason. Third possibility worth
   checking first: an unreachable line is often a **dead defence** and the fix is deleting
   it. Two were, reaching 100 — a `?? []` over a key taken from that same map, and
@@ -781,6 +781,39 @@ reasonable-looking change wrong**.
   `notifications.create` resolves** — echo first and a missing permission still yields a
   green e2e with the feature broken. `launch()` sets it unconditionally, so even `npm run
   manual` isn't byte-equivalent to a packaged build.
+- **`__CC_DECISION_ECHO_TO__` is the same mechanism one level up, and it is the only thing
+  at L4/L5 that carries a CAUSE.** Everything else this level sees is an effect — a tab
+  exists, in this container, with these cookies — so the six ways a navigation can end up
+  not moving arrive as one signal, and `timed out after 30000ms` covered a POST-guard
+  regression, a dead window handle, an unanswered relay, a config that never applied, a
+  load-dependent hydration race and genuine flake alike. `engine.ts`'s `say()` calls
+  `port.echoDecision` at **every exit of `navigate`**, including the ones that return before
+  resolving (a `view-source:` load, a re-fire, an absorbed hop) — those are precisely the
+  ones a reader takes for "CC never saw this navigation", and they echo a **null** decision
+  to say which it is. A request that is not a top-level http(s) navigation echoes nothing:
+  it is not a navigation CC declined to route, and every image on the page would bury the
+  hops worth reading.
+
+  Three properties are not negotiable. It is **synchronous and void**, like
+  `pause.record` — `test/fitness/decision-cost.test.ts` counts a call as a round trip only
+  if it returns a thenable, so a promise acquired here starts failing that gate the moment
+  it appears. The **words are built inside the guard** in `browser-port.ts`, so a shipped
+  navigation pays nothing, and they are the resolver's own (`describeDecision`), so a
+  diagnosis and an F9 toast cannot come to describe one decision differently. And it is
+  **read-only**, which is what separates it from the build-time seed forbidden above: a seed
+  that armed a container would make the shipped extension capable of starting up with
+  routing disabled, while an echo changes no routing at all. `package.test.ts` counts **two**
+  `if (false)` branches in the packaged bundle rather than asserting one is present, because
+  `toContain` goes on passing with either echo live.
+
+  The reading side is `readDecisions` / `describeDecisions` / `describeSessionDecisions` in
+  `harness/firefox.ts`, wired into the CC-specific polls (`awaitTab`, `awaitTabs`,
+  `awaitContainers`, `awaitContainerTab`, `awaitProbeReport`). Deliberately NOT in
+  `harness/browser/` — that layer is Selenium's problem only, and `Page.diagnose()` knows
+  nothing about CC. Like `diagnose()` it **never throws** and takes a short budget: it runs
+  when the browser is least well, and a diagnosis that fails replaces the real failure with
+  its own. Every empty answer says which empty it is, since "CC saw no navigation" and "no
+  http(s) page was open to ask through" send a reader to two different places.
 - **`driver.quit()` is not what keeps a browser from leaking — `harness/reaper.ts` is.**
   Selenium unrefs its geckodriver and kills it from its own `process.once("exit")` hook,
   which covers a clean exit and an uncaught throw and nothing else: node emits no `exit`

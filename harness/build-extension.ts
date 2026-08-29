@@ -41,6 +41,10 @@ export async function buildExtension(
     redirectorDelayMs?: number | undefined;
     configYaml?: string | undefined;
     notifyEchoTo?: string | undefined;
+    // The probe id CC echoes its ROUTING DECISIONS to. Defaults off for the same reason the
+    // notify echo does: no shipped bundle may contain a probe id, and
+    // `test/extension/package.test.ts` asserts it does not.
+    decisionEchoTo?: string | undefined;
   } = {},
 ): Promise<string> {
   await build({
@@ -60,6 +64,7 @@ export async function buildExtension(
       __CC_REDIRECTOR_DELAY_MS__: String(opts.redirectorDelayMs ?? 2000),
       __CC_CONFIG_YAML__: JSON.stringify(opts.configYaml ?? TEST_CONFIG_YAML),
       __CC_NOTIFY_ECHO_TO__: JSON.stringify(opts.notifyEchoTo ?? ""),
+      __CC_DECISION_ECHO_TO__: JSON.stringify(opts.decisionEchoTo ?? ""),
     },
   });
   return OUTFILE;

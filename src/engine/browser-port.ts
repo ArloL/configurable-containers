@@ -1,3 +1,4 @@
+import { describeDecision } from "../resolver/decision-label";
 import { DEFAULT_STORE_ID } from "./port";
 import type {
   BrowserPort, Clock, ContextualIdentity, CreateIdentityProps, CreateTabProps, RegisteredContentScript, Tab,
@@ -18,6 +19,18 @@ function mapTab(t: browser.tabs.Tab): Tab {
 // The extension id the harness build echoes notifications to, so an e2e can observe a toast
 // that lives in no DOM. "" in every shipped build, which esbuild folds away.
 declare const __CC_NOTIFY_ECHO_TO__: string;
+
+// The same, one level up: the id a test build echoes DECISIONS to, so an e2e can read what
+// CC decided rather than inferring it from the tab that did or did not appear. "" in every
+// shipped build.
+//
+// A second define is the honest price of this, and it is a second rather than a first —
+// `launch()` already sets the notify echo unconditionally, so no test build has ever been
+// byte-equivalent to a packaged one. What matters is the other rule: this is READ-ONLY.
+// CLAUDE.md forbids a build-time seed that ARMS a container, because that would make the
+// shipped extension capable of starting up with routing disabled; an echo changes no routing
+// and can only describe what already happened.
+declare const __CC_DECISION_ECHO_TO__: string;
 
 // Keep this logic-free: every decision belongs in resolve() or the engine. One Firefox
 // note — a blocking onBeforeRequest listener may return a Promise<BlockingResponse>, which
@@ -183,6 +196,29 @@ export function createBrowserPort(): BrowserPort {
          and not the probe's id. */
       if (__CC_NOTIFY_ECHO_TO__ !== "") {
         await browser.runtime.sendMessage(__CC_NOTIFY_ECHO_TO__, { cmd: "cc-notification", ...n });
+      }
+    },
+
+    echoDecision(e) {
+      /* v8 ignore else -- the else IS the shipped build, and no run that measures coverage
+         has it: the identifier is a compile-time constant, so the two arms belong to two
+         different bundles rather than two paths through one, exactly as `notify`'s echo
+         does. `test/extension/package.test.ts` pins the shipped side. */
+      if (__CC_DECISION_ECHO_TO__ !== "") {
+        // Floated, never awaited, and the formatting happens INSIDE the guard: the caller is
+        // the blocking handler, so neither the message nor the words it carries may cost a
+        // shipped navigation anything. A rejected send (no probe installed) is swallowed for
+        // the same reason a failed toast is — saying what happened must not change it.
+        void browser.runtime
+          .sendMessage(__CC_DECISION_ECHO_TO__, {
+            cmd: "cc-decision",
+            url: e.url,
+            method: e.method,
+            tabId: e.tabId,
+            decision: e.decision ? describeDecision(e.decision) : null,
+            outcome: e.outcome,
+          })
+          .catch(() => {});
       }
     },
 

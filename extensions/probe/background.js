@@ -55,9 +55,31 @@ async function reportTab(tabId, cookieStoreId, url) {
 // target; shipped builds set ""). Collected here because a desktop notification lives
 // in no DOM, so WebDriver has no other way to observe one.
 const notifications = [];
+
+// Decisions echoed by the same build: what CC resolved for each navigation and what it did
+// about it. This is the only channel that carries CC's CAUSES rather than its effects — the
+// reports above say a tab exists in container X, and nothing else says why — so a red e2e
+// can name "declined: POST has a body" instead of a selector that never appeared.
+//
+// Bounded, and the TAIL is what is kept: a long run makes hundreds of these, and what a
+// failing poll wants is the last handful. `shift()` on an array this small is cheaper than
+// the ring buffer that would replace it, and it keeps the order a reader expects.
+const MAX_DECISIONS = 100;
+const decisions = [];
+
 browser.runtime.onMessageExternal.addListener((msg) => {
   if (msg && msg.cmd === "cc-notification") {
     notifications.push({ title: msg.title, message: msg.message });
+  }
+  if (msg && msg.cmd === "cc-decision") {
+    decisions.push({
+      url: msg.url,
+      method: msg.method,
+      tabId: msg.tabId,
+      decision: msg.decision,
+      outcome: msg.outcome,
+    });
+    if (decisions.length > MAX_DECISIONS) decisions.shift();
   }
   return Promise.resolve({ ok: true });
 });
@@ -83,6 +105,9 @@ browser.runtime.onMessageExternal.addListener((msg) => {
 //             REMOVED through it means re-navigating something on every poll; this
 //             asks the browser instead, from a tab that never moves.
 //   notifications — every notification CC's test build echoed to us so far.
+//   decisions — what CC decided about each navigation it saw, and what it did about it,
+//             oldest first, at most MAX_DECISIONS of them. The one command that answers
+//             "why", which is what a timeout otherwise leaves the reader to guess.
 browser.runtime.onMessage.addListener(async (msg, sender) => {
   if (msg && msg.cmd === "viewSource") {
     const t = await browser.tabs.create({
@@ -133,6 +158,9 @@ browser.runtime.onMessage.addListener(async (msg, sender) => {
   }
   if (msg && msg.cmd === "notifications") {
     return notifications;
+  }
+  if (msg && msg.cmd === "decisions") {
+    return decisions;
   }
   return null;
 });

@@ -2,6 +2,7 @@ import type {
   BlockingHeadersResponse,
   BlockingResponse,
   BrowserPort,
+  DecisionEcho,
   Clock,
   Cookie,
   ContextualIdentity,
@@ -65,6 +66,17 @@ export interface MockPort {
   removedContainers: string[];
   seededCookies: SetCookieDetails[];
   notifications: NotificationSpec[];
+  /**
+   * What the engine SAID about each navigation it saw: the decision it resolved and the
+   * outcome it acted on, in order. In Firefox this is echoed to the e2e probe by a test
+   * build and folded away in a shipped one; here it is the same record, which is what keeps
+   * the two from describing different things.
+   *
+   * It is the one thing on this mock that carries a CAUSE rather than an effect, so an L3
+   * case can assert *why* a tab did not move — "declined: POST has a body" and "deferred:
+   * MAC owns this url" both leave the tab exactly where it was.
+   */
+  decisions: DecisionEcho[];
   registeredScripts: RegisterContentScriptDetails[];
   badgeText: string;
   /**
@@ -153,6 +165,7 @@ export function aFakeBrowser(): MockPort {
   const removedContainers: string[] = [];
   const seededCookies: SetCookieDetails[] = [];
   const notifications: NotificationSpec[] = [];
+  const decisions: DecisionEcho[] = [];
 
   let tabId = 0;
   let containerId = 0;
@@ -342,6 +355,13 @@ export function aFakeBrowser(): MockPort {
       if (notifyThrows) throw new Error("notify failed");
       notifications.push(n);
     },
+    echoDecision(e) {
+      // Synchronous and never throwing, as the real one is: the caller is the blocking
+      // handler, and a mock that could throw here would model a hazard the shipped
+      // implementation does not have (its whole body is inside a `if (false)` in a
+      // shipped build, and the send it makes in a test build is floated).
+      decisions.push(e);
+    },
     onActionClicked(h) {
       actionClickedHs.push(h);
     },
@@ -398,6 +418,7 @@ export function aFakeBrowser(): MockPort {
     removedContainers,
     seededCookies,
     notifications,
+    decisions,
     registeredScripts,
     // A getter: `badgeText` is reassigned on every set, so exposing its value here would
     // freeze a test's view at construction time.

@@ -241,6 +241,16 @@ assignment, real container create/dispose, real redirects.
   reopened into a **temp** — the stranded shim tab is closed; into a **permanent** —
   likewise closed (the case `inherit` alone leaves behind); a destination that navigates
   in place and stays — **not** closed. The shim hop never spawns a throwaway.
+- **The decision echo** — the only thing at this level that carries a CAUSE. Everything
+  else here is an effect (a tab exists, in this container, with these cookies), so the six
+  ways a navigation can end up not moving arrive as one signal: a poll running out. A test
+  build echoes what `resolve()` answered and what the engine did with it
+  (`__CC_DECISION_ECHO_TO__`, folded to `if (false)` in every shipped bundle) and the
+  CC-specific polls print the last few in their timeout report, so a red run names
+  *"reopen -> Work => declined: POST has a body"* instead of a selector that never appeared.
+  `test/e2e/plumbing.test.ts` proves the channel itself end to end, because a diagnostic
+  that silently carried nothing would leave every timeout as bad as before while looking
+  better.
 - **Fast-disposal build** — `launch({ ccGraceMs })` bundles CC with a wound-down grace
   (500ms in `test/e2e/disposal.test.ts`), exercising real timers without five-minute waits.
 - **Real-delay disposal (F10), nightly** — `test/e2e/disposal.realtime.test.ts` takes the

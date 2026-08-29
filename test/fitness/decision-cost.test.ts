@@ -27,8 +27,17 @@ function sequentialTmpSuffixes(): () => string {
   return () => String(++n);
 }
 
-// Every port method the engine can await, in call order. Registrations are not counted:
-// they run once at startup, not per navigation.
+// Every port method the engine can await, in call order. Two kinds are not counted, and the
+// distinction is the one this file is about rather than a convenience.
+//
+// Registrations (`on…`) run once at startup, not per navigation.
+//
+// And a method that answers SYNCHRONOUSLY is not a round trip: it returns no promise, so
+// Firefox never holds the request on it. `echoDecision` is the case — it is the same
+// contract as `PauseRecorder.record`, void and never awaited, and counting it would make
+// this list report a cost that does not exist while saying nothing about the one that does.
+// Detected by what the call returns rather than by name, so a method that quietly acquires
+// a promise is counted from that moment on, which is exactly when it starts costing.
 function countingPort(port: BrowserPort): { port: BrowserPort; awaited: string[] } {
   const awaited: string[] = [];
   const registrations = /^on[A-Z]/;
@@ -37,8 +46,9 @@ function countingPort(port: BrowserPort): { port: BrowserPort; awaited: string[]
       const value = (target as unknown as Record<string, unknown>)[prop];
       if (typeof value !== "function" || registrations.test(prop)) return value;
       return (...args: unknown[]) => {
-        awaited.push(prop);
-        return (value as (...a: unknown[]) => unknown).apply(target, args);
+        const result = (value as (...a: unknown[]) => unknown).apply(target, args);
+        if (typeof (result as { then?: unknown } | undefined)?.then === "function") awaited.push(prop);
+        return result;
       };
     },
   });
@@ -75,6 +85,36 @@ describe("fitness — the blocking path's round-trip budget", () => {
       // navigation it is about to act on, and that ordering is what this pins.
       expect(counted.awaited).toEqual(["getTab", "getIdentity"]);
     });
+  });
+
+  it("says what it decided about every navigation, and pays nothing to say it", async () => {
+    // The e2e boundary carries CC's causes now, not only its effects — but the thing that
+    // reports them is called from the blocking handler, on every navigation, in a build that
+    // ships to nobody. So it is void and synchronous by contract, exactly as
+    // `PauseRecorder.record` is, and this is the assertion that keeps it that way: the same
+    // two lookups the decision needs, and the account of it is free.
+    //
+    // In a shipped build there is not even that: the echo target is a compile-time constant,
+    // so `browser-port.ts`'s implementation folds to `if (false)` and the words are never
+    // built. `test/extension/package.test.ts` pins that side.
+    const browser = aFakeBrowser();
+    const work = browser.addContainerNamed({ name: "Work" });
+    const tab = browser.existingTab({ url: "https://work.example/one", cookieStoreId: work.cookieStoreId });
+    const counted = countingPort(browser.port);
+    createEngine({ port: counted.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
+
+    await browser.navigates(aNavigationTo("https://work.example/two", { tabId: tab.id }));
+
+    expect(counted.awaited).toEqual(["getTab", "getIdentity"]);
+    expect(browser.decisions).toEqual([
+      {
+        url: "https://work.example/two",
+        method: "GET",
+        tabId: tab.id,
+        decision: { kind: "stay" },
+        outcome: "left where it is",
+      },
+    ]);
   });
 
   it("asks another extension only once it has decided to act, and only then", async () => {

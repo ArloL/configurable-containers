@@ -60,11 +60,15 @@ describe("packageExtension", () => {
     try {
       const { stageDir } = await packageExtension({ version: "2607.0.103", outDir });
       const bundle = readFileSync(path.join(stageDir, "background.js"), "utf8");
-      // The echo can only reach the probe by naming it, so its absence is the whole
-      // property. The `cc-notification` literal itself remains, inside a branch esbuild
-      // folded to `if (false)`: the build does not minify, so dead statements survive.
+      // The echoes can only reach the probe by naming it, so its absence is the whole
+      // property. The `cc-notification` and `cc-decision` literals themselves remain, each
+      // inside a branch esbuild folded to `if (false)`: the build does not minify, so dead
+      // statements survive, and an AMO reviewer can read that they are dead.
       expect(bundle).not.toContain("probe@configurable-containers.test");
-      expect(bundle).toContain("if (false)");
+      // BOTH of them, counted rather than merely present: there are two echoes now, and
+      // `toContain` would go on passing with either one live. The decision echo is the newer
+      // and the more dangerous to get wrong — it describes every navigation the user makes.
+      expect(bundle.match(/if \(false\)/g) ?? []).toHaveLength(2);
     } finally {
       rmSync(outDir, { recursive: true, force: true });
     }

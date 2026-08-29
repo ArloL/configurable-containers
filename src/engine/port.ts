@@ -7,6 +7,7 @@
 // Routing those four through here would buy nothing and put them behind a mock built for
 // navigation.
 
+import type { Decision } from "../resolver/types";
 import type { HttpHeader } from "../overlays/cookies";
 export type { HttpHeader };
 
@@ -110,6 +111,32 @@ export interface RegisteredContentScript {
 // consumer, and a type-only import upward was the last thing making the pause module know
 // the engine exists.
 export type RecordedNav = Pick<WebRequestDetails, "url" | "method">;
+
+// One navigation's REASONING, for a test build to echo to the e2e probe.
+//
+// The e2e boundary is the highest-distance one in the test suite, and until now it carried
+// CC's EFFECTS and never its CAUSES: the probe reports the tab CC opened, and nothing
+// reports the decision CC made. So one signal — `timed out after 30000ms` — covered a
+// POST-guard regression that wedged the tab, a dead window handle, an unanswered probe
+// relay, a config that never applied, a load-dependent hydration race, and genuine flake.
+// Six candidate causes past the four a person holds at once, which is why diagnosis is the
+// most expensive activity in this repository even though each hazard is documented.
+//
+// `decision` is what `resolve()` answered; `outcome` is what the engine DID about it, which
+// is not the same question and is the half a decline or a guard lives in. Both are needed:
+// "reopen -> Work" plus "declined: the navigation has a body" is a diagnosis, and either
+// alone is half of one.
+export interface DecisionEcho {
+  url: string;
+  method: string;
+  tabId: number;
+  // Absent where the engine returned BEFORE resolving — a view-source load, a re-fire it
+  // had already acted on, an absorbed redirect hop. Those exits are exactly the ones a
+  // reader mistakes for "CC never saw this navigation", so they are echoed too.
+  decision?: Decision | undefined;
+  outcome: string;
+}
+
 
 export interface TabUpdateInfo {
   status?: "loading" | "complete" | undefined;
@@ -225,6 +252,19 @@ export interface BrowserPort {
   getURL(path: string): string;
 
   notify(n: NotificationSpec): Promise<void>;
+
+  // What CC decided about one navigation and what it did, for a test build to hand the e2e
+  // suite. Synchronous and void by contract, exactly as `PauseRecorder.record` is: it is
+  // called from the blocking handler, so it must add no round trip in front of a page load
+  // and a failure to say what happened must never change what happens.
+  //
+  // In every shipped build the implementation folds to `if (false)` — the echo target is a
+  // compile-time constant and the build does not minify, so the dead branch is readable
+  // proof for an AMO reviewer. It is READ-ONLY, which is what separates it from the
+  // build-time seed CLAUDE.md forbids: a seed that armed a container would make the shipped
+  // extension capable of starting up with routing disabled, while this changes no routing at
+  // all.
+  echoDecision(e: DecisionEcho): void;
 
   // Text only, because the colour never changes: the real adapter sets it once at startup
   // rather than on every arm/disarm. Empty string clears it.

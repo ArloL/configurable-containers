@@ -23,8 +23,9 @@ rules:
 
 export const ccDefines = {
   __CC_CONFIG_YAML__: JSON.stringify(TEST_CONFIG_YAML),
-  // The unit tests exercise the echo branch, so it is defined here. buildExtension
-  // defaults it to "" so no shipped bundle can contain it — asserted in
+  // The unit tests exercise both echo branches, so both are defined here. buildExtension
+  // defaults them to "" so no shipped bundle can contain a probe id — asserted in
   // test/extension/package.test.ts.
   __CC_NOTIFY_ECHO_TO__: JSON.stringify("probe@configurable-containers.test"),
+  __CC_DECISION_ECHO_TO__: JSON.stringify("probe@configurable-containers.test"),
 };

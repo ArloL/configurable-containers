@@ -11,7 +11,7 @@
 // a user reading two different accounts of the same declined navigation.
 // `namesAConfiguredContainer` decides whether a decline interrupts the user at all.
 import { describe, it, expect } from "vitest";
-import { namesAConfiguredContainer, targetLabel } from "../../src/resolver/decision-label";
+import { describeDecision, namesAConfiguredContainer, targetLabel } from "../../src/resolver/decision-label";
 import type { Declinable } from "../../src/resolver/decision-label";
 import type { Target } from "../../src/resolver/types";
 
@@ -61,5 +61,18 @@ describe("namesAConfiguredContainer", () => {
   // Firefox's no-container, not a rule's target.
   it("stays quiet about the default container for the same reason", () => {
     expect(namesAConfiguredContainer(reopenInto({ kind: "default" }))).toBe(false);
+  });
+});
+
+describe("describeDecision", () => {
+  // The four kinds, because this is what an e2e failure gets to say instead of naming a
+  // selector that never appeared. A phrase that collapsed two kinds into one would send the
+  // reader looking for the wrong bug.
+  it("names each kind, and what a reopen or a choice was going to do", () => {
+    expect(describeDecision({ kind: "leaveAlone" })).toBe("leaveAlone (no rule and nothing to isolate)");
+    expect(describeDecision({ kind: "stay" })).toBe("stay (already correctly contained)");
+    expect(describeDecision(reopenInto({ kind: "permanent", name: "Work" }))).toBe("reopen -> Work");
+    expect(describeDecision(reopenInto({ kind: "temporary" }))).toBe("reopen -> a new temporary container");
+    expect(describeDecision(choice("Personal", "Work"))).toBe("choice -> one of: Personal, Work");
   });
 });
