@@ -122,3 +122,40 @@ The work, in order:
 Not urgent: the floor is almost certainly at or near what CI already runs, since the
 manifest keys and the container APIs are the constraint. What is missing is anybody having
 established that.
+
+## Nothing binds a published artefact to the commit it claims to come from (2026-08-29)
+
+Two halves of the release promise are checked and a third is not.
+`verify-release.yaml` proves the **xpi matches its own published source archive** (rebuild
+it with the published `BUILD_TIMESTAMP`, compare sha256), and GitHub's immutable releases
+stop either asset being swapped afterwards. What no gate here establishes is that the
+source archive is the **repo at the tagged commit**. A release built by hand, or from a
+tree that never existed in git, reproduces perfectly against itself and passes every check
+this repo runs.
+
+`actions/attest-build-provenance` closes exactly that: it signs a SLSA provenance
+statement through Sigstore naming the workflow, the run and the commit SHA that produced
+each artefact, and `gh attestation verify <file> --repo ArloL/configurable-containers`
+checks it. The natural shape:
+
+- attest the **reproducible pre-signing xpi and the source archive** in both publishing
+  paths — `ci.yml`'s `prerelease` job and `release.yaml` — since both channels publish the
+  same three artefacts and one verifier already serves either.
+- verify in **`verify-release.yaml`**, beside the hash comparison it already makes. It is
+  handed the tag by the job that published, so it needs no search.
+- job-level `id-token: write` and `attestations: write`. Both workflows declare
+  `permissions: {}` at the top and grant per job, which is what keeps zizmor quiet; keep
+  it that way.
+
+Two limits worth writing down before anyone reaches for this as a complete answer. It
+attests the **GitHub asset only** — AMO repacks uploads, so the signed xpi Firefox
+actually installs is not byte-comparable with anything attested, which is the same
+constraint that makes `verify-reproducible.ts` target the GitHub copy. And provenance
+proves *where a build came from*, never *that the source is honest*: it is worth having
+because it makes the source archive checkable against a public commit, not because it says
+anything about the code in it.
+
+Priority is low and the reason is honest: the threat it addresses is someone with write
+access to this repo publishing a release out of band, and there is one maintainer. It
+earns its place the day there are more, or the day a downstream reader wants to verify
+without trusting the release page.
