@@ -465,6 +465,18 @@ mutant no other case catches.
   - **The manifest** (`manifest.test.ts`) — declared permissions against called APIs, both
     directions. A missing one fails silently; an unused one is a larger install prompt and
     more AMO surface for an API nothing calls.
+  - **The Firefox floor** (`firefox-floor.test.ts`) — the `strict_min_version` the manifest
+    declares, against every `browser.<api>.<method>` in `src/` and every manifest key the
+    add-on ships, priced from `@mdn/browser-compat-data`. Nothing else here would notice a
+    call that needs a newer Firefox than the add-on is offered on: every level below L4
+    runs against a mock, and L4 measures `latest` and `latest-esr` only, so an API added
+    in 141 passes every gate in this file and fails on the profiles below it. Both
+    directions are inventoried rather than bounded — a call site BCD cannot price fails
+    as unpriced rather than passing, and the manifest keys it cannot price are listed with
+    the reason each is a value rather than a key. It carries the other two implied floors
+    too: the esbuild `target`, pinned to the floor's major, and the Android question the
+    floor raises, where the calls Firefox for Android has at no version are derived from
+    BCD rather than listed.
   - **The duplicated seed** (`seed-config.test.ts`) — `__CC_CONFIG_YAML__` is supplied
     twice, by `harness/build-extension.ts` for e2e and `vitest.shared.ts` for the unit
     levels, and drift splits the suite's idea of the shipped config while both halves stay

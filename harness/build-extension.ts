@@ -49,7 +49,11 @@ export async function buildExtension(
     outdir: OUTDIR,
     format: "iife",
     platform: "browser",
-    target: "firefox115",
+    // The floor the manifest declares (`strict_min_version`), which is all this says: which
+    // syntax esbuild may emit, never which browser.* APIs the code may call. The two used to
+    // disagree — a build claiming 115 shipping a manifest key from 140 — and
+    // `test/fitness/firefox-floor.test.ts` is what keeps them from drifting apart again.
+    target: "firefox140",
     logLevel: "silent",
     define: {
       __CC_GRACE_MS__: String(opts.graceMs ?? PRODUCTION_GRACE_MS),
