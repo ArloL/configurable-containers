@@ -1,7 +1,9 @@
 # Drift reviews
 
-Eight reviews for the class of defect no gate in this repo can see: **a true statement that
-stopped being true**. They are run by an agent reading and judging, not by a tool.
+Nine reviews for what no gate in this repo can see. D1–D8 hunt **a true statement that
+stopped being true**; D9 asks a different question — whether CLAUDE.md still earns the
+context it costs every session, which is a matter of judgement rather than of truth. They
+are run by an agent reading and judging, not by a tool.
 
 Nothing in CI can catch these, by design rather than oversight. `test/fitness/` reads `src/`
 with comments **stripped** (`test/fitness/sources.ts`) — deliberately, because this codebase
@@ -25,16 +27,23 @@ thing that found them was a person asking a question.
 | **D6** | Does this test still assert what its comment claims? | `test/` |
 | **D7** | Has this follow-up's resolution condition been met? | `FOLLOWUPS.md` |
 | **D8** | Do two current documents contradict each other? | `CLAUDE.md`, `TESTING.md`, `README.md`, `CONFIG.md` |
+| **D9** | Does every session need all of CLAUDE.md? | `CLAUDE.md` |
 
 ## What counts as a finding
 
 A non-deterministic review is far easier to make cry wolf than a fitness function, and this
 repo's rule is that **a check which cries wolf is deleted and takes its invariant with it**.
 
-1. **A finding is a contradiction, never an opinion.** Name two things and say why they
-   cannot both be true. "This is unclear", "this could be worded better" are not findings.
-2. **Cite both sides.** The claim as `file:line`, quoted; the evidence as `file:line`, or a
-   command and its actual output. A finding you cannot cite twice is a suspicion — drop it.
+1. **A finding is a contradiction or a measured judgement — never an unmeasured
+   preference.** Most are contradictions: name two things and say why they cannot both be
+   true. D9's are judgements, where nothing is false and the claim is that a cost has grown
+   past what it buys. Opinion is legitimate there — *"CLAUDE.md has drifted too large"* is a
+   real finding — but it has to arrive with a number, a named section, and what it is
+   costing. "This is unclear", "this could be worded better", "this feels long" are not
+   findings.
+2. **Cite both sides.** For a contradiction: the claim as `file:line`, quoted, and the
+   evidence as `file:line` or a command and its output. For a judgement: the measurement and
+   what it is being weighed against. A finding you cannot cite twice is a suspicion — drop it.
 3. **Silence is a valid and expected result.** Most runs should find nothing. Say so. Never
    manufacture a finding to justify the run; that is what gets the practice switched off.
 4. **If a deterministic check could have caught it, say so.** That drift is a gap in
@@ -240,3 +249,69 @@ thresholds.
 The specs under `docs/superpowers/` and the `docs/modularity-review/` snapshots are **exempt**
 — a contradiction between a dated record and the code is history working correctly. A
 contradiction between CLAUDE.md and TESTING.md is a finding.
+
+## D9 — Does every session need all of CLAUDE.md?
+
+**Is each section highly relevant to every session, and does the file match the documented
+guidance?**
+
+The one review whose findings are judgements rather than contradictions. Nothing here has to
+be false: CLAUDE.md is read at the start of **every** conversation, so every line is a tax
+paid by sessions that will never use it, and the question is whether each still earns that.
+
+Measure first, and report the numbers — a judgement without them is the vibe rule 1 forbids:
+
+- total lines, words, and approximate tokens (bytes ÷ 4 is close enough)
+- lines per `##` section
+- how often the work actually touches each section's subject: `git log --name-only` over the
+  last few months, counted per path, against the section that covers it
+
+Then apply the tests from
+[Write an effective CLAUDE.md](https://code.claude.com/docs/en/best-practices#write-an-effective-claude-md),
+which are the standard this review measures against rather than anyone's taste:
+
+- **"Keep it short and human-readable."**
+- **"Loaded every session, so only include things that apply broadly. For domain knowledge or
+  workflows that are only relevant sometimes, use skills instead"** — loaded on demand
+  "without bloating every conversation".
+- The per-line test: **"Would removing this cause Claude to make mistakes?"** If not, cut it.
+- **"Bloated CLAUDE.md files cause Claude to ignore your actual instructions"**, and the named
+  failure pattern: *the over-specified CLAUDE.md*, where "Claude ignores half of it because
+  important rules get lost in the noise".
+- The ✅/❌ table — notably ❌ *long explanations or tutorials*, *anything Claude can figure
+  out by reading code*, *information that changes frequently*.
+- **"If you emphasize many lines, none of them stands out."** Measurable: bold spans ÷ bullets.
+- `/doctor` proposes cuts for content derivable from the codebase; `/context` confirms what
+  actually loaded.
+
+**State the tension before reporting anything, or this review says "too long" every time.**
+The ✅ column includes *common gotchas or non-obvious behaviors* and *architectural decisions
+specific to your project*, which is a fair description of nearly all of this file — its own
+header says it carries only "platform and tooling facts that make a reasonable-looking change
+wrong". So **volume alone is not the finding.** The finding is *placement*: a fact that is a
+genuine gotcha, but only for a task type most sessions never perform.
+
+Candidates, most defensible first:
+
+1. **A section only a rare task needs.** Compute the fraction of recent commits touching its
+   paths. Release/AMO and MAC interop are the obvious places to look. The documented remedy
+   is a skill or a linked doc, not deletion — the knowledge is real.
+2. **Long explanation where a rule would do.** Usually the remedy is to keep the *rule* here
+   and move the *argument* to the code it is about, not to delete the argument.
+3. **Content derivable from the code.** What `/doctor` proposes.
+4. **Emphasis inflation.** If nearly every line is bold, emphasis has stopped working and the
+   lines that need it cannot get it.
+5. **Frequently-changing information**, which is a bloat liability and a D1/D3 liability at
+   once.
+
+**Weigh the remedy, don't assume it is free.** Moving a gotcha into a skill means it loads
+only when the model judges it relevant — and a fact whose whole job is to stop a
+reasonable-looking wrong change is most needed exactly when the model does not yet know it
+is relevant. That risk is real and specific to gotcha-type content, so a proposal to move
+one should say why the trigger would fire in time.
+
+Not findings: "this is long" without a section, a number, and a task type that does not need
+it; a gotcha that genuinely is cross-cutting, however long it runs; and any proposal that
+*loses* reasoning rather than relocating it — this codebase's premise is that the reasoning
+is the artifact, so deleting an argument to save tokens trades a cheap cost for the expensive
+one this whole directory exists to prevent.
