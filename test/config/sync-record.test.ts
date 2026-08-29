@@ -293,8 +293,9 @@ describe("reconciling the local config against the published one", () => {
   });
 
   it("does nothing when the texts agree but the stamps do not", () => {
-    // Adoption ends in runtime.reload(). Adopting identical text would have two machines
-    // restarting each other forever.
+    // An adoption is itself a change the other machine hears, so adopting identical text
+    // would have two converged machines publishing at each other forever. Not a restart
+    // loop any more — a save applies in place — which makes it quieter, not absent.
     const remote = decodeRecord(published("local text", 999));
     expect(reconcile(local, remote)).toEqual({ action: "none" });
   });

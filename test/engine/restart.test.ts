@@ -33,8 +33,15 @@ const containerNames = (browser: ReturnType<typeof aFakeBrowser>) =>
 
 // F8. A restart destroys every Map, Set and counter the engine and its siblings hold, so
 // what the extension knows afterwards is only what it rebuilt from browser.* queries.
-// These cases pin that rebuild, one mechanism at a time. Not a hypothetical MV3 concern:
-// options.ts calls runtime.reload() on every config save.
+// These cases pin that rebuild, one mechanism at a time.
+//
+// A restart used to be routine — a config save called runtime.reload(), so every Save was
+// one. It is not any more (a save applies in place; `seams.test.ts` keeps `reload()` out of
+// `src/`), and the background page is MV2-persistent, so what is left is a browser restart,
+// an extension update and a disable/enable. That makes these cases MORE load-bearing rather
+// than less: the rebuild is now exercised roughly once per browser start, so nothing in an
+// ordinary session would notice it being broken, and the first thing to notice would be a
+// user whose containers came back wrong.
 describe("a background restart — state that must be reconstructed", () => {
   it("resumes the throwaway counter past a container that is still live", async () => {
     const { browser, clock } = aBrowserWithFakeClock();
@@ -157,12 +164,14 @@ describe("a background restart — state that cannot be", () => {
     expect([...browser.containers.values()].map((c) => c.name)).toEqual(["tmp2"]);
   });
 
-  // The restart users actually cause: a config save calls runtime.reload(). Before the
-  // grace was written down, that reload lost every pending one and ran a startup sweep
-  // that reclaimed at grace 0, so hitting Save destroyed whichever throwaways were
-  // mid-grace — F10's "disposed too early" by the most ordinary route there is. The
-  // remaining grace has to survive. Both halves are asserted, because a disposer that
-  // never removed anything would pass the first one too.
+  // Why the grace is a stored fact rather than a pending timer. Back when a config save
+  // called runtime.reload(), that reload lost every pending grace and ran a startup sweep
+  // that reclaimed at grace 0 — so hitting Save destroyed whichever throwaways were
+  // mid-grace, F10's "disposed too early" by the most ordinary route there is. A save no
+  // longer restarts anything, which removes the frequency but not the failure: a browser
+  // restart is the same event, and a user who quits Firefox mid-flow is exactly who has a
+  // throwaway mid-grace. The remaining grace has to survive. Both halves are asserted,
+  // because a disposer that never removed anything would pass the first one too.
   it("resumes the remaining grace of a throwaway emptied before the restart", async () => {
     const { browser, clock, advance } = aBrowserWithFakeClock();
     const sourceTab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
@@ -247,8 +256,18 @@ describe("restart — a paused container", () => {
     );
     await browser.settle();
 
-    // Every config save calls runtime.reload(), and reviewing a recording is what leads to
-    // a save, so this is the ordinary path.
+    // The recording is the ONLY thing that survives this, and that is what the whole
+    // feature rests on. `disposer.ts` does not consult the pause, so it reclaims the armed
+    // throwaway once it has been empty for the grace, and the pause's own disarm-on-empty
+    // drops it from the armed set at the next tab close. By the time the user opens the
+    // options page to write rules, the container this recording is about is usually gone —
+    // which is why `Recording.container` stores its display name AT ARM TIME rather than
+    // asking getIdentity() later.
+    //
+    // (This case used to justify itself with "every config save calls runtime.reload(), so
+    // this is the ordinary path". A save applies in place now, so the restart is a browser
+    // restart rather than a routine one. Rarer, and still the case that decides whether a
+    // recording can be read the next morning.)
     session = await restartTheBackground(session, browser, clock.clock, workConfig());
 
     expect(session.pause.isPaused(shop.cookieStoreId)).toBe(true);
