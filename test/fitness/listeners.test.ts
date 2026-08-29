@@ -59,10 +59,11 @@ describe("fitness — one browser event, one registration", () => {
       onTabRemoved: ["src/engine/disposer.ts", "src/engine/pause.ts"],
 
       // The same shape: `createRedirectorCloser` registers after `createAutoTemp` and both
-      // are called. Auto-temp listens on BOTH tab events because Firefox bug 1586612 fires
-      // `onCreated` with "about:blank" before the real url; an onCreated-only draft passed
-      // L3 and failed in real Firefox, and the mock's single slot had quietly put L3 back in
-      // that position. `wiring.test.ts` now pins the update path with the closer alongside.
+      // are called. Auto-temp listens on BOTH tab events because a tab reads "about:blank"
+      // on `onCreated` until its url commits, and the real url arrives on `onUpdated`; an
+      // onCreated-only draft passed L3 and failed in real Firefox, and the mock's single slot
+      // had quietly put L3 back in that position. `wiring.test.ts` now pins the update path
+      // with the closer alongside.
       onTabUpdated: ["src/engine/auto-temp.ts", "src/engine/redirector-closer.ts"],
 
       onBeforeSendHeaders: ["src/engine/cookie-seeder.ts"],

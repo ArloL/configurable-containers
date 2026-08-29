@@ -79,7 +79,8 @@ export function createAutoTemp(opts: AutoTempOptions): void {
   // What it looked like it was preventing — the replacement tab being containerized again —
   // is not reachable: `supersede` creates that tab in the tmp container just minted, and
   // `isAutoTempCandidate` rejects any tab whose cookieStoreId is not firefox-default. The
-  // double-event case (bug 1586612, onCreated then onUpdated for one tab) is `processed`'s.
+  // double-event case (onCreated with about:blank, then onUpdated with the real url, for one
+  // tab) is `processed`'s.
   // Do not reintroduce it per tab either: a per-tab flag is `processed` again.
   function maybeAutoTemp(tab: Tab): void {
     if (processed.has(tab.id)) return;

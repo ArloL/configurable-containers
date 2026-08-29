@@ -214,9 +214,14 @@ Why a function is shaped the way it is lives in its own comment. This file carri
   reopened out of, and since each reopen makes the source tab the new one's opener, the
   next hop bounced it back again: login tabs alternating between two containers forever
   (F14). A typed url has no opener, so it always looked fine.
-- **`tabs.onCreated` sometimes fires with `about:blank` before the real url** (bug
-  1586612), so auto-temp listens on **both** `onTabCreated` and `onTabUpdated`, deduped by
-  a `processed` set. An `onCreated`-only draft passed L3 and failed in real Firefox.
+- **A tab's url is not final when `tabs.onCreated` fires** — it reads `about:blank` until
+  the url commits and the real one arrives on `tabs.onUpdated`, and how long that lasts is
+  channel-dependent (`tabs.create({})` answers `about:blank` on 140 ESR, `about:newtab` on
+  154). So auto-temp listens on **both** `onTabCreated` and `onTabUpdated`, deduped by a
+  `processed` set; an `onCreated`-only draft passed L3 and failed in real Firefox. Four sites
+  here credited **bug 1586612** for this until 2026-08-29 and none should again: that bug is
+  `onUpdated` firing *before* `onCreated`, fixed on 73.0a1 in 2019 — this is ordinary
+  documented behaviour, so no Firefox version retires the second listener.
 - **`reopenedNav` is keyed on the *navigation*, awaits a *specific* url, and matches by
   site.** A redirect chain keeps one requestId and stays `about:blank` throughout, so the
   one-shot version walked `tmp1`→`tmp2`→`tmp3` on one click; a marker any request could
@@ -673,7 +678,7 @@ Why a function is shaped the way it is lives in its own comment. This file carri
   modelled "last registration wins" the two events `wireBackground` registers twice
   (`onTabRemoved`: pause then the disposer; `onTabUpdated`: auto-temp then the
   redirector-closer) had their first listener silently dropped, so pause's disarm-on-empty
-  and auto-temp's bug-1586612 path were unwired in every composed-background case. Never
+  and auto-temp's `onTabUpdated` path were unwired in every composed-background case. Never
   relax these. `getCookie` carries one more: a `setCookie` that SUCCEEDS does not mean the
   next get answers, because the seeder sets with the spec's own https url and then asks
   with the navigation's — Firefox hands no Secure cookie to an http one, and a mock that
