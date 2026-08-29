@@ -1,22 +1,11 @@
 import type { BrowserPort } from "./port";
-import type { ContainerRef, Target } from "../resolver/types";
+import { DEFAULT_STORE_ID } from "./port";
+import { TMP_NAME, TMP_PREFIX, isThrowawayName, type ContainerRef, type Target } from "../resolver/types";
 
-// Reserved name prefix: throwaways are named `tmp<N>`. Identity comes from the name so it
-// survives a restart — the background context, and every map in it, dies on each config
-// save, leaving the name as the only durable record.
-export const TMP_PREFIX = "tmp";
-
-// The reserved name in full: prefix AND decimal suffix, which is what `createIdentity`
-// mints. The digits are load-bearing — on the prefix alone a user's `tmpwork`, or an
-// action-less rule for `tmpfiles.org`, is claimed as ours, and that costs two silent
-// losses: the disposer deletes it once its last tab closes, logins and all, and `toRef`
-// reads a tab in it as "in a throwaway". `config/parse` refusing a container named in this
-// shape is the other half of keeping the two sets apart.
-const TMP_NAME = /^tmp(\d+)$/;
-
-export function isThrowawayName(name: string): boolean {
-  return TMP_NAME.test(name);
-}
+// The naming rule itself is `src/resolver/types.ts`'s — `TMP_PREFIX`, `TMP_NAME` and
+// `isThrowawayName` sit down there because `config/parse` refusing this shape is the other
+// half of this module minting it, and a pure parser must not import an engine module to ask.
+// Re-exported nowhere: both halves import it from the same place or the shape drifts.
 
 // The largest N among existing `tmp<N>` names, or 0. The suffix counter is in-memory, so
 // without this a restart reissues tmp1 beside a live tmp1. Names are the only durable
@@ -42,7 +31,7 @@ export function createRegistry(port: BrowserPort, tmpSuffix: () => string): Cont
 
   return {
     async toRef(cookieStoreId) {
-      if (!cookieStoreId || cookieStoreId === "firefox-default") {
+      if (!cookieStoreId || cookieStoreId === DEFAULT_STORE_ID) {
         return { kind: "default" };
       }
       const ci = await port.getIdentity(cookieStoreId);
@@ -59,7 +48,7 @@ export function createRegistry(port: BrowserPort, tmpSuffix: () => string): Cont
     async toStoreId(target) {
       switch (target.kind) {
         case "default":
-          return "firefox-default";
+          return DEFAULT_STORE_ID;
         case "permanent": {
           const cached = permanentByName.get(target.name);
           if (cached) return cached;

@@ -96,3 +96,30 @@ export type Decision =
 
 // The reserved container name meaning "a fresh throwaway".
 export const TEMPORARY = "Temporary";
+
+// The reserved name PREFIX: throwaways are named `tmp<N>`. Identity comes from the name
+// because the name is all that survives a restart — the background context, and every map
+// in it, dies with the browser, leaving the name as the only durable record.
+export const TMP_PREFIX = "tmp";
+
+// The reserved name in full: prefix AND decimal suffix, which is what `createIdentity`
+// mints. The digits are load-bearing — on the prefix alone a user's `tmpwork`, or an
+// action-less rule for `tmpfiles.org`, is claimed as ours, and that costs two silent
+// losses: the disposer deletes it once its last tab closes, logins and all, and `toRef`
+// reads a tab in it as "in a throwaway".
+//
+// Exported because `highestTmpSuffix` reads the SUFFIX out of a name and must not spell the
+// shape a second time; nothing else should use it — ask `isThrowawayName`.
+export const TMP_NAME = /^tmp(\d+)$/;
+
+// Whether a container name is one of ours.
+//
+// It lives here, in the vocabulary module that already declares `TEMPORARY`, rather than in
+// `engine/registry.ts` where it is minted, because the two halves of the naming rule are
+// `registry` MINTING this shape and `config/parse` REFUSING it, and a parser is a pure data
+// layer that must not import an engine module to ask. Both now import down. The rule is one
+// declaration either way — restating the shape in the parser is the drift that loses a
+// user's `tmpwork` to the disposer.
+export function isThrowawayName(name: string): boolean {
+  return TMP_NAME.test(name);
+}

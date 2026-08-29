@@ -1,6 +1,6 @@
-import { TMP_PREFIX } from "./registry";
+import { TMP_PREFIX } from "../resolver/types";
 import { supersede } from "./supersede";
-import type { BrowserPort, Tab } from "./port";
+import { DEFAULT_STORE_ID, type BrowserPort, type Tab } from "./port";
 
 function defaultSuffix(): () => string {
   let n = 0;
@@ -13,15 +13,15 @@ export interface AutoTempOptions {
 }
 
 function isAutoTempCandidate(tab: Tab): boolean {
-  if (tab.cookieStoreId !== "firefox-default") return false;
+  if (tab.cookieStoreId !== DEFAULT_STORE_ID) return false;
   return tab.url === "about:newtab" || tab.url === "about:home";
 }
 
 // Reopens about:newtab / about:home tabs (which start in firefox-default) into a fresh
 // temporary container, as TCP's `maybeReopenInTmpContainer` does. Listens on BOTH
 // tabs.onCreated and tabs.onUpdated, because a tab's url is not final at onCreated:
-//   onCreated  url="about:blank"  csid="firefox-default"
-//   onUpdated  url="about:blank"  csid="firefox-default"
+//   onCreated  url="about:blank"  csid=DEFAULT_STORE_ID
+//   onUpdated  url="about:blank"  csid=DEFAULT_STORE_ID
 //   onUpdated  url="http://…"     <- the url only appears here
 //
 // about:blank is deliberately NOT a candidate: a tab reads as about:blank for its whole

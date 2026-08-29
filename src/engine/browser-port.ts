@@ -1,3 +1,4 @@
+import { DEFAULT_STORE_ID } from "./port";
 import type {
   BrowserPort, Clock, ContextualIdentity, CreateIdentityProps, CreateTabProps, RegisteredContentScript, Tab,
 } from "./port";
@@ -6,7 +7,7 @@ function mapTab(t: browser.tabs.Tab): Tab {
   return {
     id: t.id!,
     url: t.url ?? "",
-    cookieStoreId: t.cookieStoreId ?? "firefox-default",
+    cookieStoreId: t.cookieStoreId ?? DEFAULT_STORE_ID,
     index: t.index,
     active: t.active,
     openerTabId: t.openerTabId,

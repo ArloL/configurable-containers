@@ -40,7 +40,16 @@ reasonable-looking change wrong**.
 - **`BrowserPort` is the browser seam for the engine and its siblings only** (`port.ts`
   types, `browser-port.ts` implementation).
   `src/extension/{config,config-sync,options,choice}.ts` touch `browser.*` directly by
-  design.
+  design. `port.ts` also owns the Firefox **values** the engine's siblings would otherwise
+  each spell — `DEFAULT_STORE_ID` was written out independently in `registry`, `pause`,
+  `auto-temp` and `browser-port`, none importing another, and two of them must be identical
+  for routing to answer at all (`toRef` reading it as `{kind:"default"}`, `arm` refusing it).
+- **A `Decision` said in words is the RESOLVER's** (`src/resolver/decision-label.ts`:
+  `targetLabel`, `namesAConfiguredContainer`, `Declinable`). The F9 toast and the pause
+  record must not drift, so it is one function — but it decides nothing the engine owns, and
+  living in `engine.ts` made `pause.ts` (and every bundle that reaches it) depend on the
+  engine for two pure functions. Down there it is also inside the mutation gate, which never
+  saw it while only L3 engine cases covered it.
 - **New background behaviour is a sibling in `wireBackground` (`src/extension/wiring.ts`),
   never nested in `createEngine`.** `background.ts` is that call plus an async tail, and
   the L3 restart harness drives the same function, so startup order cannot drift.
@@ -82,9 +91,10 @@ reasonable-looking change wrong**.
   continued. `MAX_RECORDED_HOSTS` bounds both — and the hosts past it are **counted into
   `Recording.dropped`**, not dropped in silence: rules are written from that list, and one a
   reader takes for the whole flow while it quietly is not is the same silent wrong answer a
-  half-parsed config would be. `dropped` is optional in the type because a recording stored
-  before the cap has no such key, and refusing those on hydrate would throw the user's
-  history away.
+  half-parsed config would be. `dropped` is optional in **`StoredRecording`** and required in
+  `Recording`, which is the split below: a recording stored before the cap has no such key
+  and refusing it on hydrate would throw the user's history away, but by the time the
+  blocking handler increments it the normalizer has filled it in.
 
   **A row is one per URL as well as one per host** (`RecordedHost.urls`, the pattern
   `patternForUrl` built), which is what makes a rule for a GitHub OAuth hand-off writable
@@ -101,6 +111,23 @@ reasonable-looking change wrong**.
   `undefined` **inside the blocking handler**, where a throw is a navigation that never
   completes. Filling the missing fields in is what lets `urls` be required in the type
   instead of checked at every use.
+
+  **Three types, not one, and which one may carry an optional field is the contract.**
+  `StoredRecording`/`StoredHost` (what any build may have left in `storage.local`, where a
+  field added later is optional), `Recording`/`RecordedHost` (in memory, everything present)
+  and `RecordingView`/`RecordedHostView`/`RecordedUrlView` (`pause-protocol.ts`, what the
+  message carries and the options page renders). The normalizers are the crossing one way,
+  `toView` the other. One declaration served all four roles until 2026-08-29, so a change
+  made for the renderer landed in a schema the blocking handler mutates, and the module was
+  `src/`'s only import cycle — `engine/pause` ↔ `extension/pause-protocol`. Adding a field
+  now costs three edits the compiler asks for. Two things it bought immediately:
+  `cookieStoreId` does **not** cross to the page (it has no use for a store id), and
+  `record()` says `open.dropped++` rather than `(open.dropped ?? 0) + 1` inside
+  `onBeforeRequest`. `PAUSE_STORAGE_KEY` moved to `pause-protocol.ts` for the same reason:
+  the page names it to subscribe to `storage.onChanged` as a signal, and a key two realms
+  agree on is protocol, not a private detail one of them borrows. So **`options.ts` imports
+  nothing from `src/engine/`** and `test/fitness/seams.test.ts` pins that the engine's only
+  reach into `src/extension` is a protocol module.
 - **Two arming paths, one `arm()`.** The toolbar button takes its container from the `Tab`
   Firefox passes to `browserAction.onClicked`; the options page names one and the
   background validates it. **WebDriver cannot click a `browser_action`**, so logic living
@@ -341,13 +368,18 @@ reasonable-looking change wrong**.
   `highestTmpSuffix` stays: a browser restart still leaves `tmp<N>` containers behind with
   the counter at zero.
 - **A throwaway is `tmp` PLUS A NUMBER, and the digits are load-bearing**
-  (`isThrowawayName`, `src/engine/registry.ts`). Identity derives from the name because
+  (`isThrowawayName`, **`src/resolver/types.ts`**). Identity derives from the name because
   the name is all that survives a restart, so the shape must separate ours from the user's
   exactly: on the prefix alone, `open: tmpwork` — or an action-less rule for
   `tmpfiles.org`, where nobody typed a container name at all — was **deleted by the
   disposer once empty**, with the logins in it, and read by `toRef` as a throwaway until
   then. The other half is `config/parse` refusing a container named `tmp<N>`; keep the two
-  in step, and mint only through `TMP_PREFIX + <counter>`.
+  in step, and mint only through `TMP_PREFIX + <counter>`. It lives beside `TEMPORARY` in
+  the resolver rather than where it is minted because those two halves are an engine module
+  and a **pure parser**, and the parser importing `engine/registry` to ask put that module
+  in the **options-page bundle** for one seven-line predicate. Both import down now, and
+  `test/resolver/throwaway-name.test.ts` owns the cases — under `test/resolver/` so the
+  mutation gate can kill a regex widened to `/^tmp/`.
 - **The disposer's grace is a STORED FACT** (`cookieStoreId -> emptySince`, remaining
   grace re-derived per sweep), because a pending `setTimeout` dies with the background
   context — with the browser now, and with every config save back when saving reloaded. The

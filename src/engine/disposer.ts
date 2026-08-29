@@ -1,5 +1,5 @@
 import type { BrowserPort, Clock } from "./port";
-import { isThrowawayName } from "./registry";
+import { isThrowawayName } from "../resolver/types";
 
 const GC_INTERVAL_MS = 600_000; // 10 min, matches TCP
 

@@ -1,13 +1,18 @@
-import { targetLabel, type RecordedNav } from "./engine";
 import { patternForUrl } from "../matcher/matcher";
+import { targetLabel } from "../resolver/decision-label";
 import type { Decision } from "../resolver/types";
-import type { ContainerRow, PauseStatusResponse, PauseToggleMessage, PauseToggleResponse } from "../extension/pause-protocol";
-import type { BrowserPort, Clock } from "./port";
+import { PAUSE_STORAGE_KEY } from "../extension/pause-protocol";
+import type {
+  ContainerRow, PauseStatusResponse, PauseToggleMessage, PauseToggleResponse,
+  RecordedHostView, RecordedUrlView, RecordingView,
+} from "../extension/pause-protocol";
+import { DEFAULT_STORE_ID, type BrowserPort, type Clock, type RecordedNav } from "./port";
 
-// storage.local key holding the armed set and the recordings. The background is its ONLY
-// writer; the options page reads through a message instead, since a host row landing
-// mid-render would race a toggle and lose one of the two writes.
-export const PAUSE_STORAGE_KEY = "pauseState";
+// The background is this key's ONLY writer; the options page reads through a message
+// instead, since a host row landing mid-render would race a toggle and lose one of the two
+// writes. The key itself is declared in `pause-protocol.ts` — the page names it too, to
+// subscribe to storage.onChanged as a signal, and a key two realms agree on is protocol.
+export { PAUSE_STORAGE_KEY };
 
 // A cap on how many recordings are kept, so the list stays readable.
 export const MAX_RECORDINGS = 10;
@@ -42,6 +47,21 @@ export const MAX_RECORDED_URLS_PER_HOST = 20;
 // reader to write the one rule that breaks the sign-in.
 export const VARIED = "varies by URL";
 
+// ---- The two shapes on THIS side of the boundary --------------------------------
+//
+// Three types where one used to serve four roles. `StoredRecording` is what a previous
+// build of CC left in storage.local; `Recording` is what this build holds in memory; and
+// `RecordingView` (pause-protocol.ts) is what the options page renders. The normalizers
+// below are the crossing, and the split is what makes their job statable in the type
+// system rather than in a comment: an optional field is legal in exactly one of these
+// types, and it is not the one the blocking handler reads.
+//
+// The cost is two declarations that are near-identical the day they are written. It is
+// worth paying because this shape has already changed once under a live install base —
+// `urls` and both `dropped` counters arrived on 2026-08-26 — and the build that read an
+// older row without normalizing it would have called `.find` on `undefined` INSIDE
+// `onBeforeRequest`, where a throw is a navigation that never completes.
+
 export interface RecordedUrl {
   // The match pattern for this navigation — `*://github.com/login/oauth/authorize*` — and
   // also the text the row copies. Stored rather than the raw path because it is what gets
@@ -69,6 +89,10 @@ export interface RecordedHost {
 
 export interface Recording {
   id: string;
+  // Which container this is a recording OF. In memory and on disk only: `running()` and
+  // `disarm` look a recording up by it, and it is deliberately absent from `RecordingView`,
+  // because the page names the container by its display name and has nothing to do with a
+  // store id. That absence is the split earning its keep on the first field it touched.
   cookieStoreId: string;
   // The display name AT ARM TIME. Usually a throwaway, which the disposer deletes minutes
   // after the flow ends, so by the time the user reads the recording getIdentity() returns
@@ -77,15 +101,49 @@ export interface Recording {
   startedAt: number;
   endedAt: number | null; // null while running
   hosts: RecordedHost[]; // first-seen order, at most MAX_RECORDED_HOSTS of them
-  // Distinct hosts seen after the cap was reached. Optional because a recording written by
-  // a build without the cap has no such field, and refusing those on hydrate would throw
-  // the user's history away over a key they never had.
+  // Distinct hosts seen after the cap was reached. REQUIRED here, unlike on disk: `record()`
+  // increments it on the blocking path, and `open.dropped = (open.dropped ?? 0) + 1` is the
+  // shape of question this split exists to stop being asked in that handler.
+  dropped: number;
+}
+
+// What a build of CC — this one or an older one — may have left in storage.local.
+//
+// Every field that arrived after the first release is optional HERE and required in
+// `Recording`, which is the whole contract: backward compatibility is a property of the
+// disk format, not of the model, and the normalizers below are the one place the two meet.
+// Adding a field means adding it optional here, required there, and filling it in
+// `readRecording` — three edits the compiler asks for, instead of one that silently makes
+// an old row unreadable and throws away browsing history the user armed a container to
+// capture.
+//
+// It is `unknown` that `hydrate` actually reads, so this type documents the far side rather
+// than being asserted onto it; `readRecording` checks every field it names.
+export interface StoredRecording extends Omit<Recording, "hosts" | "dropped"> {
+  hosts: StoredHost[];
+  dropped?: number; // absent in a recording written before the per-recording cap existed
+}
+
+export interface StoredHost extends Omit<RecordedHost, "urls" | "dropped"> {
+  urls?: RecordedUrl[]; // absent in a host row written before URL detail existed
   dropped?: number;
 }
 
 export interface PauseState {
   armed: string[];
+  // In-memory `Recording`s, which is also what `snapshot()` writes: a `Recording` is a
+  // `StoredRecording` with nothing missing, so writing one needs no mapping and reading one
+  // back needs `readRecording`.
   recordings: Recording[]; // newest first
+}
+
+// The whole of what storage.local holds under PAUSE_STORAGE_KEY, as any build may have
+// written it. `hydrate` reads `unknown` and checks, so this names the far side rather than
+// being asserted onto it — but naming it is what lets a test arrange a recording an OLDER
+// build wrote without describing it as the shape this one holds.
+export interface StoredPauseState {
+  armed: string[];
+  recordings: StoredRecording[];
 }
 
 export type ArmResult = { ok: true; container: string } | { ok: false; reason: string };
@@ -107,7 +165,6 @@ export interface Pause {
   handleMessage(msg: unknown): Promise<PauseStatusResponse | PauseToggleResponse> | undefined;
 }
 
-const DEFAULT_STORE_ID = "firefox-default";
 const NOTIFY_TITLE = "Configurable Containers";
 
 // The F9 toast's own words for a declined action, plus the case F9 never sees: a decision
@@ -123,47 +180,54 @@ function wouldHaveLabel(decision: Decision): string {
 // that is not one — the "a corrupt value counts as absent" rule hydrate() applies to the
 // whole state, since a recording that cannot be read must not stop the armed set from being.
 //
-// It NORMALIZES rather than only checking, which the type-guard version it replaced could
+// These three are the ANTI-CORRUPTION LAYER between `StoredRecording` and `Recording`, and
+// with the two types separate that is now something the compiler helps with rather than a
+// claim in a comment: everything optional is on the far side, everything required is on
+// this one, and the only way across is here.
+//
+// They NORMALIZE rather than only check, which the type-guard version they replaced could
 // not: a host row written before URL detail existed has no `urls`, and a build that read it
 // and trusted the type would call `.find` on undefined — inside the blocking handler, where
 // a throw is a navigation that never completes. Filling the missing fields in is the
-// upgrade, and it is why `urls` and `dropped` can be required in the type rather than
-// optional-and-checked at every use. `Recording.dropped` stays optional there for the
-// separate reason below: it is what a pre-cap recording lacks, and it is a plain number.
+// upgrade, and it is why `Recording` can require them.
 function readRecording(v: unknown): Recording | null {
   if (typeof v !== "object" || v === null) return null;
-  // `Partial`, not `Recording`: cast to the whole shape and every check below reads as
-  // comparing a `string` to "string", which is to say as dead code — the assertion turns
+  // `Partial`, not `StoredRecording`: cast to the whole shape and every check below reads
+  // as comparing a `string` to "string", which is to say as dead code — the assertion turns
   // off the checking this function exists to do.
-  const r = v as Partial<Recording>;
+  const r = v as Partial<StoredRecording>;
   if (
     typeof r.id !== "string" ||
     typeof r.cookieStoreId !== "string" ||
     typeof r.container !== "string" ||
     typeof r.startedAt !== "number" ||
     !(r.endedAt === null || typeof r.endedAt === "number") ||
+    // Lenient about ABSENT, strict about PRESENT. Absent is a recording written before the
+    // cap existed and is filled in below; a present value of the wrong type is corruption,
+    // and the whole state's rule is that a corrupt value counts as absent.
     !(r.dropped === undefined || typeof r.dropped === "number") ||
     !Array.isArray(r.hosts)
   ) {
     return null;
   }
-  const out: Recording = {
+  return {
     id: r.id,
     cookieStoreId: r.cookieStoreId,
     container: r.container,
     startedAt: r.startedAt,
     endedAt: r.endedAt,
     hosts: r.hosts.map(readHost).filter((h): h is RecordedHost => h !== null),
+    // A recording written before the cap existed has no `dropped`, and refusing it over a
+    // key it never had would throw the user's history away. Filled in HERE rather than
+    // carried through as an optional: that is what lets `record()` say `open.dropped++`
+    // inside the blocking handler instead of `(open.dropped ?? 0) + 1`.
+    dropped: r.dropped ?? 0,
   };
-  // Spread in conditionally rather than writing `dropped: undefined`: absent and undefined
-  // are different values to `exactOptionalPropertyTypes`, and only one of them round-trips
-  // through JSON as the key a pre-cap recording did not have.
-  return r.dropped === undefined ? out : { ...out, dropped: r.dropped };
 }
 
 function readHost(v: unknown): RecordedHost | null {
   if (typeof v !== "object" || v === null) return null;
-  const h = v as Partial<RecordedHost>;
+  const h = v as Partial<StoredHost>;
   if (typeof h.host !== "string" || typeof h.hits !== "number" || typeof h.wouldHave !== "string") {
     return null;
   }
@@ -193,6 +257,32 @@ function readUrl(v: unknown): RecordedUrl | null {
     wouldHave: u.wouldHave,
     methods: u.methods.filter((m): m is string => typeof m === "string"),
   };
+}
+
+// The other crossing: the in-memory model into what the options page renders.
+//
+// It is a projection, not a cast. `cookieStoreId` is dropped because the page has no use
+// for a store id, and that is the whole argument for the split written as code — a field
+// this side needs and the far side does not can now simply not be sent, where one type
+// meant every field was every consumer's business. A field the page needs is added to
+// `RecordingView` and fails to compile until it is mapped here.
+function toView(r: Recording): RecordingView {
+  return {
+    id: r.id,
+    container: r.container,
+    startedAt: r.startedAt,
+    endedAt: r.endedAt,
+    hosts: r.hosts.map(toHostView),
+    dropped: r.dropped,
+  };
+}
+
+function toHostView(h: RecordedHost): RecordedHostView {
+  return { host: h.host, hits: h.hits, wouldHave: h.wouldHave, urls: h.urls.map(toUrlView), dropped: h.dropped };
+}
+
+function toUrlView(u: RecordedUrl): RecordedUrlView {
+  return { pattern: u.pattern, hits: u.hits, methods: u.methods, wouldHave: u.wouldHave };
 }
 
 // One hop's URL row, added or updated in place. True when it changed something a reader
@@ -265,7 +355,7 @@ export function createPause(opts: { port: BrowserPort; clock: Clock }): Pause {
     const now = clock.now();
     armed.add(cookieStoreId);
     recordings = [
-      { id: String(now), cookieStoreId, container: identity.name, startedAt: now, endedAt: null, hosts: [] },
+      { id: String(now), cookieStoreId, container: identity.name, startedAt: now, endedAt: null, hosts: [], dropped: 0 },
       ...recordings,
     ].slice(0, MAX_RECORDINGS);
     await persist();
@@ -316,7 +406,7 @@ export function createPause(opts: { port: BrowserPort; clock: Clock }): Pause {
         reason: csid === DEFAULT_STORE_ID ? "The default container cannot be paused." : undefined,
       }));
 
-    return { containers, recordings };
+    return { containers, recordings: recordings.map(toView) };
   }
 
   async function toggle(cookieStoreId: unknown): Promise<PauseToggleResponse> {
@@ -402,7 +492,7 @@ export function createPause(opts: { port: BrowserPort; clock: Clock }): Pause {
           // that quietly is not would be the silent wrong answer this cap exists to avoid —
           // rules written from it would miss the host that actually broke. Not persisted
           // here for the reason above; `disarm` flushes it with the hit counts.
-          open.dropped = (open.dropped ?? 0) + 1;
+          open.dropped++;
           return;
         }
         row = { host, hits: 0, wouldHave, urls: [], dropped: 0 };
@@ -438,7 +528,7 @@ export function createPause(opts: { port: BrowserPort; clock: Clock }): Pause {
       const raw = await port.readStored(PAUSE_STORAGE_KEY);
       // Anything that is not the shape we wrote counts as absent: a corrupt value must not
       // leave a container unrouted.
-      const state = raw as Partial<PauseState> | null;
+      const state = raw as Partial<StoredPauseState> | null;
       if (typeof state !== "object" || state === null) return;
       if (Array.isArray(state.armed)) {
         for (const id of state.armed) if (typeof id === "string") armed.add(id);
