@@ -132,6 +132,21 @@ reasonable-looking change wrong**.
   `notifications`, the F9 toast is silently lost. Without `webNavigation`,
   `onBeforeNavigate` never fires and every "View Page Source" is routed as a navigation
   (F13).
+- **The floor is `strict_min_version: "140.0"`, and 140 comes from the MANIFEST rather than
+  the code.** Every `browser.*` call in `src/` has been there since Firefox 59 at the
+  latest (`contentScripts.register`); what sets the floor is
+  `browser_specific_settings.gecko.data_collection_permissions`, a 140 key. 140 is also
+  where CI's `latest-esr` leg sits, and below it nothing here has ever been run — which is
+  the argument against lowering it to what the APIs alone would allow: an older Firefox
+  that lacks an API or ignores a key does not refuse to install, it routes wrongly on a
+  profile no gate here has touched. `test/fitness/firefox-floor.test.ts` prices every call
+  site and every manifest key against `@mdn/browser-compat-data` and fails on one that
+  wants more than the floor; it also pins `harness/build-extension.ts`'s esbuild `target`
+  to the same major, which is a claim about *syntax* only and is how that one had drifted
+  to `firefox115` while the manifest shipped a 140 key. **Don't add `gecko_android`** to
+  quiet addons-linter's warning that the key needs Android 142: containers do not exist on
+  Firefox for Android (`contextualIdentities` is unsupported at every version), so the key
+  would advertise an add-on that cannot route there at all.
 - **A `view-source:` load reaches `onBeforeRequest` wearing the INNER url.** Ctrl+U
   fetches the document it prints, so webRequest reports a `main_frame` GET for plain
   `https://site/` in a tab still pre-commit on `about:blank`. Routing it loses the wrapper
