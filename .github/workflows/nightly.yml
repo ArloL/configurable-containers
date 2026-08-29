@@ -53,7 +53,7 @@ jobs:
   mutation:
     name: Mutation gate (the pure modules)
     runs-on: ubuntu-latest
-    # Five pure modules, ~1070 mutants, no browser: about two minutes of work plus npm.
+    # Five pure modules, ~1160 mutants, no browser: about two minutes of work plus npm.
     timeout-minutes: 20
     permissions:
       contents: read

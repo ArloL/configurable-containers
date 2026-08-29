@@ -298,10 +298,10 @@ mutant no other case catches.
   miss". `npm run test:mutation` mutates every **pure** module — `src/resolver`,
   `src/matcher`, `src/psl`, `src/config` and `src/overlays` — and fails if a mutant
   survives. A survivor in precedence or group code is a subtle-bug hole by definition.
-  **Gated at 100%**, which the scope earns: no I/O, no clock, ~1070 mutants in about two
-  minutes. Nightly all the same, and not for the cost — a
-  refactor can introduce an *equivalent* mutant honestly, which should file an issue for
-  someone to name in a comment, not block a merge.
+  **Gated at 100%**, which the scope earns: no I/O, no clock, ~1160 mutants in about two
+  minutes (measured 2026-08-29; the count moves with the five modules). Nightly all the
+  same, and not for the cost — a refactor can introduce an *equivalent* mutant honestly,
+  which should file an issue for someone to name in a comment, not block a merge.
 
   The nightly keeps the HTML report as an artifact (`mutation-report`, 14 days, uploaded on
   failure too — the failing run is the one worth reading). It is per-mutant and browsable:
@@ -351,15 +351,21 @@ mutant no other case catches.
   modules the mutation gate owns, but "is any of `src/` reached by no deterministic test at
   all".
 
-  Thresholds sit a point or two under what the suite measures (~98% statements, ~97%
-  branches), **except** the five modules the mutation gate owns — `src/resolver`,
-  `src/matcher`, `src/psl`, `src/config` and `src/overlays` — held at 100, so a new
-  uncovered branch in them is caught on the push that adds it rather than that night. Three files are excluded for platform facts rather than
-  gaps: `background.ts` (the MV2 entry point, whose listeners must register as the file
-  evaluates — L3 drives the `wireBackground` it delegates to) and `choice.ts` /
-  `options.ts` (DOM, and there is no jsdom here; what could be decided without a document
-  already was, in `picker-protocol.ts` at 100%). Left in at 0% they would force a
-  threshold low enough to report nothing about the rest.
+  Thresholds are **100 on all four counters** (`vitest.coverage.config.ts`), and they are
+  the measurement rather than a floor under it: every line, branch and function of `src/`
+  outside the three files below is reached by an L1–L3 case. That is what makes a red run
+  name the new code on the push that writes it — the 97/95/95/97 this carried until
+  2026-08-27, with the five mutation-gate modules held at 100 by glob, absorbed the first
+  few uncovered branches in silence and only went red once someone had written several.
+  Code no deterministic level can reach is marked at the line instead (`/* v8 ignore … --
+  why */`, as `matcher.ts`, `load.ts` and `browser-port.ts`'s two echoes do), so the
+  exception is readable beside the code rather than averaged away; lowering a threshold is
+  not an exit, the same rule the mutation gate has. Three files are excluded for platform
+  facts rather than gaps: `background.ts` (the MV2 entry point, whose listeners must
+  register as the file evaluates — L3 drives the `wireBackground` it delegates to) and
+  `choice.ts` / `options.ts` (DOM, and there is no jsdom here; what could be decided
+  without a document already was, in `picker-protocol.ts`, at 100%). Left in at 0% they
+  would force a threshold low enough to report nothing about the rest.
 
   This gate finds dead defences too, and takes the same exit: the two in `matcher.ts`
   Stryker reports unreachable carry a `/* v8 ignore */` beside their `// Stryker disable`.

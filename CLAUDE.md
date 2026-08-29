@@ -765,9 +765,10 @@ Why a function is shaped the way it is lives in its own comment. This file carri
   `:focus`, and `fill()` is `clear()` + `sendKeys()`, which also fires the `input` the
   editor validates on as assigning `.value` never did.
   `test/e2e/privileged-protocol.test.ts` pins that each of those answers on an extension
-  page and is the tripwire for the next widening. Measured 2026-08-25 on **154.0**:
-  `executeScript` on that page still WORKS, so the refusal is 156.0a1's and has not reached
-  release — the avoidance is about where release is going, not where it is. **Don't reach for the flag**: it re-grants privileged access to the
+  page and is the tripwire for the next widening. Re-measured 2026-08-29 on all three
+  channels: `executeScript` on that page ANSWERS on **140.14.0esr** and **154.0.1** and is
+  refused on **157.0a1**, so the widening rode 156 forward and has not reached release —
+  the avoidance is about where release is going, not where it is. **Don't reach for the flag**: it re-grants privileged access to the
   whole session to keep one convenience call working, and pins the suite to a Firefox that
   permits what the shipped extension's users never will. `harness/firefox.ts`'s own
   `executeScript` helpers stay as they are — every one reads a probe-written attribute on
