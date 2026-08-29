@@ -2,8 +2,20 @@ import { describe, it, expect } from "vitest";
 import { globSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { buildAmoMetadata, readListingCopy, SUMMARY_LIMIT } from "../../scripts/amo-metadata";
+import { sourceFiles } from "../fitness/sources";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
+
+/** The lines of the notes' PERMISSIONS section. Throws when the heading is gone. */
+function permissionsSection(notes: string): string[] {
+  const lines = notes.split("\n");
+  const start = lines.indexOf("PERMISSIONS");
+  if (start === -1) throw new Error("amo/reviewer-notes.txt has no PERMISSIONS heading");
+  // Headings in this file are bare ALL-CAPS lines; the section runs to the next one.
+  const rest = lines.slice(start + 1);
+  const end = rest.findIndex((line) => /^[A-Z][A-Z ]+$/.test(line));
+  return end === -1 ? rest : rest.slice(0, end);
+}
 
 /**
  * The `- <permissions> — <why>` bullets of the notes' PERMISSIONS section, as the set of
@@ -16,14 +28,7 @@ const root = fileURLToPath(new URL("../../", import.meta.url));
  * comparison below pass over an empty set, which is the failure it exists to prevent.
  */
 function explainedPermissions(notes: string): string[] {
-  const lines = notes.split("\n");
-  const start = lines.indexOf("PERMISSIONS");
-  if (start === -1) throw new Error("amo/reviewer-notes.txt has no PERMISSIONS heading");
-  // Headings in this file are bare ALL-CAPS lines; the section runs to the next one.
-  const rest = lines.slice(start + 1);
-  const end = rest.findIndex((line) => /^[A-Z][A-Z ]+$/.test(line));
-  const section = end === -1 ? rest : rest.slice(0, end);
-
+  const section = permissionsSection(notes);
   const bullets = section.filter((line) => line.startsWith("- "));
   if (bullets.length === 0) throw new Error("the PERMISSIONS section explains nothing");
   return bullets.flatMap((bullet) => {
@@ -33,6 +38,27 @@ function explainedPermissions(notes: string): string[] {
     if (heads === bullet.slice(2)) throw new Error(`no em dash in permission bullet: ${bullet}`);
     return heads!.split(",").map((name) => name.trim()).filter((name) => name !== "");
   });
+}
+
+/**
+ * One PERMISSIONS bullet with its continuation lines, joined — so a claim can be checked
+ * against the permission it is made about rather than against the whole file. A bullet
+ * runs to the next one or to a blank line.
+ */
+function permissionBullet(notes: string, name: string): string {
+  const section = permissionsSection(notes);
+  const start = section.findIndex((line) => line.startsWith(`- ${name} `));
+  if (start === -1) throw new Error(`no PERMISSIONS bullet for "${name}"`);
+  const rest = section.slice(start + 1);
+  const end = rest.findIndex((line) => line.startsWith("- ") || line.trim() === "");
+  return [section[start]!, ...(end === -1 ? rest : rest.slice(0, end))].join(" ");
+}
+
+/** The storage areas `src/` actually reaches, read as text with comments stripped. */
+function storageAreasUsed(): string[] {
+  const code = sourceFiles("src").map((f) => f.code).join("\n");
+  const areas = [...code.matchAll(/browser\.storage\.(local|sync)\b/g)].map((m) => m[1]!);
+  return [...new Set(areas)].sort();
 }
 
 const COPY = {
@@ -154,5 +180,37 @@ describe("the copy this repo actually ships", () => {
     // verifier ever disagreed, no single sentence here could be true for both.
     expect([...declared]).toHaveLength(1);
     expect(readListingCopy().reviewerNotes).toContain(`Node ${[...declared][0]}`);
+  });
+
+  // The same shape as the permissions case, for the same reason, over the claim a reviewer
+  // is most likely to check by hand: where the user's data goes. The bullet read "storage —
+  // the user's config. storage.local only." for as long as config-sync had been mirroring
+  // that config into storage.sync, so the notes told AMO the config never leaves the
+  // profile while every startup published it to the user's Firefox Account.
+  //
+  // Exact, in both directions. An area used and not named understates what leaves the
+  // machine; an area named and no longer used tells a reviewer the add-on writes somewhere
+  // it does not, which is the same drift facing the other way. Scoped to the bullet rather
+  // than the whole file, because a mention under WHERE DATA GOES must not be able to
+  // satisfy a claim made in PERMISSIONS.
+  it("names, in the storage bullet, every storage area src/ reaches", () => {
+    const bullet = permissionBullet(readListingCopy().reviewerNotes, "storage");
+    const named = ["local", "sync"].filter((area) => bullet.includes(`storage.${area}`));
+
+    expect(named).toEqual(storageAreasUsed());
+  });
+
+  // The listing's own copy, which is read by users rather than reviewers, and which said
+  // "Nothing is collected and nothing is transmitted. Your configuration stays in your
+  // browser." while the options page it ships with rendered "Synced via Firefox Sync".
+  //
+  // A keyword rather than a sentence, and either of the two honest names for it: what can
+  // be pinned here is that the description SAYS SOMETHING about the config leaving the
+  // machine, not how it words it. An equality rather than an assertion in one direction —
+  // if config-sync is ever removed, a listing still promising sync is drift too.
+  it("tells users their config is synced, for exactly as long as it is", () => {
+    const mirrors = storageAreasUsed().includes("sync");
+
+    expect(/Firefox Sync|Firefox Account/.test(readListingCopy().description)).toBe(mirrors);
   });
 });

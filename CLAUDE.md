@@ -891,12 +891,11 @@ Why a function is shaped the way it is lives in its own comment. This file carri
   `BUILD_TIMESTAMP=<value>`, which nobody substituted and which no checksum could match.
 
   Because that upload happens on **every push to main**, prose in `amo/` that has gone
-  stale is drift that gets PUBLISHED rather than merely sitting in the repo. Two claims in
-  `reviewer-notes.txt` are therefore pinned by `test/extension/amo-metadata.test.ts`
-  against what they describe. **The PERMISSIONS bullets are an exact set against
-  `extensions/cc/manifest.json`** — `test/fitness/manifest.test.ts` already stops a
-  permission arriving without a caller, but nothing stopped one arriving without an
-  explanation, and `webNavigation` and `notifications` had both done exactly that. It is
+  stale is drift that gets PUBLISHED rather than merely sitting in the repo. Four claims are
+  therefore pinned by `test/extension/amo-metadata.test.ts` against what they describe.
+  **The PERMISSIONS bullets are an exact set against `extensions/cc/manifest.json`** —
+  `test/fitness/manifest.test.ts` already stops a permission arriving without a caller, but
+  nothing stopped one arriving without an explanation, and `webNavigation` and `notifications` had both done exactly that. It is
   exact in the other direction too: a bullet outliving its permission tells a reviewer the
   add-on asks for something it does not. The parser reads the `- <names> — <why>` heads of
   the section under the bare `PERMISSIONS` heading, and **throws** when that heading or a
@@ -904,6 +903,16 @@ Why a function is shaped the way it is lives in its own comment. This file carri
   two empty sets and pass. **And the Node version is the one the workflows really set** —
   the notes said "Needs Node 22+" while every workflow said 24, `package.json` declares no
   `engines`, and the whole point of that paragraph is a reviewer reproducing the checksum.
+  **The storage bullet names every area `src/` reaches**, exactly and in both directions —
+  it read "storage.local only" for as long as config-sync had been mirroring the config
+  into `storage.sync`, so the notes told a reviewer the config never leaves the profile
+  while every startup published it. Scoped to that bullet, so a mention elsewhere in the
+  file cannot satisfy a claim made under `PERMISSIONS`. **`description.md` names
+  Firefox Sync for exactly as long as `src/` writes to `storage.sync`** — the listing's
+  privacy paragraph said "nothing is transmitted … stays in your browser" while the options
+  page it ships with rendered "Synced via Firefox Sync". That one is a keyword rather than
+  a sentence: what can be pinned is that the copy says *something* about the config leaving
+  the machine, not how it words it.
 - **Never derive a dev version from the clock** — `YYMM.DD.HHMM` outranks every
   `YYMM.0.<micro>` for the rest of the month, so one local build would own the update
   channel. Nothing enforces this; it is a rule for whoever sets `VERSION`.
