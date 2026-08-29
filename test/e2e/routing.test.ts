@@ -14,7 +14,7 @@ describe("routing (real Firefox, CC + probe)", () => {
   let serverPort: string;
 
   beforeAll(async () => {
-    firefox = await launch({ extensions: ["probe", "cc"] });
+    firefox = await launch({ extensions: ["cc"] });
     serverPort = new URL(firefox.serverUrl).port;
   });
 
@@ -57,7 +57,7 @@ describe("routing — a redirect chain is one navigation (real Firefox, CC + pro
   let serverPort: string;
 
   beforeAll(async () => {
-    firefox = await launch({ extensions: ["probe", "cc"] });
+    firefox = await launch({ extensions: ["cc"] });
     serverPort = new URL(firefox.serverUrl).port;
   });
 
@@ -88,7 +88,7 @@ describe("routing — a same-tab link that changes container (real Firefox, CC +
   let serverPort: string;
 
   beforeAll(async () => {
-    firefox = await launch({ extensions: ["probe", "cc"] });
+    firefox = await launch({ extensions: ["cc"] });
     serverPort = new URL(firefox.serverUrl).port;
   });
 
@@ -132,7 +132,7 @@ describe("routing — a link opened in a new tab (real Firefox, CC + probe)", ()
   let serverPort: string;
 
   beforeAll(async () => {
-    firefox = await launch({ extensions: ["probe", "cc"] });
+    firefox = await launch({ extensions: ["cc"] });
     serverPort = new URL(firefox.serverUrl).port;
   });
 
@@ -176,7 +176,7 @@ describe("routing — a same-site link opened in a new tab (real Firefox, CC + p
   let serverPort: string;
 
   beforeAll(async () => {
-    firefox = await launch({ extensions: ["probe", "cc"] });
+    firefox = await launch({ extensions: ["cc"] });
     serverPort = new URL(firefox.serverUrl).port;
   });
 
@@ -212,7 +212,7 @@ describe("routing — a window.open popup (real Firefox, CC + probe)", () => {
   let serverPort: string;
 
   beforeAll(async () => {
-    firefox = await launch({ extensions: ["probe", "cc"] });
+    firefox = await launch({ extensions: ["cc"] });
     serverPort = new URL(firefox.serverUrl).port;
   });
 

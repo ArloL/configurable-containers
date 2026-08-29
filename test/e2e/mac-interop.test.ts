@@ -18,7 +18,7 @@ describe("MAC interop (real Firefox, CC + MAC + probe)", () => {
 
   beforeAll(async () => {
     firefox = await launch({
-      extensions: ["probe", "cc", "mac"],
+      extensions: ["cc", "mac"],
       // nomatch.example matches no CC rule, so CC's own answer would be a throwaway.
       // MAC assigns it to Personal (firefox-container-1). The two answers differ, which
       // is what makes the deferral observable.

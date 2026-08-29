@@ -27,7 +27,7 @@ describe("temp disposal at the shipped grace (real Firefox, real time)", () => {
   let serverPort: string;
 
   beforeAll(async () => {
-    firefox = await launch({ extensions: ["probe", "cc"] }); // no ccGraceMs: production value
+    firefox = await launch({ extensions: ["cc"] }); // no ccGraceMs: production value
     serverPort = new URL(firefox.serverUrl).port;
   });
 

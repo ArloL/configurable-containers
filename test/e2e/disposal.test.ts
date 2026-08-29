@@ -19,7 +19,7 @@ describe("temp disposal (real Firefox)", () => {
 
   beforeAll(async () => {
     // Short grace so the keep-alive window elapses quickly in the test.
-    firefox = await launch({ extensions: ["probe", "cc"], ccGraceMs: 500 });
+    firefox = await launch({ extensions: ["cc"], ccGraceMs: 500 });
     serverPort = new URL(firefox.serverUrl).port;
   });
 

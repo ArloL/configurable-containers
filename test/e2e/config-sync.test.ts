@@ -42,7 +42,7 @@ function syncCase(
     let serverPort: string;
 
     beforeAll(async () => {
-      firefox = await launch({ extensions: ["probe", "cc"], configYaml });
+      firefox = await launch({ extensions: ["cc"], configYaml });
       serverPort = new URL(firefox.serverUrl).port;
     });
 

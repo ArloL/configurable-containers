@@ -25,7 +25,7 @@ describe("pause & record (real Firefox, CC + probe)", () => {
   let serverPort: string;
 
   beforeAll(async () => {
-    firefox = await launch({ extensions: ["probe", "cc"] });
+    firefox = await launch({ extensions: ["cc"] });
     serverPort = new URL(firefox.serverUrl).port;
   }, 120_000);
 

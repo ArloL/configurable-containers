@@ -40,7 +40,7 @@ describe("inherit — a tab whose opener is in another container (real Firefox, 
 
   beforeAll(async () => {
     firefox = await launch({
-      extensions: ["probe", "cc"],
+      extensions: ["cc"],
       configYaml: SSO_CONFIG,
       localDomains: ["chat.example", "portal.example", "sso.example"],
     });

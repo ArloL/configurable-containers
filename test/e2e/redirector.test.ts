@@ -23,7 +23,7 @@ describe("redirector auto-close (real Firefox, CC + probe)", () => {
   let relay: Page;
 
   beforeAll(async () => {
-    firefox = await launch({ extensions: ["probe", "cc"], ccRedirectorDelayMs: 200 });
+    firefox = await launch({ extensions: ["cc"], ccRedirectorDelayMs: 200 });
     serverPort = new URL(firefox.serverUrl).port;
     relay = (
       await navigateToContainerTab(firefox.browser, `http://work.example:${serverPort}/?cb=relay`)

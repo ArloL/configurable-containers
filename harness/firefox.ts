@@ -62,7 +62,11 @@ export interface Session {
 }
 
 export interface LaunchOptions {
-  extensions?: ("probe" | "cc" | "mac")[];
+  // What to install besides the probe, which every session gets and no caller can decline:
+  // it is how anything here observes a container at all, and `launch()` points CC's notify
+  // and decision echoes at its id whatever this says. It used to be a member of this list,
+  // where naming CC alone dropped it — which is how `npm run manual` lost it.
+  extensions?: ("cc" | "mac")[];
   // Seed a MAC site assignment (requires the "mac" extension). A HOST, not a url: the test
   // server's port is only known inside launch(), and MAC keys assignments by hostname+port.
   // userContextId is the number in a cookieStoreId — "1" is Firefox's built-in Personal.
@@ -198,7 +202,9 @@ async function buildXpiFor(
 }
 
 export async function launch(opts: LaunchOptions = {}): Promise<Session> {
-  const extensions = opts.extensions ?? ["probe"];
+  // Probe first, the order every caller used to spell. Nothing here has established that
+  // install order matters; this preserves it rather than finding out.
+  const extensions = ["probe" as const, ...(opts.extensions ?? [])];
   // Claimed BEFORE anything can start a browser, so every exit path below — including a
   // session creation that throws before any driver handle exists — has a token to reap by.
   const profileDir = claimProfileDir();
