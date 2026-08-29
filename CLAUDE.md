@@ -4,9 +4,11 @@ A Firefox WebExtension that routes each site into the right container from one u
 
 Covered elsewhere: `README.md` (goals, build, release), `CONFIG.md` (config format),
 `TESTING.md` (the L1–L5 pyramid, the F1–F14 bug matrix), `test/` (the behaviour spec),
-`docs/superpowers/`, `FOLLOWUPS.md`. Why a function is shaped the way it is lives in its
-own comment. This file carries only **platform and tooling facts that make a
-reasonable-looking change wrong**.
+`docs/superpowers/`, `FOLLOWUPS.md`, `docs/drift-reviews.md` (the scheduled agent reviews
+that catch what no gate can see — a true statement that stopped being true, which every
+check here is blind to because `test/fitness/` reads source with comments stripped).
+Why a function is shaped the way it is lives in its own comment. This file carries only
+**platform and tooling facts that make a reasonable-looking change wrong**.
 
 ## Where new logic goes
 
