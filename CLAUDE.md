@@ -838,6 +838,20 @@ reasonable-looking change wrong**.
   `dev-updates.js` picks the signed asset by excluding `configurable-containers-<v>.xpi`,
   and its old `.endsWith(".xpi")` would have offered the *unsigned* build to every
   dogfooder — uninstallable, silent, and permanent on an immutable release.
+- **Those two reproducible artefacts also carry SLSA provenance, which answers a different
+  question from the hash check.** `verify-release.yaml` proves the xpi matches the source
+  archive published beside it; a release built by hand, from a tree that never existed in
+  git, satisfies that perfectly. `actions/attest-build-provenance` (both publishing paths,
+  job-level `id-token: write` + `attestations: write`) signs a statement naming the
+  workflow, the run and the **commit**, and the verify job compares that commit with the
+  tag's own — `gh attestation verify` alone only says "a workflow in this repo", so the
+  digest comparison is the check and the signature is not. Two things it deliberately does
+  not cover: the **AMO-signed xpi**, since AMO repacks and the file Firefox installs is
+  byte-comparable with nothing that was attested, and the honesty of the source, since
+  provenance says where a build came from and never what is in it. The release notes
+  publish the verify command, which makes it a promise —
+  `test/fitness/release-provenance.test.ts` is what keeps a third publishing path from
+  quietly not making it. A release cut before this existed fails the check by design.
 - **AMO's source requirement follows the BUNDLE, not the channel, so `sign:dev` uploads it
   too.** It is triggered by shipping code a reviewer cannot read (`background.js` is an
   esbuild bundle) and unlisted add-ons are "subject to be manually reviewed at any time

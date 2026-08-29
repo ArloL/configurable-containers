@@ -504,6 +504,13 @@ mutant no other case catches.
     file carrying every one of them — a `driver.sleep(1000)` as a negative assertion, and a
     poll that read "no tab shows this url" as a pass, so the case went green with its
     navigation removed altogether. Nothing else in the repo would ever have asked.
+  - **Release provenance** (`release-provenance.test.ts`) — both publishing paths attest
+    the artefacts they publish, attest nothing they do not, hold the two scopes the
+    attestation needs, and are checked by `verify-release.yaml` against the tag's own
+    commit. The release notes tell a reader to run `gh attestation verify`, so this is a
+    published promise; nothing else here reads a workflow, and a second publishing path
+    that skipped the attest step would leave those notes advertising a verification that
+    fails.
   - **The round-trip budget** (`decision-cost.test.ts`) — the only one that measures
     rather than inspects, and the answer to "nothing tests latency". `onBeforeRequest` is
     blocking, so every awaited call before it answers is latency in front of a page load.

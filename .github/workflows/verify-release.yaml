@@ -48,6 +48,7 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+      attestations: read # reads the provenance the publishing job stored
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -71,6 +72,65 @@ jobs:
           package-manager-cache: false
 
       - run: npm ci
+
+      # The half the hash comparison below cannot reach. Rebuilding the xpi from its own
+      # published source archive proves the two agree WITH EACH OTHER — a release built by
+      # hand, from a tree that never existed in git, reproduces against itself perfectly and
+      # passes every other check this repo runs. The provenance names the commit, so this is
+      # what makes the source archive checkable against a public one.
+      #
+      # `gh attestation verify` already enforces that the artefact was built by a workflow in
+      # THIS repository; the digest comparison is the extra step, and it is the one the gate
+      # exists for: without it a genuine build of some other commit — an older release's
+      # artefact renamed, a branch nobody reviewed — verifies clean.
+      #
+      # The commit comes from the tag through the commits endpoint rather than the ref one,
+      # because that resolves an annotated tag's object to the commit it points at, and
+      # calver-tag-action's tags are not guaranteed to be lightweight.
+      #
+      # Two artefacts, named exactly, for the same reason the attest step names them: a dev
+      # release also carries the AMO-SIGNED xpi, which is a repack of the pre-signing build
+      # and has no attestation of its own.
+      #
+      # An empty digest is a FAILURE and not a pass. `gh`'s json shape is not this repo's to
+      # promise, and a `--jq` path that has moved answers nothing at all — which, compared
+      # with `$commit`, has to be a mismatch rather than a match against nothing.
+      #
+      # A release cut before this step existed carries no attestation and fails here. That is
+      # the honest answer for a hand-dispatched re-check of one, and it is why provenance is
+      # wired into the two publishing paths rather than run over history.
+      #
+      # The tag is checked for shape first, for the reason verify-reproducible.ts's
+      # `releaseTag` gives: it goes into an API path, and one carrying "../" or "?" addresses
+      # a different release from the one this job believes it is verifying.
+      - name: Verify the release's build provenance
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag || github.event.release.tag_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          echo "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$' || {
+            echo "::error::not a release tag: $TAG (expected v<YYMM>.<day>.<micro>)"
+            exit 1
+          }
+          version="${TAG#v}"
+          dir="$(mktemp -d)"
+          gh release download "$TAG" --repo "$REPO" --dir "$dir" \
+            --pattern "configurable-containers-${version}.xpi" \
+            --pattern "configurable-containers-src-${version}.zip"
+          commit="$(gh api "repos/${REPO}/commits/${TAG}" --jq .sha)"
+          echo "$TAG is commit $commit"
+          for file in "$dir"/*; do
+            built_from="$(gh attestation verify "$file" --repo "$REPO" --format json \
+              --jq '.[].verificationResult.signature.certificate.sourceRepositoryDigest' \
+              | sort -u)"
+            if [ "$built_from" != "$commit" ]; then
+              echo "::error::$(basename "$file") attests a build of '${built_from}', not ${commit}"
+              exit 1
+            fi
+            echo "$(basename "$file"): built from $built_from"
+          done
 
       # Downloads the release's own xpi and source archive, rebuilds from the archive with
       # the release's own published BUILD_TIMESTAMP, and compares the sha256. A mismatch
