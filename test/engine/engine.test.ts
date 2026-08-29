@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { aFakeBrowser } from "./mock-port";
-import { createEngine, type PauseRecorder, type RecordedNav } from "../../src/engine/engine";
+import { createEngine, type PauseRecorder } from "../../src/engine/engine";
+import type { RecordedNav } from "../../src/engine/port";
 import { createPicker } from "../../src/engine/picker";
 import { parseConfig } from "../../src/config/parse";
 import { matchRule, matchGroup, hostMatcher } from "../../src/matcher/matcher";

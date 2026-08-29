@@ -10,6 +10,13 @@
 import type { HttpHeader } from "../overlays/cookies";
 export type { HttpHeader };
 
+// Firefox's cookieStoreId for "no container". A Firefox fact, so it lives at the seam that
+// owns Firefox facts rather than in each module that asks — it was spelled independently in
+// four of them (`registry`, `pause`, `auto-temp`, `browser-port`), none importing another,
+// and two must be identical for routing to answer at all: `registry.toRef` reads it as
+// `{kind:"default"}` and `pause.arm` refuses to arm it. A typo in either is silent.
+export const DEFAULT_STORE_ID = "firefox-default";
+
 export interface WebRequestDetails {
   requestId: string;
   tabId: number;
@@ -94,6 +101,16 @@ export interface RegisteredContentScript {
   unregister(): Promise<void>;
 }
 
+// What the pause recorder is told about one navigation. Derived from `WebRequestDetails`
+// rather than restated, so the engine hands `d` over as it stands; passing the two strings
+// positionally instead is a swap the compiler cannot catch, and it would put the method
+// where the URL is read.
+//
+// It sits at the seam rather than in `engine.ts` because `engine/pause.ts` is its other
+// consumer, and a type-only import upward was the last thing making the pause module know
+// the engine exists.
+export type RecordedNav = Pick<WebRequestDetails, "url" | "method">;
+
 export interface TabUpdateInfo {
   status?: "loading" | "complete" | undefined;
 }
@@ -101,7 +118,7 @@ export interface TabUpdateInfo {
 export interface Tab {
   id: number;
   url: string; // "" / about:blank for a fresh tab
-  cookieStoreId: string; // "firefox-default" | "firefox-container-N"
+  cookieStoreId: string; // DEFAULT_STORE_ID | "firefox-container-N"
   index: number;
   active: boolean;
   openerTabId?: number | undefined;

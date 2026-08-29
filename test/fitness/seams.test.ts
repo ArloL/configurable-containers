@@ -47,8 +47,52 @@ describe("fitness — the pure modules stay pure", () => {
     expect(imports).toEqual([
       'src/matcher/matcher.ts — import type { Rule, Group } from "../resolver/types";',
       'src/psl/same-site.ts — import { parse } from "tldts";',
+      'src/resolver/decision-label.ts — import type { Decision } from "./types";',
       'src/resolver/resolve.ts — import type { Action, Config, ContainerRef, Decision, Deps, NavContext } from "./types";',
       'src/resolver/resolve.ts — import { TEMPORARY } from "./types";',
+    ]);
+  });
+});
+
+describe("fitness — the layers point one way", () => {
+  // The rule above, for the two layers that are not pure but are still BELOW the engine.
+  //
+  // `src/config` turns text into a `Config` and `src/overlays` turn a `Config` into
+  // descriptions of effects; neither performs any. Both were outside the inventory above,
+  // and `config/parse.ts` had quietly grown `import { isThrowawayName } from
+  // "../engine/registry"` — sound sharing (restating the `tmp<N>` shape in the parser is the
+  // drift that gets a user's `tmpwork` deleted by the disposer) pointed the wrong way. The
+  // cost was measurable: `engine/registry.ts` was in the OPTIONS PAGE bundle, reached
+  // through the parser, for one seven-line predicate. The shape now lives in
+  // `resolver/types.ts` and both halves import down.
+  it("keeps src/config and src/overlays out of src/engine and src/extension", () => {
+    const imports = filesMatching(sourceFiles("src/config", "src/overlays"), /^\s*import\s/)
+      .flatMap((f) => f.lines.map((l) => `${f.path} — ${l.replace(/^\d+:\s*/, "")}`));
+
+    expect(imports.filter((i) => /from\s+"\.\.\/(engine|extension)\//.test(i))).toEqual([]);
+  });
+
+  // And the direction the pause feature crossed. `engine/pause.ts` imported four types from
+  // `extension/pause-protocol.ts`, which imported `Recording` back — `src/`'s only import
+  // cycle, type-only so no runtime cycle, but a knowledge cycle across the layer boundary
+  // this file polices everywhere else.
+  //
+  // TWO modules are allowed, and what they have in common is the point: a protocol module is
+  // by construction the shared vocabulary of one boundary, imports nothing itself, and is
+  // named by both sides. The engine may name one. What it may not do is reach for a page's
+  // code, or for a type the page owns the rendering of — `RecordingView` lives over there
+  // now, and `pause.ts` maps its own model into it rather than shipping the model.
+  //
+  // The inventory is of MODULES rather than import lines, because an import that got long
+  // enough to wrap would otherwise arrive here as a second entry saying `} from …`, and the
+  // question this asks is which modules, not how they are spelled.
+  it("lets the engine name a protocol module and nothing else in src/extension", () => {
+    const named = filesMatching(sourceFiles("src/engine"), /from\s+"\.\.\/extension\//)
+      .flatMap((f) => f.lines.map((l) => `${f.path} -> ${/"\.\.\/extension\/([\w-]+)"/.exec(l)?.[1] ?? l}`));
+
+    expect([...new Set(named)].sort()).toEqual([
+      "src/engine/pause.ts -> pause-protocol",
+      "src/engine/picker.ts -> picker-protocol",
     ]);
   });
 });

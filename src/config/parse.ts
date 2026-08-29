@@ -5,7 +5,7 @@ import { parse, YAMLParseError } from "yaml";
 import { hostMatcher, patternMatcher, regexMatcher, type Matcher } from "../matcher/matcher";
 // The naming contract belongs to the registry, which mints the names; imported rather than
 // restated so the two halves cannot drift. (Types only — no browser reaches the parser.)
-import { isThrowawayName } from "../engine/registry";
+import { isThrowawayName } from "../resolver/types";
 import type { Action, Config, CookieSpec, Group, Rule, ScriptSpec } from "../resolver/types";
 
 export class ConfigError extends Error {

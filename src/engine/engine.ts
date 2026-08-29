@@ -1,6 +1,10 @@
 import { resolve } from "../resolver/resolve";
+// Saying a decision in words is the resolver's, not the engine's: the pause record and the
+// F9 toast must use one wording, and pause.ts reaching up here for it was the only edge
+// that made the pause module — and the options bundle behind it — depend on the engine.
+import { namesAConfiguredContainer, targetLabel, type Declinable } from "../resolver/decision-label";
 import type { Config, ContainerRef, Decision, Deps, NavContext, Target } from "../resolver/types";
-import type { BlockingResponse, BrowserPort, Tab, WebRequestDetails } from "./port";
+import type { BlockingResponse, BrowserPort, RecordedNav, Tab, WebRequestDetails } from "./port";
 import { createRegistry, type ContainerRegistry } from "./registry";
 import { supersede } from "./supersede";
 
@@ -11,11 +15,6 @@ export interface Engine {
   // (F1). Throws, so callers decide whether to fail open.
   reopen(tab: Tab, url: string, target: Target): Promise<void>;
 }
-
-// What the recorder is told about one navigation. A `WebRequestDetails` satisfies it, so
-// the engine hands `d` over as it stands. Passing the two strings positionally instead is a
-// swap the compiler cannot catch, and it would put the method where the URL is read.
-export type RecordedNav = Pick<WebRequestDetails, "url" | "method">;
 
 // The pause seam, synchronous by contract: `isPaused` runs inside the blocking webRequest
 // handler, where an await would cost every navigation latency, and `record` returns void so
@@ -105,46 +104,9 @@ async function buildNavContext(
   return { targetUrl: d.url, current, initiator, inheritedFrom };
 }
 
-// The two decisions the engine performs by opening a tab, and so the two it cannot perform
-// for a request with a body. Exported because the pause record describes a declined action
-// in the same words as the F9 notification: one function, so the two cannot drift.
-export type Declinable = Extract<Decision, { kind: "reopen" } | { kind: "choice" }>;
-
 async function containerLabel(port: BrowserPort, cookieStoreId: string): Promise<string> {
   const ci = await port.getIdentity(cookieStoreId);
   return ci ? ci.name : "the default container";
-}
-
-export function targetLabel(decision: Declinable): string {
-  if (decision.kind === "choice") return `one of: ${decision.options.join(", ")}`;
-  switch (decision.into.kind) {
-    case "permanent":
-      return decision.into.name;
-    case "temporary":
-      return "a new temporary container";
-    case "default":
-      return "the default container";
-  }
-}
-
-// Whether a declined navigation is worth interrupting the user for. Narrows the
-// NOTIFICATION only; the decline is unconditional, since the body would be dropped anyway.
-//
-// A toast earns its interruption by naming a container the config names: *stayed in tmp9
-// instead of Haeger* says the login landed where it cannot work and points at the rule to
-// fix. That is the SSO case this exists for.
-//
-// A temporary target cannot say that. *Stayed in tmp9 instead of a new temporary container*
-// names two throwaways the user can neither tell apart nor act on — and that is the COMMON
-// case: a card payment at an unmatched site, where the 3-D Secure host posts back cross-site
-// and staying put is what makes checkout work. Silenced with it: a POST out of a permanent
-// container that would have been isolated. It still names no unapplied rule and nothing to
-// do, which is the line this draws. `default` sits with `temporary` — it is Firefox's
-// no-container, not a rule's target.
-export function namesAConfiguredContainer(decision: Declinable): boolean {
-  // A choice always lists containers straight out of the config, `Temporary` among them
-  // or not.
-  return decision.kind === "choice" || decision.into.kind === "permanent";
 }
 
 // May a redirect hop of a navigation we reopened a tab for be acted on?

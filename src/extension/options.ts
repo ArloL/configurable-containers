@@ -21,8 +21,17 @@ import {
 } from "./config";
 
 import { CONFIG_APPLY, type ConfigApplyResponse } from "./config-protocol";
-import { PAUSE_STORAGE_KEY } from "../engine/pause";
-import type { ContainerRow, PauseStatusResponse, PauseToggleResponse } from "./pause-protocol";
+// Everything this page needs of the pause feature comes from the PROTOCOL module, and
+// nothing from `src/engine/`. That is a rule now (test/fitness/seams.test.ts): a page bundle
+// that reaches into the background's modules pulls whatever they import, and `createPause`
+// is one edge away from the engine, the resolver and the registry.
+import {
+  PAUSE_STORAGE_KEY,
+  type ContainerRow,
+  type PauseStatusResponse,
+  type PauseToggleResponse,
+  type RecordingView,
+} from "./pause-protocol";
 
 const textarea = document.getElementById("cc-config") as HTMLTextAreaElement;
 const saveButton = document.getElementById("cc-save") as HTMLButtonElement;
@@ -162,7 +171,7 @@ function renderContainerRow(row: ContainerRow): HTMLElement {
   return line;
 }
 
-function renderRecording(recording: PauseStatusResponse["recordings"][number]): HTMLElement {
+function renderRecording(recording: RecordingView): HTMLElement {
   const box = document.createElement("div");
   box.className = "cc-pause-recording";
 
@@ -201,11 +210,14 @@ function renderRecording(recording: PauseStatusResponse["recordings"][number]): 
     box.append(note("Nothing seen yet."));
   }
 
-  // The host list is capped (MAX_RECORDED_HOSTS in src/engine/pause.ts). Saying so is the
+  // The host list is capped (MAX_RECORDED_HOSTS, src/engine/pause.ts). Saying so is the
   // point of the cap being counted rather than silent: rules are written FROM this list, so
-  // a reader has to know when it is not the whole of what CC saw. The number is not named
-  // here on purpose — importing it would pull the background's pause module, and with it
-  // the engine, into the options bundle.
+  // a reader has to know when it is not the whole of what CC saw. The number itself is not
+  // named, because the cap is the recorder's policy and this page renders what it is sent —
+  // the count of what was dropped is the part a reader can act on. (The note that used to
+  // stand here said importing the constant would pull the engine into this bundle. Measured
+  // against the build, that was false even then: esbuild tree-shakes `createPause`. It is
+  // moot now — this page imports nothing from src/engine/ at all.)
   if (recording.dropped) {
     box.append(note(`… and ${plural(recording.dropped, "more host")} seen but not recorded — the per-recording cap was reached.`));
   }

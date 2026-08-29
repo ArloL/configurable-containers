@@ -7,6 +7,7 @@ import {
   PAUSE_STORAGE_KEY,
   VARIED,
   type PauseState,
+  type StoredPauseState,
 } from "../../src/engine/pause";
 import type { Decision } from "../../src/resolver/types";
 import type { PauseStatusResponse } from "../../src/extension/pause-protocol";
@@ -94,7 +95,9 @@ describe("pause — arming", () => {
       recordings: [
         { id: "1", cookieStoreId: shop.cookieStoreId, container: "tmp3", startedAt: 1, endedAt: null, hosts: [] },
       ],
-    } satisfies PauseState);
+      // The DISK shape, not the in-memory one: this row has no `dropped`, exactly as a
+      // recording written before the cap existed does not, and hydrate() fills it in.
+    } satisfies StoredPauseState);
     const pause = createPause({ port: browser.port, clock: aFakeClock().clock });
 
     await pause.hydrate();
@@ -365,12 +368,16 @@ describe("pause — the host cap", () => {
     expect(pause.snapshot().recordings[0]!.dropped).toBe(3);
   });
 
-  it("leaves `dropped` unset while the recording is under the cap", async () => {
+  // In memory the count is always present — that is the difference between `Recording` and
+  // the `StoredRecording` a previous build may have left on disk, and it is what keeps the
+  // blocking handler from asking "did this key exist yet?" about a row it is incrementing.
+  // A recording that has dropped nothing says zero.
+  it("counts nothing dropped while the recording is under the cap", async () => {
     const { pause, csid } = await anArmedPause();
 
     pause.record(csid, get("https://payment.acme.test/"), intoTemporary);
 
-    expect(pause.snapshot().recordings[0]!.dropped).toBeUndefined();
+    expect(pause.snapshot().recordings[0]!.dropped).toBe(0);
   });
 
   it("still counts hops on a host it already holds after the cap is reached", async () => {
@@ -709,6 +716,47 @@ describe("pause — the options page's questions", () => {
     // counts, because the container is occupied either way.
     expect(row.hosts).toEqual(["shop.test"]);
     expect(row.tabCount).toBe(3);
+  });
+
+  // The projection across the realm boundary, which is what the three-type split bought.
+  //
+  // `Recording` (in memory), `StoredRecording` (on disk) and `RecordingView` (what the page
+  // renders) used to be one declaration, so every field was every consumer's business and a
+  // change made for the renderer landed in a schema the blocking handler mutates. The
+  // clearest proof they are separate now is a field that does NOT cross: the page names a
+  // container by its display name and has no use for a store id, so `cookieStoreId` stays on
+  // this side. Asserting the whole object rather than a key or two is deliberate — an
+  // inventory catches a field added to the model and shipped by accident, which a spot check
+  // would not.
+  it("sends the page a view of a recording, not the model it keeps", async () => {
+    const browser = aFakeBrowser();
+    const shop = browser.addContainerNamed({ name: "tmp3" });
+    const clock = aFakeClock();
+    const pause = createPause({ port: browser.port, clock: clock.clock });
+    await pause.arm(shop.cookieStoreId);
+    pause.record(shop.cookieStoreId, post("https://payment.acme.test/3ds"), intoWork);
+
+    const view = (await status(pause)).recordings[0]!;
+
+    expect(view).toEqual({
+      id: expect.any(String),
+      container: "tmp3",
+      startedAt: expect.any(Number),
+      endedAt: null,
+      dropped: 0,
+      hosts: [
+        {
+          host: "payment.acme.test",
+          hits: 1,
+          wouldHave: "Work",
+          dropped: 0,
+          urls: [{ pattern: "*://payment.acme.test/3ds*", hits: 1, methods: ["POST"], wouldHave: "Work" }],
+        },
+      ],
+    });
+    // The model still holds it; the wire does not.
+    expect(pause.snapshot().recordings[0]!.cookieStoreId).toBe(shop.cookieStoreId);
+    expect(view).not.toHaveProperty("cookieStoreId");
   });
 
   it("refuses a toggle that names no container", async () => {
