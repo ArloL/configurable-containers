@@ -17,7 +17,8 @@ import {
 } from "../../src/config/sync-record";
 
 // storage.sync is the one subsystem here with no level above L3 and no e2e case that can
-// reach it — no Firefox Account in a test profile, and adoption ends in runtime.reload().
+// reach it — no Firefox Account in a test profile, no moz-extension: navigation for the
+// driver, and a probe that has its own sync namespace.
 // The deterministic levels are the whole defence, and what they are defending against is
 // not a mis-routed tab but a config quietly replaced by an older one on every machine the
 // user owns. The examples in sync-record.test.ts pin the cases someone thought of; these
@@ -154,8 +155,11 @@ describe("the sync record — properties", () => {
 
 describe("reconciling two copies of the config — properties", () => {
   it("never adopts text it already has, however the stamps compare", () => {
-    // Load-bearing: adoption ends in runtime.reload(), so a machine that adopted its own
-    // config would restart, adopt again, and never stop.
+    // Load-bearing, and it is a convergence property rather than a tidiness one: an
+    // adoption is itself a change the other machine hears, so a pair that had already
+    // converged would adopt each other's identical config forever. (When adoption ended in
+    // runtime.reload() the loop was more visibly a restart loop; applying in place made it
+    // quieter, not absent.)
     fc.assert(
       fc.property(arbShortText, arbStamp, arbStamp, (text, mine, theirs) => {
         const decision = reconcile({ text, updatedAt: mine }, { state: "ok", text, updatedAt: theirs, parts: 1 });
