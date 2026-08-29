@@ -431,13 +431,21 @@ Why a function is shaped the way it is lives in its own comment. This file carri
   `unicorn/no-useless-spread` flags `[...armed]` in `pause` and `[...live]` in the reaper;
   both loop bodies (`disarm`, `reapProfile`) delete from the collection being iterated, so
   taking its advice introduces the bug. `typescript/unbound-method` has no true positive
-  here — there is one class in `src/` and no method is ever passed as a value.
+  here — the two classes in `src/` are `Error` subclasses with no methods, so no method is
+  ever passed as a value.
   `no-unnecessary-condition` is off for `test/**` only: the mock builds states the types
   call impossible on purpose, while in `src/` the same rule is a dead-defence detector.
 - **A suppression comment disables the line after the DIRECTIVE, not after the reason.**
   `// oxlint-disable-next-line <rule> -- because…` spanning three lines suppresses the
   second comment line and nothing else, silently. Put the prose above and the directive
-  immediately over the code.
+  immediately over the code. **Stryker is the other way round** and the two rules must not
+  be swapped: its `next-line` binds to the start line of the *node* the comment leads
+  (`@stryker-mutator/instrumenter`, `directive-bookkeeper.js`), so the multi-line reasons
+  in `config/parse.ts` reach the code below them and "fixing" them would be a no-op at best.
+- **`lint` passes `--report-unused-disable-directives`**, so an `oxlint-disable` for a rule
+  this config does not enable fails the build instead of outliving whoever wrote it. It
+  found one on the push that added the flag: a `typescript/no-explicit-any` directive over
+  the `declare module "vitest"` merge, where the rule is pedantic and has never been on.
 - **The workflows have their own two gates — `actionlint` and `zizmor`** (`check-actions.yaml`),
   and zizmor fails the build on any finding. There are **no** zizmor suppressions, and its
   `cache-poisoning` finding on a release trigger is the reason: the fix is real, not an

@@ -10,7 +10,7 @@
     "test:mutation": "stryker run",
     "test:flake": "tsx scripts/flake-check.ts",
     "typecheck": "tsc --noEmit",
-    "lint": "oxlint --type-aware --deny-warnings src test harness scripts extensions",
+    "lint": "oxlint --type-aware --deny-warnings --report-unused-disable-directives src test harness scripts extensions",
     "audit": "npm audit --omit=dev",
     "manual": "tsx harness/manual.ts",
     "package": "tsx scripts/package.ts",

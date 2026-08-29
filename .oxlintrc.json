@@ -16,7 +16,9 @@
 // disagree about the language. oxlint reads types through `oxlint-tsgolint`, which is
 // tsgo — the same compiler `npm run typecheck` runs. One language, one answer.
 //
-// Type-aware rules only run with `--type-aware`; the npm script passes it.
+// Type-aware rules only run with `--type-aware`; the npm script passes it. It also
+// passes `--report-unused-disable-directives`, so an `oxlint-disable` naming a rule
+// this file does not enable is an error rather than dead weight nobody can date.
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   // `correctness` (the default category) plus the type-aware rules below, and nothing
@@ -43,10 +45,11 @@
 
     // Off, each because every hit here is a false alarm rather than a finding:
     //
-    // There is one class in `src/` (ConfigError) and no method is ever passed as a
-    // value; what this rule flags is closures read off object literals — `engine.reopen`
-    // handed to `createPicker`, a mock's `port.createTab` handed to `expect`. `this` is
-    // not involved in any of them.
+    // There are two classes in `src/` (`ConfigError` and `ConfigTooLargeError`), both
+    // `Error` subclasses with a constructor and no methods, so no method is ever passed
+    // as a value; what this rule flags is closures read off object literals —
+    // `engine.reopen` handed to `createPicker`, `aFakeClock()`'s `clock` and `advance`
+    // destructured in the L3 suite. `this` is not involved in any of them.
     "typescript/unbound-method": "off",
     //
     // Every spread it flags here is a SNAPSHOT of a collection the loop body mutates:
