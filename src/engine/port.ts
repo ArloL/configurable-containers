@@ -229,8 +229,10 @@ export interface BrowserPort {
   setCookie(details: SetCookieDetails): Promise<void>;
   getCookie(details: GetCookieDetails): Promise<Cookie | null>;
 
-  // The injector registers once at startup; Firefox injects at runAt for matching pages
-  // (F12).
+  // Registered by the script-injector, which keeps the handle and unregisters through it:
+  // a config is applied more than once — every Save and every adopted config re-registers
+  // the whole set — and since a save stopped restarting the extension, nothing else would
+  // ever drop a registration. Firefox injects at runAt for matching pages (F12).
   registerContentScript(details: RegisterContentScriptDetails): Promise<RegisteredContentScript>;
 
   // Returns the handler's result, so the choice page gets {ok:true}/{ok:false} and can fail

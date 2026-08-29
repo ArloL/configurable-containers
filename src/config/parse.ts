@@ -3,8 +3,10 @@
 // match forms and the two rules that fall out of them (auto-naming, scripts-on-regex).
 import { parse, YAMLParseError } from "yaml";
 import { hostMatcher, patternMatcher, regexMatcher, type Matcher } from "../matcher/matcher";
-// The naming contract belongs to the registry, which mints the names; imported rather than
-// restated so the two halves cannot drift. (Types only — no browser reaches the parser.)
+// The naming contract lives in `resolver/types`, beside the `TEMPORARY` it belongs with;
+// imported rather than restated so this refusal and the registry's minting cannot drift.
+// Downward on purpose: a pure parser must not import an engine module to ask, which is what
+// this did until the rule moved.
 import { isThrowawayName } from "../resolver/types";
 import type { Action, Config, CookieSpec, Group, Rule, ScriptSpec } from "../resolver/types";
 

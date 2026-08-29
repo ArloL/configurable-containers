@@ -29,15 +29,17 @@ export const MAX_RECORDINGS = 10;
 // 200 is two orders of magnitude above a real payment or SSO chain, which is a handful of
 // hops. Reaching it means the recording stopped being the flow the user armed for, and that
 // flow is at the TOP of a first-seen-ordered list, so the rows worth reading are the ones
-// kept. Past the cap the recording also stops writing at all, which is the other half of
-// what it costs to leave one running.
+// kept. Past the cap no new host row is added: a hop at an unseen host costs one increment
+// of `dropped` and no write. It does not stop the recording writing — the 200 hosts already
+// on the list go on counting hits and URLs — so what the cap bounds is the stored array, not
+// the write rate.
 export const MAX_RECORDED_HOSTS = 200;
 
 // The same bound one level down, for the URLs recorded under a host. It is much lower
 // because a URL row grows with BROWSING, not with the handful of hops a flow makes: fifty
 // pages read at one site is fifty rows, where the host is still one. Twenty is well above
-// the few paths a payment or SSO chain touches at any one host, and past it the recording
-// stops writing for that host, as it does for the recording as a whole at the cap above.
+// the few paths a payment or SSO chain touches at any one host, and past it no new URL row
+// is added under that host, exactly as no new host row is added at the cap above.
 export const MAX_RECORDED_URLS_PER_HOST = 20;
 
 // What a host row says when its URLs did not all resolve the same way. Before match

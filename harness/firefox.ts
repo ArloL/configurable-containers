@@ -721,9 +721,6 @@ export function openExtensionPage(page: Page, url: string): Promise<{ id: number
   return openTab(page, url);
 }
 
-// Switch the driver to the first window handle whose URL starts with `urlPrefix`. Opening a
-// tab does not move the driver, and an extension page is not addressable by navigation, so
-// this is how a test starts operating one.
 // Drive a navigation CC may cancel, and answer with the container tab it produced.
 //
 // From a FRESH tab every time: a reopen cancels the navigation of a tab that is already on
