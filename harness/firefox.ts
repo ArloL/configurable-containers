@@ -182,6 +182,7 @@ async function buildXpiFor(
     redirectorDelayMs?: number | undefined;
     configYaml?: string | undefined;
     notifyEchoTo?: string | undefined;
+    decisionEchoTo?: string | undefined;
     macAssign?: { url: string; userContextId: string; beaconUrl: string } | undefined;
   },
 ): Promise<{ xpiPath: string; cleanup: () => void }> {
@@ -211,6 +212,11 @@ export async function launch(opts: LaunchOptions = {}): Promise<Session> {
         redirectorDelayMs: opts.ccRedirectorDelayMs,
         configYaml: opts.configYaml,
         notifyEchoTo: PROBE_EXTENSION_ID,
+        // Set unconditionally, like the notify echo above, and for the same reason: a case
+        // that had to opt in would be a case that did not get a diagnosis on the run that
+        // needed one. The cost is the same one the notify echo already carries — no test
+        // build is byte-equivalent to a packaged one, `npm run manual` included.
+        decisionEchoTo: PROBE_EXTENSION_ID,
         macAssign: opts.macAssign && {
           url: `http://${opts.macAssign.host}:${new URL(server.url).port}/`,
           userContextId: opts.macAssign.userContextId,
@@ -367,7 +373,11 @@ export async function readContainerList(page: Page): Promise<string[]> {
 // navigation CC leaves alone.
 export async function awaitProbeReport(page: Page, timeoutMs = 10_000): Promise<void> {
   await poll(
-    { timeout: timeoutMs, what: "a probe report", diagnose: () => page.diagnose() },
+    {
+      timeout: timeoutMs,
+      what: "a probe report",
+      diagnose: async () => `${await page.diagnose()}\n${await describeDecisions(page)}`,
+    },
     async () => {
       const reported = await page.locator("html").getAttribute("data-cc-cookies-here");
       return reported === null ? RETRY : undefined;
@@ -505,6 +515,71 @@ export async function readNotifications(
   );
 }
 
+export interface ProbeDecision {
+  url: string;
+  method: string;
+  tabId: number;
+  /** How `resolve()` answered, or null at an exit that returned before resolving. */
+  decision: string | null;
+  outcome: string;
+}
+
+// What CC decided about each navigation it saw, oldest first, echoed by the test build.
+//
+// The e2e boundary otherwise carries CC's EFFECTS and never its CAUSES: the probe reports
+// the tab CC opened, and nothing reports the decision behind it. So `timed out after
+// 30000ms` covered a POST-guard regression that wedged the tab, a dead window handle, an
+// unanswered relay, a config that never applied, a load-dependent hydration race and
+// genuine flake — six candidates for one signal, which is why diagnosing a red run has been
+// the most expensive thing in this repository.
+export function readDecisions(relay: Page): Promise<ProbeDecision[]> {
+  return probeCommand(relay, "decisions", {}, 3000);
+}
+
+// The last few of those, as lines for a timeout report. Composed HERE and not in
+// `harness/browser/`: that layer is Selenium's problem only — a page, its ids, the window
+// list — and knows nothing about CC. This is the CC half, added to the polls that are about
+// CC's behaviour.
+//
+// It NEVER THROWS and it is given a short budget, for the same reason `Page.diagnose` catches
+// its own: a diagnosis that fails replaces the real failure with its own, and it is being run
+// at exactly the moment the browser is least well. Every way it can come back empty says so
+// in words rather than by being absent, because "CC decided nothing" and "nobody could be
+// asked" send a reader to two different places.
+export async function describeDecisions(relay: Page, limit = 8): Promise<string> {
+  try {
+    const all = await readDecisions(relay);
+    if (all.length === 0) return "  cc: saw no navigation at all";
+    const lines = all
+      .slice(-limit)
+      .map((d) => `    tab ${d.tabId} ${d.method} ${d.url}\n      ${d.decision ?? "(returned before resolving)"} => ${d.outcome}`);
+    return [`  cc decided (last ${lines.length} of ${all.length}):`, ...lines].join("\n");
+  } catch (e) {
+    return `  cc: could not be asked what it decided (${(e as Error).message})`;
+  }
+}
+
+// The same, when the caller holds a session rather than a relay page — `awaitContainerTab`
+// polls window handles and owns none. The probe's relay exists on http(s) pages only, so an
+// extension page or an about: page cannot be asked; saying which is the case beats a silent
+// omission, since "the driver was parked somewhere unaskable" is itself a common cause.
+export async function describeSessionDecisions(session: BrowserSession, limit = 8): Promise<string> {
+  try {
+    for (const page of await session.pages()) {
+      let where: string;
+      try {
+        where = await page.url();
+      } catch {
+        continue; // a handle that closed mid-walk, which is the churn being diagnosed
+      }
+      if (/^https?:/.test(where)) return await describeDecisions(page, limit);
+    }
+    return "  cc: no http(s) page open to ask through (the probe's relay lives only there)";
+  } catch (e) {
+    return `  cc: could not be asked what it decided (${(e as Error).message})`;
+  }
+}
+
 // A REAL new tab — `browser.tabs.create({})`, what Ctrl/Cmd+T does: about:newtab in the
 // default container. WebDriver's switchTo().newWindow("tab") makes an about:blank tab, which
 // auto-temp ignores by design, and WebDriver cannot navigate to about:newtab either.
@@ -534,7 +609,8 @@ export async function awaitTab(
       what: "a matching tab",
       interval: 300,
       diagnose: async () =>
-        `  saw ${JSON.stringify(tabs.map((t) => ({ url: t.url, container: t.container })))}`,
+        `  saw ${JSON.stringify(tabs.map((t) => ({ url: t.url, container: t.container })))}\n` +
+        (await describeDecisions(relay)),
     },
     async () => {
       tabs = await listTabs(relay);
@@ -557,7 +633,7 @@ export async function awaitContainers(
       timeout: timeoutMs,
       what: "the container list to settle",
       interval: 300,
-      diagnose: async () => `  saw ${JSON.stringify(names)}`,
+      diagnose: async () => `  saw ${JSON.stringify(names)}\n` + (await describeDecisions(relay)),
     },
     async () => {
       names = await listContainers(relay);
@@ -579,7 +655,7 @@ export async function awaitTabs(
       timeout: timeoutMs,
       what: "the tab list to settle",
       interval: 300,
-      diagnose: async () => `  saw ${JSON.stringify(tabs.map((t) => t.url))}`,
+      diagnose: async () => `  saw ${JSON.stringify(tabs.map((t) => t.url))}\n` + (await describeDecisions(relay)),
     },
     async () => {
       tabs = await listTabs(relay);
@@ -680,7 +756,10 @@ export async function awaitContainerTab(
     {
       timeout: timeoutMs,
       what: `a container tab for ${url}`,
-      diagnose: async () => `  saw ${JSON.stringify(seen)}`,
+      // The report this case most needed and least had. "saw [...]" lists tabs that are not
+      // the one expected; what it never said is whether CC decided to reopen at all — which
+      // separates a routing regression from a probe that had not reported yet.
+      diagnose: async () => `  saw ${JSON.stringify(seen)}\n` + (await describeSessionDecisions(session)),
       interval: 300,
     },
     async () => {

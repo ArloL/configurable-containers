@@ -305,26 +305,44 @@ export function createEngine(opts: EngineOptions): Engine {
     switch (decision.kind) {
       case "leaveAlone":
       case "stay":
-        return;
+        return say(d, "left where it is", decision);
 
       case "choice":
-        if (await macOwns(port, d.url)) return; // F7 defer
+        if (await macOwns(port, d.url)) return say(d, "deferred: MAC has an assignment for this url (F7)", decision);
         handled.add(key);
         onChoice(decision.options, { tabId: d.tabId, url: d.url });
+        say(d, "choice screen shown", decision);
         return { cancel: true };
 
       case "reopen":
-        if (await macOwns(port, d.url)) return; // F7 defer
+        if (await macOwns(port, d.url)) return say(d, "deferred: MAC has an assignment for this url (F7)", decision);
         handled.add(key); // guard BEFORE the async effects
         try {
           await reopen(tab, d.url, decision.into);
         } catch (e) {
           handled.delete(key); // fail open, so the navigation can be retried
           console.warn("[engine] reopen failed", e);
-          return;
+          return say(d, `reopen FAILED, failing open: ${String(e)}`, decision);
         }
+        say(d, "reopened", decision);
         return { cancel: true };
     }
+  }
+
+  // What CC decided about this navigation and what it did about it, for a test build to hand
+  // the e2e suite (`port.echoDecision`; "" in every shipped build, where it folds away).
+  //
+  // Every exit of `navigate` goes through this, INCLUDING the ones that return before
+  // resolving — a view-source load, a re-fire already acted on, an absorbed redirect hop.
+  // Those are precisely the exits a reader mistakes for "CC never saw this navigation", and
+  // the difference between "saw it and left it alone" and "never saw it" is the difference
+  // between two very different bugs.
+  //
+  // Synchronous and void, like `pause.record`: this runs inside the blocking handler, and
+  // neither a description nor its delivery may cost a page load anything. `return say(…)` at
+  // an exit that proceeds therefore reads as what it is — say this, then return undefined.
+  function say(d: WebRequestDetails, outcome: string, decision?: Decision): void {
+    port.echoDecision({ url: d.url, method: d.method, tabId: d.tabId, decision, outcome });
   }
 
   async function navigate(d: WebRequestDetails): Promise<BlockingResponse | void> {
@@ -334,18 +352,27 @@ export function createEngine(opts: EngineOptions): Engine {
     // inner url. Same question as the scheme test: is the user navigating to this page, or
     // is the request only raw material for something else. Adds no state and never cancels,
     // so a missing mark just routes as before.
-    if (viewSourceNav.has(d.tabId)) return;
+    //
+    // The two exits above are NOT echoed: a sub-resource or a non-http request is not a
+    // navigation CC declined to route, it is one it was never asked about, and echoing every
+    // one of them would bury the main_frame hops a reader is looking for.
+    if (viewSourceNav.has(d.tabId)) {
+      return say(d, "not routed: a view-source: load, which reaches webRequest wearing its inner url (F13)");
+    }
 
     // F1: a re-fire of a request we already acted on.
     const key = d.requestId + "+" + d.url;
-    if (handled.has(key)) return { cancel: true };
+    if (handled.has(key)) {
+      say(d, "cancelled: already acted on this exact request");
+      return { cancel: true };
+    }
 
     const ours = ourNavigation(d);
-    if (ours.absorb) return;
+    if (ours.absorb) return say(d, "left alone: this IS the navigation the tab was reopened for (F1 guard)");
     const guardedFrom = ours.from;
 
     const tab = await port.getTab(d.tabId);
-    if (!tab) return; // raced away — fail open
+    if (!tab) return say(d, "not routed: the tab was gone by the time it was looked up");
     const nav = await buildNavContext(d, tab, registry, port, guardedFrom);
 
     const decision = resolve(nav, config, deps);
@@ -353,7 +380,10 @@ export function createEngine(opts: EngineOptions): Engine {
     // Before the pause record, which describes what routing WOULD have done: a hop we are
     // not going to act on has no counterfactual to report.
     if (guardedFrom !== undefined) {
-      if (aHopBuysNoThrowaway(decision)) return; // the chain stays where it was opened
+      if (aHopBuysNoThrowaway(decision)) {
+        // the chain stays where it was opened
+        return say(d, "left alone: a hop of a reopen buys no second throwaway", decision);
+      }
       reopenedNav.delete(d.tabId); // acted on: the tab it guarded is about to be superseded
     }
 
@@ -371,12 +401,15 @@ export function createEngine(opts: EngineOptions): Engine {
     // Adds nothing to `handled` and never cancels: no state a later navigation inherits.
     if (pause.isPaused(tab.cookieStoreId)) {
       pause.record(tab.cookieStoreId, d, decision);
-      return;
+      return say(d, "not routed: routing is paused in this container, and the decision recorded", decision);
     }
 
     // Before macOwns (no reason to ask about a navigation we will not act on) and before
     // handled.add (adds no state, so it fails open).
-    if (declinePost(d, tab, decision)) return; // no cancel — the POST proceeds where it is
+    if (declinePost(d, tab, decision)) {
+      // no cancel — the POST proceeds where it is
+      return say(d, `declined: ${d.method} has a body and tabs.create can only issue a GET (F9)`, decision);
+    }
 
     return await perform(d, tab, key, decision);
   }

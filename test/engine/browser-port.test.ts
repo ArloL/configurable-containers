@@ -120,9 +120,13 @@ function fakeBrowser() {
       getURL: (path: string) => `moz-extension://uuid/${path}`,
       sendMessage: async (ext: string, msg: unknown) => {
         f.runtime._sent.push({ ext, msg });
+        if (f.runtime._sendRejects) throw new Error("Could not establish connection");
         return { echoed: msg };
       },
       _sent: [] as { ext: string; msg: unknown }[],
+      // What Firefox answers when nobody is listening at that id — the probe not installed,
+      // or a `npm run manual` run where it never is.
+      _sendRejects: false,
     },
     commands: {
       onCommand: {
@@ -349,6 +353,69 @@ describe("createBrowserPort — disposal methods", () => {
     const port = createBrowserPort();
     await expect(port.notify({ title: "T", message: "M" })).rejects.toThrow(/No permission/);
     expect(f.runtime._sent).toEqual([]);
+  });
+
+  // The other half of the boundary the 2026-08-29 modularity review named: until this echo
+  // the e2e layer could see CC's EFFECTS and never its CAUSES, so one timeout stood for six
+  // possible causes.
+  it("echoDecision sends what CC decided and what it did, in words", () => {
+    const port = createBrowserPort();
+
+    port.echoDecision({
+      url: "https://work.example/",
+      method: "POST",
+      tabId: 4,
+      decision: { kind: "reopen", into: { kind: "permanent", name: "Work" } },
+      outcome: "declined: POST has a body and tabs.create can only issue a GET (F9)",
+    });
+
+    expect(f.runtime._sent).toEqual([
+      {
+        ext: "probe@configurable-containers.test",
+        msg: {
+          cmd: "cc-decision",
+          url: "https://work.example/",
+          method: "POST",
+          tabId: 4,
+          // Rendered here rather than shipped as an object: the probe stores what it is
+          // given and the reader reads it, so the WORDS are the contract, and they are the
+          // resolver's own (`describeDecision`) so a diagnosis and an F9 toast cannot come
+          // to describe the same decision differently.
+          decision: "reopen -> Work",
+          outcome: "declined: POST has a body and tabs.create can only issue a GET (F9)",
+        },
+      },
+    ]);
+  });
+
+  // An exit that returned before resolving has no decision, and says so rather than
+  // inventing one: "CC never got as far as deciding" and "CC decided to leave it alone" are
+  // different bugs, and the first is the one a reader mistakes for "CC never saw this".
+  it("echoDecision says so when there was no decision yet", () => {
+    createBrowserPort().echoDecision({
+      url: "https://work.example/",
+      method: "GET",
+      tabId: 4,
+      outcome: "not routed: a view-source: load",
+    });
+
+    expect((f.runtime._sent[0]!.msg as { decision: unknown }).decision).toBeNull();
+  });
+
+  // Synchronous and void BY CONTRACT: the caller is the blocking onBeforeRequest handler, so
+  // saying what happened must neither delay a navigation nor be able to break one. A probe
+  // that is not installed answers with a rejection, and the only correct response to it here
+  // is nothing at all.
+  it("echoDecision survives a send nobody is listening for", async () => {
+    f.runtime._sendRejects = true;
+    const port = createBrowserPort();
+
+    expect(port.echoDecision({ url: "https://x.test/", method: "GET", tabId: 1, outcome: "left where it is" }))
+      .toBeUndefined();
+
+    // The floated rejection settles on the microtask queue; an unhandled one here would be
+    // an unhandled rejection in the background context.
+    await Promise.resolve();
   });
 
   it("setBadge writes the text and colours the badge exactly once", async () => {
