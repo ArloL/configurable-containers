@@ -1,147 +1,116 @@
 # Drift reviews
 
-Nine reviews for what no gate in this repo can see. D1–D8 hunt **a true statement that
-stopped being true**; D9 asks a different question — whether CLAUDE.md still earns the
-context it costs every session, which is a matter of judgement rather than of truth. They
-are run by an agent reading and judging, not by a tool.
+Reviews for what no gate here can see: prose that has gone false, or that has grown past what
+it buys. An agent runs one at a time.
 
-Nothing in CI can catch these, by design rather than oversight. `test/fitness/` reads `src/`
-with comments **stripped** (`test/fitness/sources.ts`) — deliberately, because this codebase
-names the very APIs it is careful not to call, so a check on raw text would report
-`resolver/types.ts`'s explanation of `browser.cookies.set` as a violation and be deleted
-within a week. Coverage counts lines executed, not claims that are true. The mutation gate
-mutates code; a comment has no mutants. `tsc` and `oxlint` see syntax and types.
-
-So on 2026-08-29 six comments across three files asserted, in the present tense, that a
-config save calls `runtime.reload()` — three days after `seams.test.ts` started pinning that
-call *out* of `src/`. Three of them were a test case's stated reason for existing. The only
-thing that found them was a person asking a question.
-
-| id | Question | Scope |
-| --- | --- | --- |
-| **D1** | Does this comment still describe what the code does? | `src/`, `harness/`, `scripts/` |
-| **D2** | Is this suppression's reason still true? | every `v8 ignore`, `Stryker disable`, `oxlint-disable`, `sonar.issue.ignore` |
-| **D3** | Has the platform moved past this measurement? | measured claims in `CLAUDE.md`, `TESTING.md` |
-| **D4** | Does this upstream citation still resolve? | `mac/`, `tcp/`, bug references |
-| **D5** | Does the published copy still describe the add-on? | `amo/` |
-| **D6** | Does this test still assert what its comment claims? | `test/` |
-| **D7** | Has this follow-up's resolution condition been met? | `FOLLOWUPS.md` |
-| **D8** | Do two current documents contradict each other? | `CLAUDE.md`, `TESTING.md`, `README.md`, `CONFIG.md` |
-| **D9** | Does every session need all of CLAUDE.md? | `CLAUDE.md` |
+Each `## D<n>` section is one complete review — question, scope, method, and what counts as a
+finding. Nothing depends on a neighbour, and a rule two reviews need is written out in both,
+because a section is the whole context for its run. Ids are stable: retire a review by
+deleting its section and leaving the gap, rather than renumbering the rest.
 
 ## Running one
 
-**Each section below is the whole context for its review.** Run one per session: they need
-different evidence and different judgement, a combined run produces a shallow pass at all of
-them, and a review that needed something from a neighbour would not survive being scheduled
-on its own. Where two reviews need the same rule, it is written out in both.
-
-Four things hold for every one, because a non-deterministic review is far easier to make cry
-wolf than a fitness function, and this repo's rule is that **a check which cries wolf is
-deleted and takes its invariant with it**:
+These hold for every review:
 
 - **Evidence, or it is a suspicion.** Every finding says what you checked and what it showed —
-  quoted text with `file:line`, a command and its output, or a measurement. Each review says
-  what shape its own findings take; none of them accepts "this is unclear" or "this could be
-  worded better".
-- **Silence is a valid and expected result.** Most runs should find nothing. Say so. Never
-  manufacture a finding to justify the run; that is what gets the practice switched off.
+  quoted text with `file:line`, a command and its output, or a measurement. Each review states
+  the shape its own findings take; none accepts "this is unclear" or "this could be worded
+  better".
+- **Silence is a valid and expected result.** Most runs find nothing. Say so. Never manufacture
+  a finding to justify the run; that is what gets a review switched off.
 - **Report; don't fix silently.** A wrong "fix" to a comment writes a *new* false statement,
-  which is worse than the stale one because it looks fresh.
-- **If a deterministic check could have caught it, say so.** That drift is a gap in
-  `test/fitness/`, and the finding should propose the check. These reviews are for what cannot
-  be pinned, so every conversion shrinks their territory — which is the point.
+  worse than the stale one because it looks fresh.
+- **If a deterministic check could have caught it, say so.** `test/fitness/` reads `src/` with
+  comments stripped, so nothing in CI can fail on prose — but a drift with a checkable shape is
+  a gap in that suite, and the finding should propose the check.
 
 ---
 
 ## D1 — Expired premises
 
 **Does each comment that states how the code behaves still describe it?**
+Scope: `src/`, `harness/`, `scripts/`.
 
 Read prose making a *present-tense, checkable claim* about a mechanism — "X calls Y", "this
 runs on every Z", "the only caller is W", "this is the ordinary path" — and check it against
 the code. Highest-yield, in order:
 
-1. **A comment justifying a decision by naming a mechanism.** Load-bearing, and what
-   CLAUDE.md is made of.
+1. **A comment justifying a decision by naming a mechanism.** Load-bearing, and what CLAUDE.md
+   is made of: a dead premise there means the next person takes a reasonable-looking wrong
+   action *and the file tells them to*.
 2. **A comment naming a caller, a count, or a frequency.** "The only external consumer", "six
-   siblings", "on every config save". Counts drift silently and `grep` settles them.
-3. **A comment describing a module that has since been split.** After 2026-08-29, prose about
-   "`Recording`" had to become prose about three types.
+   siblings", "on every config save". These drift silently and `grep` settles them.
+3. **A comment describing a module that has since been split or renamed.**
 
 Don't accept a claim because it sounds right — the reason these survive is that they *all*
 sound right.
 
-**A finding here is a contradiction:** the comment says X, the code does Y, and both are
-cited. Not findings:
+**A finding here is a contradiction:** the comment says X, the code does Y, both cited. Two
+shapes qualify — a premise that *expired*, and one that was *never true*. The second is worth
+more, because nothing else will ever catch it.
+
+Not findings:
 
 - **Past-tense history.** "It used to call `runtime.reload()`" stays true, and this codebase
   deliberately keeps the history that explains its shapes. Only present-tense claims go stale.
 - **A dated design record.** `docs/superpowers/specs/` and `docs/modularity-review/` are
   snapshots of what was decided on a date and are *supposed* to diverge from the code. If a
   decision was reversed, that belongs in CLAUDE.md, not in an edit to the record.
-- A statement of intent ("keep this synchronous") rather than of fact, and a Firefox
-  behaviour, which is D3's job.
-
-CLAUDE.md is the highest-value target: it exists to stop reasonable-looking wrong changes, so
-a dead premise there means the next person takes the wrong action *and the file tells them
-to*.
-
-**Precedent:** `runtime.reload()` × 6. Also `options.ts` claiming an import "would pull the
-background's pause module, and with it the engine, into the options bundle" — which was false
-*when written*, not expired. This review catches both shapes, and the second is worth more
-because nothing else ever will.
+- A statement of intent ("keep this synchronous") rather than of fact.
+- A claim about Firefox's behaviour, which is a measurement — see D3.
 
 ## D2 — Suppressions whose reason expired
 
 **Is each suppression's reason still true, and does the suppressed finding still fire?**
+Scope: every suppression that carries a written reason, which is what makes them reviewable.
 
-Every suppression here carries a written reason, which is what makes it reviewable:
+Enumerate rather than recall:
 
-- `/* v8 ignore … -- why */` — `src/matcher/matcher.ts`, `src/config/load.ts`,
-  `src/engine/browser-port.ts`
-- `// Stryker disable <mutator>: why` — `src/config/parse.ts`, `src/overlays/cookies.ts`
-- `// oxlint-disable-next-line <rule> -- why` — `harness/reaper.ts`,
-  `harness/browser/matchers.ts`, `test/config/parse.real.test.ts`
-- `sonar.issue.ignore.multicriteria.<id>` — `sonar-project.properties`
+```
+grep -rn 'v8 ignore\|Stryker disable\|oxlint-disable' src test harness scripts
+grep -n 'ruleKey\|resourceKey' sonar-project.properties
+```
 
-**A finding here is one of two shapes**, and they need different fixes: **the reason expired**
-(a real finding is being hidden — the severe case), or **the finding no longer fires** (dead
+**A finding here is one of two shapes**, needing different fixes: **the reason expired** (a
+real finding is being hidden — the severe case), or **the finding no longer fires** (dead
 weight that will outlive everyone who understood it — delete it).
+
+Use the deterministic half: **remove the suppression, run the gate, see whether it complains.**
+That turns most of the run from judgement into measurement; report the command and its output.
+
+Two standing facts, to check against rather than re-derive:
+
+- **`S2871` must stay.** Taking its `localeCompare` advice breaks reproducible builds, because
+  that sort is what makes the xpi's entry order identical on every machine and collation is not.
+- **zizmor has no suppressions on purpose.** A run proposing one has the finding inverted: the
+  fix is real.
 
 Not a finding: a suppression that argues its case. That is one doing its job, and the only
 question is whether the argument still holds.
 
-This one has a **deterministic half: use it.** Remove the suppression, run the gate, see
-whether it complains. That turns most of the work from judgement into measurement; report the
-command and its output.
-
-Two standing facts, to check against rather than re-derive: **`S2871` must stay** — taking its
-`localeCompare` advice breaks reproducible builds, since that sort is what makes the xpi's
-entry order identical on every machine and collation is not. And **zizmor has no suppressions
-on purpose** — a run proposing one has the finding inverted; the fix is real.
-
-Check shape as well as content: a suppression disables the line after the **directive**, not
+Check shape as well as content — a suppression disables the line after the **directive**, not
 after the reason, so a multi-line `-- because…` block suppresses the next comment line and
 nothing else, silently.
 
 ## D3 — Measured facts past their shelf life
 
 **Has the platform moved past this measurement, and is the number still what the code does?**
+Scope: measured claims in `CLAUDE.md` and `TESTING.md`.
 
-`CLAUDE.md` and `TESTING.md` are full of measurements — that is why the platform notes are
-trustworthy, and it is a liability, because a measurement is true *of a version on a date*:
-"measured, FF153", "140.14.0esr", "156.0a1 widened the same check", "one first read in twelve
-… hydrated 13ms later", "61.8s of `options.test.ts`, measured", "40 rounds … reproduced it
-zero times".
+A measurement is true *of a version on a date*, and these files are full of them — which is
+why the platform notes are trustworthy, and why they need re-checking. Find them with:
 
-Name the version and date each was measured on, and the current version.
+```
+grep -n 'measured\|esr\|FF1\|[0-9]\+\.[0-9]\+a\?[0-9]*' CLAUDE.md TESTING.md
+```
 
-**A finding here is a measurement whose consequence would now be different** — and a version
-gap alone is only a candidate. Promote it when the claim's consequence would change, and
-**propose the re-measurement rather than guessing the result**: "this may have changed" with
-no way to check is noise, and a guessed re-measurement is worse than the stale one, because
-the next reader has no way to tell it was guessed.
+For each, name the version and date it was measured on, and the current version of that thing.
+
+**A finding here is a measurement whose consequence would now be different.** A version gap
+alone is only a candidate. Promote it when the consequence would change, and **propose the
+re-measurement rather than guessing the result**: "this may have changed" with no way to check
+is noise, and a guessed re-measurement is worse than a stale one, because the next reader
+cannot tell it was guessed.
 
 Highest value: **facts that decide what CC must do** — the `view-source:` inner-url behaviour,
 `tabs.create` rejecting `about:newtab`, bug 1586612's `onCreated` ordering, `onBeforeNavigate`
@@ -150,154 +119,136 @@ preceding the request, and the privileged-context refusal that
 becomes dead code or a guard becomes wrong — and the Nightly leg catches the second, not the
 first.
 
-Also: **numbers in prose that must match a constant.** `MAX_RECORDED_HOSTS` is 200,
-`PRODUCTION_GRACE_MS` is five minutes, the coverage and mutation thresholds are 100. One grep
-each.
+Also: **numbers in prose that must match a constant** — the recording caps, the disposal
+grace, the coverage and mutation thresholds. One grep each against the source.
 
 ## D4 — Upstream citations
 
 **Does each reference into `mac/` or `tcp/` still resolve, and still say what we claim?**
+Scope: citations in `CLAUDE.md`, and the bugs CC works around.
 
 CLAUDE.md cites both **by file and symbol, never line number**, because they track upstream —
-which is what makes this cheap: a symbol either exists or does not. Use the **local
-checkout**, not the GitHub API (`mac/` is a test prerequisite; clone with
+which is what makes this cheap: a symbol either exists or does not. Use the **local checkout**,
+not the GitHub API (`mac/` is a test prerequisite; clone with
 `git clone --depth 1 https://github.com/mozilla/multi-account-containers.git mac`).
 
 Per citation: the file exists, the symbol exists in it, and the behaviour we describe is what
-that code does now. Current ones include `mac/src/js/background/assignManager.js` →
-`removeTab` (the reopen keep-or-replace rule), and TCP's `cleanup.ts` → the disposer,
-`getAssignment` → the F7 defer.
+that code does now.
 
-Harder and more valuable: **a bug CC works around may have been fixed.**
+**A finding here is a citation that no longer resolves or no longer says what we claim.**
+
+Harder and more valuable: **a bug CC works around may have been fixed** —
 `mozilla/multi-account-containers#2582` and Firefox bug 1586612 are both load-bearing
-workarounds.
-
-**A finding here is a citation that no longer resolves or no longer says what we claim.** Not
-a finding: a workaround that is still needed. A fix upstream does not mean deleting ours — CC
-supports ESR, so a workaround stays until the oldest supported Firefox no longer needs it —
-but the note should then say the fix exists.
+workarounds. Not a finding: a workaround that is still needed. A fix upstream does not mean
+deleting ours, because CC supports ESR and a workaround stays until the oldest supported
+Firefox no longer needs it — but the note should then say the fix exists.
 
 ## D5 — Published prose
 
 **Does `amo/` still describe the add-on, and would a reviewer reproduce what it promises?**
+Scope: `amo/summary.txt`, `amo/description.md`, `amo/reviewer-notes.txt`.
 
-`scripts/sign-dev.ts` uploads `amo/{summary.txt,description.md,reviewer-notes.txt}` with
-`--amo-metadata` on **every push to main**, so drift here is published rather than merely
-sitting in a file — and it overwrites anything edited in the Developer Hub, so these files are
-the only copy that matters.
+`scripts/sign-dev.ts` uploads these with `--amo-metadata` on **every push to main**, so drift
+here is published rather than merely sitting in a file — and it overwrites anything edited in
+the Developer Hub, so these files are the only copy that matters. Every other drift waits for
+someone to read it; this one ships.
 
-Part is **already deterministic and must stay that way**:
-`test/extension/amo-metadata.test.ts` pins the PERMISSIONS bullets as an exact set against
-`extensions/cc/manifest.json` (both directions — a permission with no bullet, and a bullet
-outliving its permission) and pins the Node version against what the workflows really set.
-Don't re-litigate those by hand. Check the rest:
+Part is **already deterministic and must stay that way**: `test/extension/amo-metadata.test.ts`
+pins the PERMISSIONS bullets as an exact set against `extensions/cc/manifest.json` (both
+directions — a permission with no bullet, and a bullet outliving its permission) and pins the
+Node version against what the workflows really set. Don't re-litigate those by hand.
+
+**A finding here is published prose that no longer describes the add-on.** Check:
 
 - Does the build-reproduction recipe still work? It is the reason the notes exist.
 - Does the feature description match what the extension now does?
 - Does anything claim a behaviour that has changed — routing, storage, what is sent where?
 
-**A finding here is published prose that no longer describes the add-on**, and this review has
-the highest blast radius of the nine for that reason: every other drift sits in the repo until
-someone reads it, and this one is pushed to a public listing on every merge.
-
-A finding that could be pinned should become another case in `amo-metadata.test.ts`. That file
+A finding that could be pinned should become another case in `amo-metadata.test.ts`, which
 exists because exactly this drift happened twice.
 
 ## D6 — Test justifications vs what the test asserts
 
 **Does each test's comment describe what its body actually pins?**
+Scope: `test/`.
 
-Two failure modes, both of which this suite has shipped:
+Two failure modes, both of which this suite has shipped — e2e cases passing with the feature
+entirely broken, and L3 cases asserting the bug rather than the fix:
 
 - **The comment describes a behaviour the body no longer asserts.** The stated coverage is
-  imaginary. CLAUDE.md records both precedents in its revert-verify bullet: three e2e cases
-  passed with auto-temp entirely broken, and L3 cases once asserted the bug rather than the
-  fix.
-- **The case has outlived its stated reason.** The pause restart case justified itself as "the
-  ordinary path" because every config save reloaded the background. Once that stopped being
-  true the case was still valuable — it pins the only artifact that survives a restart — but
-  nobody could have known that from the comment.
+  imaginary; nothing fails when the behaviour breaks.
+- **The case has outlived its stated reason**, while possibly still pinning something real.
 
 Method: read the comment, then read only the assertions, and ask whether the second could fail
 if the first stopped being true. Where a case names a bug (F1–F14), check the assertion would
 catch *that* bug rather than a neighbour.
 
-**A finding here is a contradiction between a comment and the assertions below it.** Not a
-finding: past-tense history in the comment, which stays true; nor a case whose reason has
-expired but which still pins something real — that is a comment to rewrite, and saying which
-is the useful half of the finding.
+**A finding here is a contradiction between a comment and the assertions below it.** Not
+findings: past-tense history in a comment, which stays true; and a case whose reason expired
+but which still pins something real — that is a comment to rewrite, and saying which is the
+useful half.
 
-Settle an uncertain finding the way the suite already does — **revert-verify**: back the fix
-out, watch it go red, restore it. Editor undo, **not** `git checkout`, which discards
-uncommitted work.
+Settle an uncertain one the way the suite already does — **revert-verify**: back the fix out,
+watch it go red, restore it. Editor undo, **not** `git checkout`, which discards uncommitted
+work.
 
 ## D7 — Expired follow-ups
 
-**Has each `FOLLOWUPS.md` entry's condition been met, and is its trade-off still priced right?**
+**Has each entry's resolution condition been met, and is its trade-off still priced right?**
+Scope: `FOLLOWUPS.md`.
 
 The file says *"Delete an entry once it is resolved"*, which makes every entry a standing
-question owned by nobody. Some conditions are checkable in one command:
+question owned by nobody. Each states its own condition; some are checkable in one command,
+and the entry says which — run it rather than reasoning about it.
 
-- **`harness/selenium-webdriver.d.ts`** — "Delete the file the day the types carry them", and
-  it warns *"Nothing will announce it"*, because merging an interface into a class makes
-  same-named methods overloads rather than a conflict.
-  `grep getDomAttribute node_modules/@types/selenium-webdriver/index.d.ts` settles it; as of
-  **4.35.6** it is still absent, so the entry stands.
-- **The live `Config` accessor** — the trigger is "when the seventh sibling is written".
-  Countable: count the siblings `wireBackground` hands the config to.
-- **`reopenedNav` across a restart** — revisit "only if dogfooding shows the wasted reopen
-  actually happening". Not checkable from the repo; say so rather than guess.
+**A finding here is a met condition, or a premise that moved.** The second is the more valuable
+question: **is the reasoning still sound?** Each entry prices a trade-off against facts that
+can move, and one whose premise moved needs re-pricing even if its conclusion survives.
 
-**A finding here is a met condition, or a premise that moved.** The second is the more
-valuable question: **is the reasoning still sound?** Each entry prices a trade-off against
-facts that can move. The `reopenedNav` entry rests partly on how often the
-background is torn down — and that frequency *already changed once*, when saves stopped
-reloading. A moved premise needs re-pricing even if the conclusion survives.
+Where an entry's condition cannot be checked from the repo, say so rather than guessing.
 
 ## D8 — Cross-document contradictions
 
 **Where two current documents describe the same thing, do they agree?**
+Scope: `CLAUDE.md`, `TESTING.md`, `README.md`, `CONFIG.md`.
 
-`CLAUDE.md`, `TESTING.md`, `README.md` and `CONFIG.md` overlap deliberately, and overlap means
-they can disagree with no way for a reader to tell which is right. Read each account of the
-topics that appear twice: the test levels and what each covers, the config grammar and its
-version gate, the release channels and what each publishes, the coverage and mutation
-thresholds.
+These overlap deliberately, and overlap means they can disagree with no way for a reader to
+tell which is right. Read each account of the topics that appear twice: the test levels and
+what each covers, the config grammar and its version gate, the release channels and what each
+publishes, the coverage and mutation thresholds.
 
 **A finding here is two current documents that cannot both be right**, with the passage from
-each quoted. Not findings: the specs under `docs/superpowers/` and the
-`docs/modularity-review/` snapshots, which are **exempt** — they are dated records, and a
-contradiction between one and the code is history working correctly. Past-tense history is
-exempt for the same reason.
+each quoted. Not findings: the specs under `docs/superpowers/` and the `docs/modularity-review/`
+snapshots, which are dated records — a contradiction between one and the code is history
+working correctly. Past-tense history is exempt for the same reason.
 
 ## D9 — Does every session need all of CLAUDE.md?
 
 **Is each section highly relevant to every session, and does the file match the documented
 guidance?**
+Scope: `CLAUDE.md`.
 
-**A finding here is a measured judgement, not a contradiction** — the one review where that
-is so, which is why the bar is written out here rather than assumed from the others. Nothing
-in the file has to be false. CLAUDE.md is read at the start of **every** conversation, so
-every line is a tax paid by sessions that will never use it, and the question is whether each
-still earns that.
+**A finding here is a measured judgement, not a contradiction**, so the bar is written out
+rather than assumed. Nothing in the file has to be false: CLAUDE.md is read at the start of
+**every** conversation, so every line is a tax paid by sessions that will never use it, and
+the question is whether each still earns that.
 
-Opinion is legitimate here: *"CLAUDE.md has drifted too large"* is a real finding even though
+Opinion is legitimate here — *"CLAUDE.md has drifted too large"* is a real finding even though
 every sentence in it is true. What it must carry instead of a second citation is a
-**measurement** — a number, a named section, and what that section is costing the sessions
-that never use it. A judgement without one is the "this feels long" that every other review
-would reject too.
+**measurement**: a number, a named section, and what that section costs the sessions that never
+use it. A judgement without one is the "this feels long" that every review rejects.
 
-Measure first, and report the numbers — without them this is the "feels long" the bar above
-rejects:
+Measure first and report the numbers:
 
 - total lines, words, and approximate tokens (bytes ÷ 4 is close enough)
 - lines per `##` section
-- how often the work actually touches each section's subject: `git log --name-only` over the
-  last few months, counted per path, against the section that covers it
+- how often the work touches each section's subject: `git log --name-only` over recent months,
+  counted per path, against the section that covers it
+- bold spans ÷ bullets, for the emphasis test below
 
 Then apply the tests from
 [Write an effective CLAUDE.md](https://code.claude.com/docs/en/best-practices#write-an-effective-claude-md),
-which are the standard this review measures against rather than anyone's taste:
+which are the standard this measures against rather than anyone's taste:
 
 - **"Keep it short and human-readable."**
 - **"Loaded every session, so only include things that apply broadly. For domain knowledge or
@@ -307,40 +258,36 @@ which are the standard this review measures against rather than anyone's taste:
 - **"Bloated CLAUDE.md files cause Claude to ignore your actual instructions"**, and the named
   failure pattern: *the over-specified CLAUDE.md*, where "Claude ignores half of it because
   important rules get lost in the noise".
-- The ✅/❌ table — notably ❌ *long explanations or tutorials*, *anything Claude can figure
-  out by reading code*, *information that changes frequently*.
-- **"If you emphasize many lines, none of them stands out."** Measurable: bold spans ÷ bullets.
+- The ✅/❌ table — notably ❌ *long explanations or tutorials*, *anything Claude can figure out
+  by reading code*, *information that changes frequently*.
+- **"If you emphasize many lines, none of them stands out."**
 - `/doctor` proposes cuts for content derivable from the codebase; `/context` confirms what
   actually loaded.
 
-**State the tension before reporting anything, or this review says "too long" every time.**
-The ✅ column includes *common gotchas or non-obvious behaviors* and *architectural decisions
-specific to your project*, which is a fair description of nearly all of this file — its own
-header says it carries only "platform and tooling facts that make a reasonable-looking change
-wrong". So **volume alone is not the finding.** The finding is *placement*: a fact that is a
-genuine gotcha, but only for a task type most sessions never perform.
+**State the tension before reporting anything, or this answers "too long" every time.** The ✅
+column includes *common gotchas or non-obvious behaviors* and *architectural decisions specific
+to your project*, which is a fair description of nearly all of this file — its own header
+claims exactly that scope. So **volume alone is not the finding.** The finding is *placement*:
+a fact that is a genuine gotcha, but only for a task type most sessions never perform.
 
 Candidates, most defensible first:
 
 1. **A section only a rare task needs.** Compute the fraction of recent commits touching its
-   paths. Release/AMO and MAC interop are the obvious places to look. The documented remedy
-   is a skill or a linked doc, not deletion — the knowledge is real.
-2. **Long explanation where a rule would do.** Usually the remedy is to keep the *rule* here
-   and move the *argument* to the code it is about, not to delete the argument.
+   paths. The remedy is a skill or a linked doc, not deletion — the knowledge is real.
+2. **Long explanation where a rule would do.** Usually keep the *rule* here and move the
+   *argument* to the code it is about.
 3. **Content derivable from the code.** What `/doctor` proposes.
 4. **Emphasis inflation.** If nearly every line is bold, emphasis has stopped working and the
    lines that need it cannot get it.
-5. **Frequently-changing information**, which is a bloat liability and a D1/D3 liability at
-   once.
+5. **Frequently-changing information**, which is a bloat liability and a D1/D3 liability at once.
 
-**Weigh the remedy, don't assume it is free.** Moving a gotcha into a skill means it loads
-only when the model judges it relevant — and a fact whose whole job is to stop a
-reasonable-looking wrong change is most needed exactly when the model does not yet know it
-is relevant. That risk is real and specific to gotcha-type content, so a proposal to move
-one should say why the trigger would fire in time.
+**Weigh the remedy, don't assume it is free.** Moving a gotcha into a skill means it loads only
+when the model judges it relevant — and a fact whose whole job is to stop a reasonable-looking
+wrong change is most needed exactly when the model does not yet know it is relevant. A proposal
+to move one should say why the trigger would fire in time.
 
 Not findings: "this is long" without a section, a number, and a task type that does not need
 it; a gotcha that genuinely is cross-cutting, however long it runs; and any proposal that
-*loses* reasoning rather than relocating it — this codebase's premise is that the reasoning
-is the artifact, so deleting an argument to save tokens trades a cheap cost for the expensive
-one this whole directory exists to prevent.
+*loses* reasoning rather than relocating it — this codebase's premise is that the reasoning is
+the artifact, so deleting an argument to save tokens trades a cheap cost for the expensive one
+these reviews exist to prevent.
