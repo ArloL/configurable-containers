@@ -84,3 +84,41 @@ stale local signature would silently win over the real one. The trigger to re-ch
 Renovate bump of `@types/selenium-webdriver`: grep the new package for the two names, and
 if they are there, delete `harness/selenium-webdriver.d.ts` and let `npm run typecheck`
 confirm the call sites still resolve.
+
+## Three implied minimum Firefox versions, none of them checked (2026-08-29)
+
+The add-on declares no floor and three parts of the build imply different ones:
+
+- **`extensions/cc/manifest.json`** has no `strict_min_version` under
+  `browser_specific_settings.gecko`, so Firefox and AMO offer CC to anything that still
+  loads MV2.
+- **`harness/build-extension.ts`** builds with `target: "firefox115"`, which is a claim
+  about the syntax esbuild may emit and nothing else — it says nothing about the
+  `browser.*` APIs the code calls.
+- **`.github/workflows/ci.yml`** measures `latest` and `latest-esr` only, and every
+  measured fact in CLAUDE.md was taken on 153 or 140.14.0esr. Below that nothing has ever
+  been run.
+
+The manifest also carries `data_collection_permissions`, a recent Gecko key; which build
+first understood it is one of the things to measure rather than assume.
+
+What makes this worth an entry rather than a shrug: the failure is silent in the way this
+repo cares about. An older Firefox that ignores a key or lacks an API does not refuse to
+install — it routes wrongly, or does not route, on a profile no gate here has ever
+touched.
+
+The work, in order:
+
+1. **Measure the real floor** and declare it as `strict_min_version`. That alone gives
+   addons-linter (`npm run lint:ext`) something to check manifest keys against, and stops
+   AMO offering the add-on below it.
+2. **Keep it honest with a fitness function**: every `browser.<api>.<method>` in `src/`
+   against `@mdn/browser-compat-data`, failing when one wants a version above the declared
+   floor. `test/fitness/manifest.test.ts` already reads those call sites for the permission
+   check and its extraction is the half that exists.
+3. **If the floor lands below 140esr, the CI matrix needs a leg at it.** A declared floor
+   nothing runs is the same unchecked claim one step along.
+
+Not urgent: the floor is almost certainly at or near what CI already runs, since the
+manifest keys and the container APIs are the constraint. What is missing is anybody having
+established that.
