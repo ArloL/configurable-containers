@@ -29,44 +29,28 @@ thing that found them was a person asking a question.
 | **D8** | Do two current documents contradict each other? | `CLAUDE.md`, `TESTING.md`, `README.md`, `CONFIG.md` |
 | **D9** | Does every session need all of CLAUDE.md? | `CLAUDE.md` |
 
-## What counts as a finding
+## Running one
 
-A non-deterministic review is far easier to make cry wolf than a fitness function, and this
-repo's rule is that **a check which cries wolf is deleted and takes its invariant with it**.
+**Each section below is the whole context for its review.** Run one per session: they need
+different evidence and different judgement, a combined run produces a shallow pass at all of
+them, and a review that needed something from a neighbour would not survive being scheduled
+on its own. Where two reviews need the same rule, it is written out in both.
 
-1. **A finding is a contradiction or a measured judgement — never an unmeasured
-   preference.** Most are contradictions: name two things and say why they cannot both be
-   true. D9's are judgements, where nothing is false and the claim is that a cost has grown
-   past what it buys. Opinion is legitimate there — *"CLAUDE.md has drifted too large"* is a
-   real finding — but it has to arrive with a number, a named section, and what it is
-   costing. "This is unclear", "this could be worded better", "this feels long" are not
-   findings.
-2. **Cite both sides.** For a contradiction: the claim as `file:line`, quoted, and the
-   evidence as `file:line` or a command and its output. For a judgement: the measurement and
-   what it is being weighed against. A finding you cannot cite twice is a suspicion — drop it.
-3. **Silence is a valid and expected result.** Most runs should find nothing. Say so. Never
-   manufacture a finding to justify the run; that is what gets the practice switched off.
-4. **If a deterministic check could have caught it, say so.** That drift is a gap in
-   `test/fitness/`, and the finding should propose the check. These reviews are for what
-   cannot be pinned, so every conversion shrinks their territory — which is the point.
+Four things hold for every one, because a non-deterministic review is far easier to make cry
+wolf than a fitness function, and this repo's rule is that **a check which cries wolf is
+deleted and takes its invariant with it**:
 
-Rank by blast radius: `amo/` prose is **published** (pushed to AMO on every push to main),
-CLAUDE.md is **load-bearing** (it exists to stop reasonable-looking wrong changes), a test's
-justification decides whether anyone can tell the case still earns its slot, and everything
-else is local.
-
-Don't fix silently. A wrong "fix" to a comment writes a *new* false statement, which is worse
-than the stale one because it looks fresh.
-
-### Never a finding
-
-- **Past-tense history.** "It used to call `runtime.reload()`" stays true, and this codebase
-  deliberately keeps the history that explains its shapes. Only present-tense claims go stale.
-- **A dated design record.** `docs/superpowers/specs/` and `docs/modularity-review/` are
-  snapshots of what was decided on a date, and are *supposed* to diverge from the code. Never
-  update one to match; if a decision was reversed, that belongs in CLAUDE.md.
-- **A deliberate exception that says it is one.** A suppression arguing its case is doing its
-  job; the only question is whether the argument still holds.
+- **Evidence, or it is a suspicion.** Every finding says what you checked and what it showed —
+  quoted text with `file:line`, a command and its output, or a measurement. Each review says
+  what shape its own findings take; none of them accepts "this is unclear" or "this could be
+  worded better".
+- **Silence is a valid and expected result.** Most runs should find nothing. Say so. Never
+  manufacture a finding to justify the run; that is what gets the practice switched off.
+- **Report; don't fix silently.** A wrong "fix" to a comment writes a *new* false statement,
+  which is worse than the stale one because it looks fresh.
+- **If a deterministic check could have caught it, say so.** That drift is a gap in
+  `test/fitness/`, and the finding should propose the check. These reviews are for what cannot
+  be pinned, so every conversion shrinks their territory — which is the point.
 
 ---
 
@@ -86,8 +70,22 @@ the code. Highest-yield, in order:
    "`Recording`" had to become prose about three types.
 
 Don't accept a claim because it sounds right — the reason these survive is that they *all*
-sound right. Not findings: past-tense history; a statement of intent ("keep this
-synchronous") rather than of fact; a Firefox behaviour, which is D3's job.
+sound right.
+
+**A finding here is a contradiction:** the comment says X, the code does Y, and both are
+cited. Not findings:
+
+- **Past-tense history.** "It used to call `runtime.reload()`" stays true, and this codebase
+  deliberately keeps the history that explains its shapes. Only present-tense claims go stale.
+- **A dated design record.** `docs/superpowers/specs/` and `docs/modularity-review/` are
+  snapshots of what was decided on a date and are *supposed* to diverge from the code. If a
+  decision was reversed, that belongs in CLAUDE.md, not in an edit to the record.
+- A statement of intent ("keep this synchronous") rather than of fact, and a Firefox
+  behaviour, which is D3's job.
+
+CLAUDE.md is the highest-value target: it exists to stop reasonable-looking wrong changes, so
+a dead premise there means the next person takes the wrong action *and the file tells them
+to*.
 
 **Precedent:** `runtime.reload()` × 6. Also `options.ts` claiming an import "would pull the
 background's pause module, and with it the engine, into the options bundle" — which was false
@@ -107,9 +105,12 @@ Every suppression here carries a written reason, which is what makes it reviewab
   `harness/browser/matchers.ts`, `test/config/parse.real.test.ts`
 - `sonar.issue.ignore.multicriteria.<id>` — `sonar-project.properties`
 
-Two failure modes needing different fixes: **the reason expired** (a real finding is being
-hidden — the severe case), and **the finding no longer fires** (dead weight that will outlive
-everyone who understood it — delete it).
+**A finding here is one of two shapes**, and they need different fixes: **the reason expired**
+(a real finding is being hidden — the severe case), or **the finding no longer fires** (dead
+weight that will outlive everyone who understood it — delete it).
+
+Not a finding: a suppression that argues its case. That is one doing its job, and the only
+question is whether the argument still holds.
 
 This one has a **deterministic half: use it.** Remove the suppression, run the gate, see
 whether it complains. That turns most of the work from judgement into measurement; report the
@@ -134,10 +135,13 @@ trustworthy, and it is a liability, because a measurement is true *of a version 
 … hydrated 13ms later", "61.8s of `options.test.ts`, measured", "40 rounds … reproduced it
 zero times".
 
-Name the version and date each was measured on, and the current version. **A gap is a
-candidate, not a finding** — promote it only when the claim's consequence would change, and
-**propose the re-measurement rather than guessing the result**. "This may have changed" with
-no way to check is noise.
+Name the version and date each was measured on, and the current version.
+
+**A finding here is a measurement whose consequence would now be different** — and a version
+gap alone is only a candidate. Promote it when the claim's consequence would change, and
+**propose the re-measurement rather than guessing the result**: "this may have changed" with
+no way to check is noise, and a guessed re-measurement is worse than the stale one, because
+the next reader has no way to tell it was guessed.
 
 Highest value: **facts that decide what CC must do** — the `view-source:` inner-url behaviour,
 `tabs.create` rejecting `about:newtab`, bug 1586612's `onCreated` ordering, `onBeforeNavigate`
@@ -166,8 +170,12 @@ that code does now. Current ones include `mac/src/js/background/assignManager.js
 
 Harder and more valuable: **a bug CC works around may have been fixed.**
 `mozilla/multi-account-containers#2582` and Firefox bug 1586612 are both load-bearing
-workarounds. A fix upstream does not mean deleting ours — CC supports ESR, so a workaround
-stays until the oldest supported Firefox no longer needs it — but the note should say so.
+workarounds.
+
+**A finding here is a citation that no longer resolves or no longer says what we claim.** Not
+a finding: a workaround that is still needed. A fix upstream does not mean deleting ours — CC
+supports ESR, so a workaround stays until the oldest supported Firefox no longer needs it —
+but the note should then say the fix exists.
 
 ## D5 — Published prose
 
@@ -188,8 +196,12 @@ Don't re-litigate those by hand. Check the rest:
 - Does the feature description match what the extension now does?
 - Does anything claim a behaviour that has changed — routing, storage, what is sent where?
 
-A finding here that could be pinned should become another case in `amo-metadata.test.ts`.
-That file exists because exactly this drift happened twice.
+**A finding here is published prose that no longer describes the add-on**, and this review has
+the highest blast radius of the nine for that reason: every other drift sits in the repo until
+someone reads it, and this one is pushed to a public listing on every merge.
+
+A finding that could be pinned should become another case in `amo-metadata.test.ts`. That file
+exists because exactly this drift happened twice.
 
 ## D6 — Test justifications vs what the test asserts
 
@@ -209,6 +221,11 @@ Two failure modes, both of which this suite has shipped:
 Method: read the comment, then read only the assertions, and ask whether the second could fail
 if the first stopped being true. Where a case names a bug (F1–F14), check the assertion would
 catch *that* bug rather than a neighbour.
+
+**A finding here is a contradiction between a comment and the assertions below it.** Not a
+finding: past-tense history in the comment, which stays true; nor a case whose reason has
+expired but which still pins something real — that is a comment to rewrite, and saying which
+is the useful half of the finding.
 
 Settle an uncertain finding the way the suite already does — **revert-verify**: back the fix
 out, watch it go red, restore it. Editor undo, **not** `git checkout`, which discards
@@ -231,8 +248,9 @@ question owned by nobody. Some conditions are checkable in one command:
 - **`reopenedNav` across a restart** — revisit "only if dogfooding shows the wasted reopen
   actually happening". Not checkable from the repo; say so rather than guess.
 
-The more valuable second question: **is the reasoning still sound?** Each entry prices a
-trade-off against facts that can move. The `reopenedNav` entry rests partly on how often the
+**A finding here is a met condition, or a premise that moved.** The second is the more
+valuable question: **is the reasoning still sound?** Each entry prices a trade-off against
+facts that can move. The `reopenedNav` entry rests partly on how often the
 background is torn down — and that frequency *already changed once*, when saves stopped
 reloading. A moved premise needs re-pricing even if the conclusion survives.
 
@@ -246,20 +264,31 @@ topics that appear twice: the test levels and what each covers, the config gramm
 version gate, the release channels and what each publishes, the coverage and mutation
 thresholds.
 
-The specs under `docs/superpowers/` and the `docs/modularity-review/` snapshots are **exempt**
-— a contradiction between a dated record and the code is history working correctly. A
-contradiction between CLAUDE.md and TESTING.md is a finding.
+**A finding here is two current documents that cannot both be right**, with the passage from
+each quoted. Not findings: the specs under `docs/superpowers/` and the
+`docs/modularity-review/` snapshots, which are **exempt** — they are dated records, and a
+contradiction between one and the code is history working correctly. Past-tense history is
+exempt for the same reason.
 
 ## D9 — Does every session need all of CLAUDE.md?
 
 **Is each section highly relevant to every session, and does the file match the documented
 guidance?**
 
-The one review whose findings are judgements rather than contradictions. Nothing here has to
-be false: CLAUDE.md is read at the start of **every** conversation, so every line is a tax
-paid by sessions that will never use it, and the question is whether each still earns that.
+**A finding here is a measured judgement, not a contradiction** — the one review where that
+is so, which is why the bar is written out here rather than assumed from the others. Nothing
+in the file has to be false. CLAUDE.md is read at the start of **every** conversation, so
+every line is a tax paid by sessions that will never use it, and the question is whether each
+still earns that.
 
-Measure first, and report the numbers — a judgement without them is the vibe rule 1 forbids:
+Opinion is legitimate here: *"CLAUDE.md has drifted too large"* is a real finding even though
+every sentence in it is true. What it must carry instead of a second citation is a
+**measurement** — a number, a named section, and what that section is costing the sessions
+that never use it. A judgement without one is the "this feels long" that every other review
+would reject too.
+
+Measure first, and report the numbers — without them this is the "feels long" the bar above
+rejects:
 
 - total lines, words, and approximate tokens (bytes ÷ 4 is close enough)
 - lines per `##` section
