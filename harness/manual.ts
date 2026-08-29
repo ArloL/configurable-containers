@@ -1,4 +1,4 @@
-// A HEADED Firefox running CC ALONE, for manual testing. Run: npx tsx harness/manual.ts
+// A HEADED Firefox running CC, for manual testing. Run: npx tsx harness/manual.ts
 //
 // Builds CC with YOUR REAL config (configurable-containers.config.yaml), starts the local
 // test server (for the cookies overlay wire-side check), and opens Firefox with CC
