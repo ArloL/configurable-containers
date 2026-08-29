@@ -3,6 +3,32 @@
 Things deliberately left needing a re-check, and where to look. Delete an entry once it is
 resolved.
 
+## The live `Config` object mutates under six siblings, and no type says so (2026-08-29)
+
+`wireBackground` creates one `Config` and fills it in place with `Object.assign` inside
+`useConfig`; six siblings hold a reference. The invariant every one of them depends on —
+*this object mutates under you; read it at event time, never at construction* — appears in
+no type. `CookieSeederOptions { config: Config }` is indistinguishable from a signature
+taking a snapshot, so a seventh sibling written the idiomatic way (`const { rules } =
+config`) would freeze on the empty config forever, and nothing would catch it: not the
+compiler, not the coverage gate, and not an L3 case, since the composed-background tests
+apply a config before navigating.
+
+Half the failure mode is already closed and closed well — `useConfig` spells out
+`{ rules, groups }` as a `Required<Config>`, so a key added to `Config` later fails to
+compile rather than silently retaining what the previous config left.
+
+**Left open deliberately, on the 2026-08-29 modularity review's own recommendation.** The
+distance is minimal — one construction site, one mutation site, the same file — so the high
+strength here is cohesion rather than coupling, and the bug has never happened. The fix is
+known and small: hand siblings a `getConfig(): Config` accessor instead of a `config: Config`
+reference, since a function cannot be destructured into a stale snapshot.
+`script-injector`'s existing `apply(config)` already demonstrates the shape from the other
+direction.
+
+Take it when the seventh sibling is written, not before — that is the moment the rule stops
+being kept by one file's comment and starts being kept by reviewer attention.
+
 ## `reopenedNav` does not survive a background restart (2026-07-28)
 
 The F1 reopen guard (`src/engine/engine.ts`) is the one piece of guard state nothing can
