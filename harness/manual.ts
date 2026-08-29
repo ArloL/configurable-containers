@@ -29,7 +29,7 @@ const CONFIG_PATH = path.resolve(HERE, "../configurable-containers.config.yaml")
 async function main() {
   const configYaml = readFileSync(CONFIG_PATH, "utf-8");
   await launch({
-    extensions: ["cc"], // see the header: the probe would take every page's title with it
+    extensions: ["cc"], // the probe would take every page's title with it
     headless: false,
     configYaml,
     localDomains: null, // live sites resolve normally
