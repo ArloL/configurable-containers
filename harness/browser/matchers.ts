@@ -206,9 +206,10 @@ expect.extend({
 });
 
 // The parameter list must match @vitest/expect's own `interface Matchers<T = any>`
-// exactly, or TS refuses the merge (TS2428) even though the matchers work.
+// exactly, or TS refuses the merge (TS2428) even though the matchers work. So the `any`
+// stays; it needs no suppression, because `typescript/no-explicit-any` is a pedantic rule
+// and `.oxlintrc.json` enables `correctness` plus a named list that does not include it.
 declare module "vitest" {
-  // oxlint-disable-next-line typescript/no-explicit-any -- see above
   interface Matchers<T = any> {
     toHaveText(expected: string | RegExp, opts?: WaitOpts): Promise<T>;
     toContainText(expected: string, opts?: WaitOpts): Promise<T>;
