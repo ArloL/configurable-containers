@@ -47,7 +47,7 @@ export interface SyncPorts {
 export type SyncOutcome =
   | "in-sync" // the two copies agree
   | "pushed" // the local config is now the published one
-  | "adopted" // a remote config replaced the local one; a reload is under way
+  | "adopted" // a remote config replaced the local one and has already been applied
   | "waiting" // the remote record is half-arrived or from a newer build
   | "too-large" // the config needs more parts than the area allows
   | "failed"; // storage.sync could not be read or written

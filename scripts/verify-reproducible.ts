@@ -1,5 +1,6 @@
-// Rebuild the last listed release from its own source archive and check the bytes match.
-// (`npm run verify:reproducible`, nightly.)
+// Rebuild a published release from its own source archive and check the bytes match.
+// (`npm run verify:reproducible [tag]`: with a tag from verify-release.yaml, without one
+// nightly.)
 //
 // The release notes promise this: every release body says "Reproduce this build:" and
 // gives the two commands. Until now nothing ever ran them. A promise about bytes that
@@ -9,8 +10,16 @@
 // a fixed 1980 mtime here, filesystem order and real mtimes there). The GitHub release
 // asset is the only copy that can be compared at all.
 //
-// It runs against the LISTED channel only. Dev builds are signed by AMO on the way out, so
-// their xpi carries a META-INF/ this can never reproduce.
+// It verifies EITHER channel, and `ci.yml` runs it over the dev prerelease it has just
+// published on every push to main. Both channels ship the same three artefacts — the
+// reproducible pre-signing xpi, the source archive it was built from, and BUILD_TIMESTAMP in
+// the notes — so "verify a release" means one thing, and `planFor` reads the one difference
+// (`--dev`) off the release itself. What is listed-only is the SEARCH below, which only the
+// nightly needs, because only it arrives without a tag.
+//
+// A dev release's AMO-SIGNED xpi is not what this compares: AMO repacks it, so it is
+// byte-comparable with nothing local, and it is a separate asset — `scripts/dev-updates.js`
+// tells the two apart by excluding the reproducible one's name.
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";

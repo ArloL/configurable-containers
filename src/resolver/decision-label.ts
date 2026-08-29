@@ -48,12 +48,19 @@ export function namesAConfiguredContainer(decision: Declinable): boolean {
 // A decision — ANY decision, not only the two that can be declined — in one short phrase,
 // for a diagnosis rather than for a user. `targetLabel` answers the user's question ("instead
 // of what?"); this answers a test author's ("what did CC decide here?"), so it names the kind
-// as well, and the two that leave a tab where it is are worth distinguishing: `leaveAlone` is
-// "no rule had anything to say" and `stay` is "a rule did, and this tab already satisfies it".
+// as well, and the two that leave a tab where it is are worth distinguishing.
+//
+// Which way round they go is worth stating, because the obvious reading is backwards:
+// `leaveAlone` is the `ignore:` action, so a rule DID match and said "do not touch this
+// site", while `stay` says the tab is already where it belongs — reachable with no rule at
+// all, through the disposable path's same-site continuity. "Nothing matched this url" is
+// neither of them: that is the disposable path, answering `stay` or a reopen into a
+// throwaway. A reader sent looking for a missing rule by the word "leaveAlone" is looking
+// for the opposite of what happened.
 export function describeDecision(decision: Decision): string {
   switch (decision.kind) {
     case "leaveAlone":
-      return "leaveAlone (no rule and nothing to isolate)";
+      return "leaveAlone (an ignore rule: CC does not touch this site)";
     case "stay":
       return "stay (already correctly contained)";
     case "reopen":

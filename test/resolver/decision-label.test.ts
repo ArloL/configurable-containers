@@ -69,7 +69,7 @@ describe("describeDecision", () => {
   // selector that never appeared. A phrase that collapsed two kinds into one would send the
   // reader looking for the wrong bug.
   it("names each kind, and what a reopen or a choice was going to do", () => {
-    expect(describeDecision({ kind: "leaveAlone" })).toBe("leaveAlone (no rule and nothing to isolate)");
+    expect(describeDecision({ kind: "leaveAlone" })).toBe("leaveAlone (an ignore rule: CC does not touch this site)");
     expect(describeDecision({ kind: "stay" })).toBe("stay (already correctly contained)");
     expect(describeDecision(reopenInto({ kind: "permanent", name: "Work" }))).toBe("reopen -> Work");
     expect(describeDecision(reopenInto({ kind: "temporary" }))).toBe("reopen -> a new temporary container");

@@ -4,7 +4,8 @@
 // test server (for the cookies overlay wire-side check), and opens Firefox with CC and the
 // probe installed. Live sites resolve normally, so CC routes github.com, youtube.com and the
 // rest per your config. The probe writes CSID:<store> into each tab title so you can see
-// where a tab landed. Ctrl+C closes Firefox and the server.
+// where a tab landed; it also provisions a `probe` container and a tab of its own, so expect
+// one of each that CC did not open. Ctrl+C closes Firefox and the server.
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -17,7 +18,10 @@ const CONFIG_PATH = path.resolve(HERE, "../configurable-containers.config.yaml")
 async function main() {
   const configYaml = readFileSync(CONFIG_PATH, "utf-8");
   await launch({
-    extensions: ["cc"],
+    // The probe, not CC alone: the CSID:<store> titles the header promises are the probe's,
+    // and `extensions` REPLACES the default rather than adding to it — `["cc"]` left a manual
+    // session with no way to see where a tab had landed.
+    extensions: ["cc", "probe"],
     headless: false,
     configYaml,
     localDomains: null, // live sites resolve normally
