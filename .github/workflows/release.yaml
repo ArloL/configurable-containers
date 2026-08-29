@@ -11,6 +11,8 @@ jobs:
     environment: mozilla
     permissions:
       contents: write # calver-tag-action pushes a tag; gh release creates a release
+      id-token: write # the Sigstore signing certificate the provenance is bound to
+      attestations: write # stores the provenance statement against this repo
     outputs:
       # So verify-release can be handed the tag rather than going looking for it.
       version: ${{ steps.version.outputs.new_version }}
@@ -80,6 +82,23 @@ jobs:
         run: |
           git archive --format=zip --output "dist/configurable-containers-src-${VERSION}.zip" HEAD
 
+      # The same provenance ci.yml's dev channel attests, over the same two artefacts, for
+      # the same reason: rebuilding the xpi from its own source archive proves only that the
+      # two agree with each other, and a release built by hand from a tree that never existed
+      # in git reproduces against itself perfectly. This is what ties the archive to a commit
+      # a reader can check out. Both channels publish the same three artefacts, so one
+      # verifier serves either — see verify-release.yaml.
+      #
+      # It attests what is on disk here, which is the pre-signing xpi. The copy AMO signs and
+      # serves is repacked and is not byte-comparable with it, so nothing about the installed
+      # file is being claimed.
+      - name: Attest the reproducible build
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            dist/configurable-containers-${{ steps.version.outputs.new_version }}.xpi
+            dist/configurable-containers-src-${{ steps.version.outputs.new_version }}.zip
+
       # Attaching the archive to the GitHub release satisfies nothing on AMO's side;
       # --upload-source-code is what does.
       #
@@ -111,6 +130,10 @@ jobs:
           npm ci
           BUILD_TIMESTAMP=${BUILD_TIMESTAMP} npm run package -- ${VERSION}
           \`\`\`
+          Check what built it, and from which commit:
+          \`\`\`
+          gh attestation verify configurable-containers-${VERSION}.xpi --repo ${GITHUB_REPOSITORY}
+          \`\`\`
           " \
             "dist/configurable-containers-${VERSION}.xpi" \
             "dist/configurable-containers-src-${VERSION}.zip"
@@ -123,6 +146,9 @@ jobs:
     needs: release
     permissions:
       contents: read
+      # A called workflow cannot hold more than its caller grants, so the provenance check
+      # inside it needs the scope named here as well as there.
+      attestations: read
     uses: ./.github/workflows/verify-release.yaml
     with:
       tag: v${{ needs.release.outputs.version }}

@@ -477,6 +477,13 @@ mutant no other case catches.
     too: the esbuild `target`, pinned to the floor's major, and the Android question the
     floor raises, where the calls Firefox for Android has at no version are derived from
     BCD rather than listed.
+  - **Release provenance** (`release-provenance.test.ts`) — both publishing paths attest
+    the artefacts they publish, attest nothing they do not, hold the two scopes the
+    attestation needs, and are checked by `verify-release.yaml` against the tag's own
+    commit. The release notes tell a reader to run `gh attestation verify`, so this is a
+    published promise; nothing else here reads a workflow, and a second publishing path
+    that skipped the attest step would leave those notes advertising a verification that
+    fails.
   - **The duplicated seed** (`seed-config.test.ts`) — `__CC_CONFIG_YAML__` is supplied
     twice, by `harness/build-extension.ts` for e2e and `vitest.shared.ts` for the unit
     levels, and drift splits the suite's idea of the shipped config while both halves stay
