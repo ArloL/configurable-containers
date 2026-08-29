@@ -62,8 +62,9 @@ trip. Note the test asserts the timestamp *recorded in the archive* rather than
 comparing two builds — two builds land inside zip's two-second granularity and match
 whether or not the mtimes were normalised, which made the obvious version a false green.
 
-`tcp/` and `mac/` are git submodules and arrive as empty directories in the archive.
-They are read-only upstream reference only; the build never touches them.
+`tcp/` and `mac/` are gitignored checkouts, not submodules (there is no `.gitmodules`), so
+`git archive HEAD` omits them entirely — not even an empty directory. They are read-only
+upstream reference only; the build never touches them.
 
 ## Claims to keep honest
 

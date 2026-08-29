@@ -177,11 +177,12 @@ describe("wiring — siblings that share a browser event", () => {
     const browser = aFakeBrowser();
     await startTheBackground(browser, aFakeClock(), config);
 
-    // Firefox bug 1586612: tabs.onCreated sometimes fires with "about:blank" before the
-    // real url arrives on tabs.onUpdated. Auto-temp listens on both events for exactly
-    // this, and an onCreated-only draft passed L3 and failed in real Firefox — which is
-    // the state L3 was quietly back in while the redirector-closer's registration was
-    // displacing auto-temp's.
+    // A tab's url is not final when tabs.onCreated fires: it reads "about:blank" until the
+    // new-tab page's url commits, and the real url arrives on tabs.onUpdated. Auto-temp
+    // listens on both events for exactly this, and an onCreated-only draft passed L3 and
+    // failed in real Firefox — which is the state L3 was quietly back in while the
+    // redirector-closer's registration was displacing auto-temp's. (Not bug 1586612: that
+    // is onUpdated firing BEFORE onCreated, fixed in 73 and long below the 140 floor.)
     const tab = await browser.opensTab({ url: "about:blank", cookieStoreId: "firefox-default" });
     expect(browser.createdContainers).toHaveLength(0); // about:blank is not a candidate
 
