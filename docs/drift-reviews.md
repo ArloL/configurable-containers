@@ -1,7 +1,9 @@
 # Drift reviews
 
 Recurring reviews for the class of defect no gate in this repo can see: **a true statement
-that stopped being true**.
+that stopped being true**. D1–D8 each hunt one flavour of it; **D9** asks whether those eight
+are still pointed where drift actually happens, which is a different question and fails
+differently.
 
 They are run by an agent, not by a tool, on a schedule. Each one below is self-contained —
 scheduling a run means handing an agent this file and a review id.
@@ -40,6 +42,7 @@ That is the whole subject of this file.
 | **D6** | Does this test still assert what its comment claims? | `test/` | monthly |
 | **D7** | Has this follow-up's resolution condition been met? | `FOLLOWUPS.md` | monthly |
 | **D8** | Do two current documents contradict each other? | `CLAUDE.md`, `TESTING.md`, `README.md`, `CONFIG.md` | quarterly |
+| **D9** | Is this catalogue still pointed where drift happens? | this file, `docs/drift-reviews/` | twice a year, never before two runs of most reviews exist |
 
 ---
 
@@ -355,12 +358,100 @@ contradiction between CLAUDE.md and TESTING.md is a finding.
 
 ---
 
+## D9 — Is the catalogue pointed at the right things?
+
+**Ask of the eight reviews above — and, per the last note, of this one: are they still where
+drift happens, and what have they been missing?**
+
+The meta-review. D1–D8 each ask whether a claim is still true; this one asks whether the set
+of questions is still the right set. Those are different jobs and they fail differently — a
+review can be perfectly executed every month and still be worthless because nothing drifts
+where it is looking.
+
+It is also the review that owns **this file**, which nothing else does: D1's scope is `src/`,
+`harness/` and `scripts/`, and D8's is the four top-level documents. So the catalogue makes
+present-tense claims about the repo — the suppression sites it lists, the paths in each
+Scope column, the constants D3 names — with no review checking them. That is the same gap
+that produced the practice, one level up.
+
+### Four questions, in descending order of value
+
+**1. What drifted that no review would have caught?** The highest-value question this
+practice can ask, and the only one that finds a *missing* review rather than a mis-aimed one.
+
+Evidence: `git log` since the last D9 for commits that fixed staleness — a comment corrected,
+a doc updated to match code, a suppression deleted as dead. For each, ask which review would
+have found it, and whether it was in fact found by a scheduled run or by someone tripping
+over it. A drift found by a person asking a question is a coverage gap with a precedent
+attached, which is exactly what an addition needs. The `runtime.reload()` set is the founding
+example: six comments, three files, found by a question.
+
+**2. What has been converted, and should therefore shrink?** Rule 4 means a healthy practice
+makes itself smaller. Two conversions already exist and are the model:
+`test/extension/amo-metadata.test.ts` pins the PERMISSIONS bullets as an exact set because
+that prose drifted twice, and `test/fitness/e2e-discipline.test.ts` exists because a
+migration's own commit message claimed rules the code did not follow. Both took territory
+away from a human reading prose.
+
+So for each review: has a fitness test taken part of its scope? If yes, the Scope column
+should say so, or the review should retire. A catalogue that only grows is a ratchet, and a
+ratchet is how a practice becomes a tax nobody can argue against.
+
+**3. Is a review finding nothing because it works, or because it is aimed wrong?** Both look
+identical in the reports, which is why this needs judgement rather than a threshold. Ways to
+tell them apart:
+
+- Has the *surface* it watches changed at all since the last run? A review over files nobody
+  has touched should find nothing, and that is not evidence of anything.
+- Is its scope now empty or already deterministic? A review whose whole territory got pinned
+  is finished, not clean.
+- Would it have caught the drifts found under question 1? A review that would have missed a
+  real drift inside its own stated scope is mis-aimed, and this is the sharpest test there
+  is.
+
+**4. Has the repo grown a surface the catalogue does not cover?** Enumerate rather than
+recall: what leaves the repo (published prose, release notes, listing copy); what suppression
+mechanisms exist; what external things are cited by file and symbol; what artefacts are
+generated from other artefacts. Compare that enumeration against the Scope column. `amo/` is
+the only published-prose surface today — if a second appears, D5's scope is wrong the day it
+lands and nothing will say so.
+
+### The rule that keeps D9 from being a ratchet
+
+**An addition needs a precedent; a retirement does not.**
+
+Proposing a new review requires a drift that actually happened and that no existing review
+would have caught — cited, like any other finding. "We should also check X" without a
+precedent is the crying-wolf failure at the meta level, and it is worse here than anywhere
+else, because every review added is a recurring cost paid forever by someone who was not in
+the room.
+
+Retiring or merging a review needs only the absence of findings plus an argument from
+question 3. Bias this review toward **subtraction**: a run that retires one review and adds
+none is a better outcome than the reverse.
+
+### Conflict of interest
+
+D9 reviews the document that authorises D9. It may propose retiring itself — if the catalogue
+has been stable across several runs and questions 1 and 2 keep coming back empty, that is the
+finding, and it should be reported rather than avoided. A meta-review that has never proposed
+subtracting anything is not doing its job.
+
+### Do not run it early
+
+It reasons over a corpus of reports, so it needs one. Running D9 against a single prior report
+produces opinion dressed as analysis. Wait until most reviews have run at least twice — with
+the cadences above, that is roughly two quarters in — and say in the report how many prior
+runs it had to work from.
+
+---
+
 ## Scheduling notes
 
 - **Run one review per invocation.** They need different evidence and different judgement,
   and a combined run reliably produces a shallow pass at all of them.
-- **Stagger them.** Monthly for D1, D2, D5, D6, D7; quarterly for D3, D4, D8. D5 additionally
-  before any release, since that is when its severity is realised.
+- **Stagger them.** Monthly for D1, D2, D5, D6, D7; quarterly for D3, D4, D8; D9 twice a
+  year. D5 additionally before any release, since that is when its severity is realised.
 - **Vary the scope of the expensive ones.** D1 over the whole repo every month will be
   shallow. Better: rotate a directory per run (`src/engine`, then `src/config` + `src/resolver`,
   then `harness/`), and always include whatever changed since the last run — `git log` since
@@ -372,4 +463,5 @@ contradiction between CLAUDE.md and TESTING.md is a finding.
 - **Track the conversion.** Rule 4 means a healthy practice makes itself smaller: each
   drift that becomes a `test/fitness/` case is territory these reviews never have to cover
   again. If a review has run four times and proposed no deterministic check, ask whether it
-  is looking at the right thing.
+  is looking at the right thing — which is D9's job, and the reason it exists rather than
+  this bullet being left as an intention nobody acts on.
