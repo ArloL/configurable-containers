@@ -1,11 +1,22 @@
-// A HEADED Firefox with CC + probe, for manual testing. Run: npx tsx harness/manual.ts
+// A HEADED Firefox running CC ALONE, for manual testing. Run: npx tsx harness/manual.ts
 //
 // Builds CC with YOUR REAL config (configurable-containers.config.yaml), starts the local
-// test server (for the cookies overlay wire-side check), and opens Firefox with CC and the
-// probe installed. Live sites resolve normally, so CC routes github.com, youtube.com and the
-// rest per your config. The probe writes CSID:<store> into each tab title so you can see
-// where a tab landed; it also provisions a `probe` container and a tab of its own, so expect
-// one of each that CC did not open. Ctrl+C closes Firefox and the server.
+// test server (for the cookies overlay wire-side check), and opens Firefox with CC
+// installed. Live sites resolve normally, so CC routes github.com, youtube.com and the rest
+// per your config. Ctrl+C closes Firefox and the server.
+//
+// NO PROBE, deliberately — this is the one caller that does not want it, which is why
+// `extensions` names CC alone. The probe is the e2e suite's answer to WebDriver being unable
+// to read chrome UI: it smuggles a tab's container into `document.title`, so every page in
+// the session would read `CSID:firefox-container-3` instead of its own title. A person needs
+// none of that — Firefox itself shows the container on the tab and in the URL bar. It would
+// also add a `probe` container to the list you are inspecting, and hand every live page a
+// list of your default-container cookie names, which is a boundary a session browsing real
+// logged-in sites should keep.
+//
+// When you are debugging a decision rather than browsing, add "probe" and read CC's echoed
+// decision log — `decisions`, the last 100 — from about:debugging -> Inspect on the probe.
+// The titles go with it.
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -18,10 +29,7 @@ const CONFIG_PATH = path.resolve(HERE, "../configurable-containers.config.yaml")
 async function main() {
   const configYaml = readFileSync(CONFIG_PATH, "utf-8");
   await launch({
-    // The probe, not CC alone: the CSID:<store> titles the header promises are the probe's,
-    // and `extensions` REPLACES the default rather than adding to it — `["cc"]` left a manual
-    // session with no way to see where a tab had landed.
-    extensions: ["cc", "probe"],
+    extensions: ["cc"], // see the header: the probe would take every page's title with it
     headless: false,
     configYaml,
     localDomains: null, // live sites resolve normally
