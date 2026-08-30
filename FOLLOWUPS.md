@@ -28,10 +28,26 @@ reference, since a function cannot be destructured into a stale snapshot.
 direction.
 
 Take it when the next sibling holding a `config` reference is written — the FIFTH — not
-before; that is the moment the rule stops being kept by one file's comment and starts being
-kept by reviewer attention. A `test/fitness/` inventory of the holders, in the exact-list
-style of `retained-state.test.ts`, would make that trigger mechanical instead of leaving it
-to whoever remembers this file.
+before. **That trigger is now mechanical**: `test/fitness/live-config.test.ts` pins the four
+holders as an exact list, so the fifth cannot be added without someone coming here, reading
+why the object mutates under it, and writing the row. It also pins the two halves that make
+the rule work — `script-injector` reaching the config as an `apply(config)` argument rather
+than a field, and `useConfig` FILLING the object rather than replacing it.
+
+Two things priced on 2026-08-30, which is why the accessor did not come with that check:
+
+- **It is weaker than "unstatable-wrongly".** `const config = getConfig()` at the top of a
+  factory snapshots exactly as dead as `const { rules } = config` does. What the accessor
+  removes is the destructure — the idiomatic spelling — not the mistake itself.
+- **It is not four modules of churn.** The four sources are five read sites, but the option
+  is spelled at 114 construction sites across seven test files, ~107 of them passing
+  `config`, each an inline one-line literal (`createEngine({ port, config: workConfig(), … })`).
+  Every one becomes two lines, since `getConfig: () => workConfig()` would build a fresh
+  config per read instead of sharing one.
+
+So the entry stays open on a smaller claim than it started with: the accessor is worth
+taking when a fifth sibling makes someone open these modules anyway, and is not worth a
+110-site diff before then.
 
 The count was wrong here until 2026-08-30, and the shape of the mistake is worth keeping:
 `grep -rn "config: Config" src/engine src/extension/wiring.ts` answers with six FILES, two
