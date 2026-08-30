@@ -34,6 +34,14 @@ const arbGroup: fc.Arbitrary<Group> = fc.record({ match: fc.array(arbHost, { min
 const arbConfig = fc.record({ rules: fc.array(arbRule, { maxLength: 5 }), groups: fc.array(arbGroup, { maxLength: 3 }) });
 
 describe("resolve — properties", () => {
+  // The three properties that follow ASSERT NOTHING, found by drift review D6 on
+  // 2026-08-30 and recorded in FOLLOWUPS.md ("Three L1 properties assert nothing") with
+  // the measurements. In short: F5 compares a test double with a character-for-character
+  // copy of itself, and the other two compare a pure function's answer with the same
+  // answer. They are left in place rather than deleted or rewritten because replacing them
+  // is a design decision about where L1 ends and L2 begins, and about what the mutation
+  // gate's killer suites are. Read the coverage they claim as unclaimed until then —
+  // `test/matcher/matcher.rules.test.ts` is what actually pins first-match today.
   it("F5: matchRule equals a first-match oracle", () => {
     fc.assert(fc.property(arbUrl, fc.array(arbRule, { maxLength: 6 }), (url, rules) => {
       const h = new URL(url).host;
