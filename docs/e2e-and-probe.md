@@ -14,20 +14,20 @@ mechanics of L4/L5.
 
 - **An auto-temp e2e must not navigate.** Any unmatched http url reaches a `tmp` container
   via the *engine's* disposable path, so "open a tab, navigate, assert tmp" passes whether
-  or not auto-temp exists. The isolating signal is a tab in `tmp` **while still on
-  `about:newtab`** (`launch({ startupUrl: "about:newtab" })`); the startup sweep discards
+  or not auto-temp exists. The isolating signal is a tab in `tmp` while still on
+  `about:newtab` (`launch({ startupUrl: "about:newtab" })`); the startup sweep discards
   the driver's own tab, so observe from a page of your own — `navigateToContainerTab`
   opens one and needs no re-anchoring, which is what that case used to spend three lines on.
 
 - **Don't trust a green `npm test` on disposal timing** — every fast case keeps browsing,
   and browsing re-triggers the sweep. `*.realtime.test.ts` is the one thing `npm test`
-  does not run (`npm run test:realtime`, nightly), and cases there must **not** pass
+  does not run (`npm run test:realtime`, nightly), and cases there must not pass
   `ccGraceMs`: the point is that the bundle carries the shipped constant.
 
 - **The pause's toolbar button and badge have no L4 coverage and cannot.** WebDriver
   cannot click a `browser_action` or read chrome UI. `test/e2e/pause.test.ts` drives the
-  **options-page** route instead, and since both call one `arm()` the uncovered surface is
-  the click itself. **Do not add a build-time seed to arm a container**:
+  options-page route instead, and since both call one `arm()` the uncovered surface is
+  the click itself. Do not add a build-time seed to arm a container:
   `__CC_NOTIFY_ECHO_TO__` already shows the cost (no test build is byte-equivalent to a
   packaged one), and arming by name would make the shipped extension capable of starting
   up with routing disabled.
@@ -42,8 +42,8 @@ mechanics of L4/L5.
   `toHaveCount`, `toBeVisible`, `toBeEnabled`, imported for effect from
   `harness/browser/matchers`), so the shape to avoid is
   `expect(await locator.innerText()).toBe(…)`: it reads once, which is the flake the
-  retrying form exists to remove. **`.not` on one of these polls for the condition to STOP
-  holding**, which is not what vitest does on its own, and an element that never appears
+  retrying form exists to remove. `.not` on one of these polls for the condition to STOP
+  holding, which is not what vitest does on its own, and an element that never appears
   fails in BOTH directions — except under `toBeVisible` and `toHaveCount`, which read a
   missing element as `false` and `0` because that is what `.not.toBeVisible()` and
   `toHaveCount(0)` are asking for. Why each of those is where it is — `settle` and its
@@ -54,11 +54,11 @@ mechanics of L4/L5.
 
   Three things a new case gets wrong otherwise. **A textarea's content is its VALUE** —
   `toHaveValue(/…/)`, not `toContainText`, which reads `innerText` and sees `""`.
-  **`page.close()` and `session.newPage()` re-anchor the driver** on a surviving window,
+  `page.close()` and `session.newPage()` re-anchor the driver on a surviving window,
   because closing the active tab — or the extension discarding it, as the auto-temp sweep
   does — otherwise leaves the next command *anywhere later in the file* failing with
-  `NoSuchWindow`. And **a timeout names what it waited for, the page's url, the ids present
-  and the tab list**, which is the report `NoSuchElementError: *[id="cc-sync"]` was not.
+  `NoSuchWindow`. And a timeout names what it waited for, the page's url, the ids present
+  and the tab list, which is the report `NoSuchElementError: *[id="cc-sync"]` was not.
 
   `test/fitness/e2e-discipline.test.ts` pins the rest of this bullet — no `driver`, no
   sleep, no read-then-compare, no deadline loop — each rule carrying an exact list of the
@@ -80,7 +80,7 @@ mechanics of L4/L5.
   140 ESR one first read in twelve came back empty and hydrated 13ms later; in CI on
   2026-08-25 a read landed before the document had parsed at all, and `findElement`'s throw
   escaped a loop that polled for TEXT. Both are now closed by waiting rather than reading —
-  `pageAt`, then a retrying assertion. The race is **load-dependent**: 40 rounds on an idle
+  `pageAt`, then a retrying assertion. The race is load-dependent: 40 rounds on an idle
   machine, with and without CPU pressure, reproduced it zero times, which is why the
   layer's own semantics are unit-tested against a fake driver instead of a browser.
 
@@ -105,15 +105,15 @@ mechanics of L4/L5.
   must never move the RELAY page it was asked through** — the navigation destroys the
   document the answer lands in, and whether the reply beats the commit is a race the 100ms
   poll loses now and then. It reads as `probe command "nav" timed out`. The probe now
-  **refuses** a `nav` targeting `sender.tab.id`, so the mistake names itself instead of
+  refuses a `nav` targeting `sender.tab.id`, so the mistake names itself instead of
   flaking; the fix is a second http tab to relay from (`openTab` + `awaitContainerTab`, a
-  matched host so CC parks it once). **Open that tab through the probe, not `page.goto`** —
+  matched host so CC parks it once). Open that tab through the probe, not `page.goto` —
   from a committed page the reopen cancels the navigation and it never returns.
 
 - **An F9 e2e must start from a COMMITTED page**: from a fresh tab CC reopens first, the
   302 is then another hop of a navigation `reopenedNav` already owns, and the assertion
   proves nothing. If the POST guard regresses the tab wedges and every WebDriver call
-  blocks — **a bare timeout is that regression's signature, not flake.**
+  blocks — a bare timeout is that regression's signature, not flake.
 
 - **A reaper case must kill its holder with a SIGNAL.** Selenium's own exit hook cleans up
   after a clean exit and an uncaught throw, so an abandonment case that merely
@@ -122,16 +122,16 @@ mechanics of L4/L5.
 
 - **Config-sync adoption has no L4 test and cannot have one** (no Firefox Account in a
   test profile, no `moz-extension:` navigation, the probe has its own sync namespace). The
-  e2e cases observe the **startup push** only.
+  e2e cases observe the startup push only.
 
 ## e2e: what the driver cannot do, and what the probe does instead
 
 - **A machine with no Firefox can get one: `./scripts/get-firefox.sh`.** It fetches both
   channels into `.firefox/`, and then `FIREFOX_BIN=.firefox/esr/firefox npm test` runs the
-  suite exactly as `ci.yml`'s `latest-esr` leg does. It fetches **linux64 only**, which is
+  suite exactly as `ci.yml`'s `latest-esr` leg does. It fetches linux64 only, which is
   what CI runs; on macOS take the dmg from
   `download.mozilla.org/?product=firefox-esr-latest-ssl&os=osx` and point `FIREFOX_BIN` at
-  `Firefox.app/Contents/MacOS/firefox` inside it. **geckodriver needs no setup** —
+  `Firefox.app/Contents/MacOS/firefox` inside it. geckodriver needs no setup —
   Selenium Manager ships inside `selenium-webdriver` and fetches it the first time a driver
   is built, so nothing looks for one on PATH. The other prerequisite is a `mac/` checkout
   (`git clone --depth 1 https://github.com/mozilla/multi-account-containers.git mac`),
@@ -142,7 +142,7 @@ mechanics of L4/L5.
   serves the builds, and GitHub release assets come from `objects.githubusercontent.com`.
   Probe those before concluding L4/L5 cannot be run here — that conclusion has been drawn
   wrongly more than once, and it silently drops the only levels that see a real browser.
-  **Always pass `FIREFOX_BIN`**: without it Selenium Manager downloads Firefox itself from
+  Always pass `FIREFOX_BIN`: without it Selenium Manager downloads Firefox itself from
   `ftp.mozilla.org`, and the failure reads `Unable to obtain browser driver` — which looks
   like a geckodriver problem and is not.
 - **`runtime.reload()` does not bring a TEMPORARILY installed extension back on 140 ESR.**
@@ -157,20 +157,20 @@ mechanics of L4/L5.
   or signing to fix a load failure — `xpinstall.signatures.required=false` is ignored on
   release and only *permanent* install needs signing.
 - **Observation is the probe**, a separate MV2 extension: `CSID:<store>` in
-  `document.title`, container name and list in `data-cc-*`. It also **provisions a `probe`
-  container and its own tab**, so every list and tab-count assertion sees one extra.
+  `document.title`, container name and list in `data-cc-*`. It also provisions a `probe`
+  container and its own tab, so every list and tab-count assertion sees one extra.
 - **WebDriver cannot navigate to `about:newtab` or `moz-extension://`** (Marionette's
   non-web-scheme rule; pinning the uuid doesn't help), and `newWindow("tab")` gives
   `about:blank`, which auto-temp ignores by design. Hence the probe's `newTab` / `tabs` /
-  `nav` (by **tab id** — the driver can't map a handle to one) / `open` commands; the
+  `nav` (by tab id — the driver can't map a handle to one) / `open` commands; the
   driver can only *operate* an extension page something else opened.
 - **And operating one may NOT run a script in it.** An extension page lives in the
-  extension process, which Firefox counts as a **privileged browsing context**, and
+  extension process, which Firefox counts as a privileged browsing context, and
   Marionette refuses `ExecuteScript`/`ExecuteAsyncScript` there unless the browser was
   started with `--remote-allow-system-access`. 154 refused only *parent-process* contexts;
   156.0a1 widened the same check to `isPrivilegedContext` (extension and privileged
   `about:` processes too) and took nine cases down at once — the Nightly tripwire earning
-  its keep. The trap is that `WebElement.getAttribute` is **not** a protocol command:
+  its keep. The trap is that `WebElement.getAttribute` is not a protocol command:
   Selenium implements it as an injected atom, so the call every http(s) case makes reads as
   `UnsupportedOperationError` here. `harness/browser` is built so that mistake cannot be
   made: `Locator.getAttribute` IS `getDomAttribute` (the W3C endpoint — and what
@@ -180,21 +180,21 @@ mechanics of L4/L5.
   editor validates on as assigning `.value` never did.
   `test/e2e/privileged-protocol.test.ts` pins that each of those answers on an extension
   page and is the tripwire for the next widening. Re-measured 2026-08-29 on all three
-  channels: `executeScript` on that page ANSWERS on **140.14.0esr** and **154.0.1** and is
-  refused on **157.0a1**, so the widening rode 156 forward and has not reached release —
-  the avoidance is about where release is going, not where it is. **Don't reach for the flag**: it re-grants privileged access to the
+  channels: `executeScript` on that page ANSWERS on 140.14.0esr and 154.0.1 and is
+  refused on 157.0a1, so the widening rode 156 forward and has not reached release —
+  the avoidance is about where release is going, not where it is. Don't reach for the flag: it re-grants privileged access to the
   whole session to keep one convenience call working, and pins the suite to a Firefox that
   permits what the shipped extension's users never will. `harness/firefox.ts`'s own
   `executeScript` helpers stay as they are — every one reads a probe-written attribute on
   an http(s) page, which is ordinary web content.
 - **The command relay is a DOM event injected into http(s) pages only**, so the driver
   must be parked on a probe-reported http(s) page first, and an unanswered command reads
-  as an *empty answer*, not an error. **`commands.onCommand` cannot be driven at all**
+  as an *empty answer*, not an error. `commands.onCommand` cannot be driven at all
   (chrome-level key events) — the reopen picker is L3-tested and its e2e case is `it.skip`.
 - **The probe's attributes land AFTER a navigation resolves** (`reportTab` awaits two
   `cookies.getAll` calls first) while server-rendered markup is there as the document
   parses, so asserting on both in one breath is a race. `awaitContainerTab` covers most
-  cases free; a navigation with **no reopen to wait for** needs `awaitProbeReport`.
+  cases free; a navigation with no reopen to wait for needs `awaitProbeReport`.
 - **Drive routing from a FRESH tab** — a cancelled navigation never returns to WebDriver,
   so navigating a tab already on a page hangs until timeout. `navigateToContainerTab` is
   that rule as a function; reach for it rather than `page.goto` when CC may reopen.
@@ -212,9 +212,9 @@ mechanics of L4/L5.
   not moving arrive as one signal, and `timed out after 30000ms` covered a POST-guard
   regression, a dead window handle, an unanswered relay, a config that never applied, a
   load-dependent hydration race and genuine flake alike. `engine.ts`'s `say()` calls
-  `port.echoDecision` at **every exit of `navigate`**, including the ones that return before
+  `port.echoDecision` at every exit of `navigate`, including the ones that return before
   resolving (a `view-source:` load, a re-fire, an absorbed hop) — those are precisely the
-  ones a reader takes for "CC never saw this navigation", and they echo a **null** decision
+  ones a reader takes for "CC never saw this navigation", and they echo a null decision
   to say which it is. A request that is not a top-level http(s) navigation echoes nothing:
   it is not a navigation CC declined to route, and every image on the page would bury the
   hops worth reading.
@@ -222,12 +222,12 @@ mechanics of L4/L5.
   Three properties are not negotiable. It is **synchronous and void**, like
   `pause.record` — `test/fitness/decision-cost.test.ts` counts a call as a round trip only
   if it returns a thenable, so a promise acquired here starts failing that gate the moment
-  it appears. The **words are built inside the guard** in `browser-port.ts`, so a shipped
+  it appears. The words are built inside the guard in `browser-port.ts`, so a shipped
   navigation pays nothing, and they are the resolver's own (`describeDecision`), so a
   diagnosis and an F9 toast cannot come to describe one decision differently. And it is
-  **read-only**, which is what separates it from the build-time seed forbidden above: a seed
+  read-only, which is what separates it from the build-time seed forbidden above: a seed
   that armed a container would make the shipped extension capable of starting up with
-  routing disabled, while an echo changes no routing at all. `package.test.ts` counts **two**
+  routing disabled, while an echo changes no routing at all. `package.test.ts` counts two
   `if (false)` branches in the packaged bundle rather than asserting one is present, because
   `toContain` goes on passing with either echo live.
 
@@ -242,14 +242,14 @@ mechanics of L4/L5.
 - **`driver.quit()` is not what keeps a browser from leaking — `harness/reaper.ts` is.**
   Selenium unrefs its geckodriver and kills it from its own `process.once("exit")` hook,
   which covers a clean exit and an uncaught throw and nothing else: node emits no `exit`
-  for a **signalled** process; a browser leaked *mid-run* runs alongside every later test;
-  and session creation can throw with Firefox **already up** — on macOS it re-execs,
+  for a signalled process; a browser leaked *mid-run* runs alongside every later test;
+  and session creation can throw with Firefox already up — on macOS it re-execs,
   geckodriver loses the pid it was watching, and the survivor re-parents to init. So
   `launch` passes a `-profile` directory it made itself, stamping the argv of the browser
   *and every content process* with a token that exists before Firefox does. Keep that
   argument; keep `reapProfile`'s guard refusing a path that isn't `cc-e2e-profile-…` (it
   becomes a `pgrep -f` pattern, and a short one matches half the process table); and leave
-  `npm run manual` **without** a SIGINT handler — the reaper's is registered first and
+  `npm run manual` without a SIGINT handler — the reaper's is registered first and
   would pre-empt it.
 - **Debug real Firefox** with geckodriver `--log trace` + Selenium `usingServer` +
   `devtools.console.stdout.content=true`; `console.error` then reaches the log. `MOZ_LOG`
@@ -258,12 +258,12 @@ mechanics of L4/L5.
 ## MAC interop (`test/e2e/mac-interop.test.ts`)
 
 - **Only an ASSIGNED domain tests the handshake** — `macOwns` swallows throws, so a broken
-  handshake and "no assignment" look identical. Backing the F7 defer out fails as **no
-  container tab at all**, not a `tmp` one: CC and MAC fight over the navigation.
+  handshake and "no assignment" look identical. Backing the F7 defer out fails as no
+  container tab at all, not a `tmp` one: CC and MAC fight over the navigation.
 - **An assignment cannot be scripted** (chrome UI only; MAC's API has no setter), so the
   harness appends a script to MAC's background page *inside the xpi it builds* calling
-  MAC's **own** `storageArea.set` — with **`neverAsk: true`**, or MAC parks on its confirm
-  interstitial and no container tab appears, and only **after the container RESOLVES**,
+  MAC's own `storageArea.set` — with `neverAsk: true`, or MAC parks on its confirm
+  interstitial and no container tab appears, and only after the container RESOLVES,
   since MAC deletes an assignment whose container it can't `get` and Firefox provisions
   even built-in ones lazily.
 - **Nothing may navigate until the assignment is READABLE; `launch` blocks on a beacon.**

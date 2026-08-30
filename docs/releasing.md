@@ -22,15 +22,15 @@ shaped the way they are.
   by the next release.** The copy is `amo/{summary.txt,description.md,reviewer-notes.txt}`;
   `scripts/amo-metadata.ts` fills its `{{version}}`/`{{timestamp}}`/`{{package_args}}`
   placeholders and both upload paths pass the result to `web-ext sign --amo-metadata`.
-  Three things a change here gets wrong. **Both channels get the same copy, and the dev
-  one is not decoration** — an unlisted add-on displays none of it, so the dev add-on's
+  Three things a change here gets wrong. Both channels get the same copy, and the dev
+  one is not decoration — an unlisted add-on displays none of it, so the dev add-on's
   Developer Hub page is the only place the copy can be read BEFORE a listed release makes
   it public, and every push to main refreshes it. The cost is that a field AMO rejects
-  fails `sign:dev` on **every push to main**, not on a release someone is watching, which
+  fails `sign:dev` on every push to main, not on a release someone is watching, which
   is why the validation is in `buildAmoMetadata` rather than left to the API.
-  **`name`, `categories` and `license` are never sent**: they are mandatory at add-on
+  `name`, `categories` and `license` are never sent: they are mandatory at add-on
   *creation* rather than per version, so a wrong value is a rejected upload rather than a
-  bad paragraph. And an **unknown `{{…}}` throws** rather than shipping the braces — the
+  bad paragraph. And an unknown `{{…}}` throws rather than shipping the braces — the
   hand-pasted notes this replaced told a reviewer to rebuild at `<version>` with
   `BUILD_TIMESTAMP=<value>`, which nobody substituted and which no checksum could match.
 
@@ -44,7 +44,7 @@ shaped the way they are.
   every push to main failed at the upload, after the build had already succeeded). The
   substituted half is not a detail: `{{timestamp}}` is 13 characters of placeholder and 25
   of value, so a file measured as written sits under the cap while every upload of it is
-  refused. **The summary's cap is not the only thing it enforces** — that field is a
+  refused. The summary's cap is not the only thing it enforces — that field is a
   `NoURLsField`, whose cleaner runs `URL_RE.sub("", …)` and stores the remainder, so a link
   pasted there is not an error anyone would see: it is a sentence with a hole in it on the
   public listing, published by an upload that reported success.
@@ -65,7 +65,7 @@ shaped the way they are.
   channel. Nothing enforces this; it is a rule for whoever sets `VERSION`.
 - **AMO REPACKS uploads**, so its copy is never byte-comparable with a local rebuild
   (sorted entries + fixed 1980 mtime here, filesystem order + real mtimes there). Verify
-  reproducibility against the **GitHub release** asset and that release's
+  reproducibility against the GitHub release asset and that release's
   `BUILD_TIMESTAMP`.
 - **A listed version is signed at APPROVAL, not upload** — in the queue it downloads back
   without `META-INF/`, so nothing is permanently installable. Unlisted signs in minutes:
@@ -76,17 +76,17 @@ shaped the way they are.
 - **Both channels share ONE tag sequence — the `prerelease` flag distinguishes them, not
   the tag.** `scripts/dev-updates.js` filters on it; a tag prefix matches nothing, and
   matching everything pushes the *listed* xpi to dev users under the dev add-on's id.
-  The other half of sharing a sequence: **the dev channel BURIES a listed release in the
-  release list within days**, so anything looking for one must page rather than read a
+  The other half of sharing a sequence: the dev channel BURIES a listed release in the
+  release list within days, so anything looking for one must page rather than read a
   window. `verify-reproducible.ts` asked for the newest 20 and passed nightly for four
   weeks announcing "No listed release yet" while `v2608.0.112` sat 32 releases down. Its
-  `findLatestListedRelease` pages until one turns up and **throws** when the page cap runs
+  `findLatestListedRelease` pages until one turns up and throws when the page cap runs
   out, because "I stopped looking" reported as "there is nothing to check" is what made
   that gate inert.
 - **Both channels publish the SAME THREE artefacts** — the reproducible pre-signing xpi,
   the source archive, and `BUILD_TIMESTAMP` in the notes — so one job verifies either and
   `verify-release.yaml` needs no branch. A dev release carries a fourth, the AMO-signed
-  xpi Firefox actually installs, and that one must stay **distinguishable by name**:
+  xpi Firefox actually installs, and that one must stay distinguishable by name:
   `dev-updates.js` picks the signed asset by excluding `configurable-containers-<v>.xpi`,
   and its old `.endsWith(".xpi")` would have offered the *unsigned* build to every
   dogfooder — uninstallable, silent, and permanent on an immutable release.
@@ -95,10 +95,10 @@ shaped the way they are.
   archive published beside it; a release built by hand, from a tree that never existed in
   git, satisfies that perfectly. `actions/attest-build-provenance` (both publishing paths,
   job-level `id-token: write` + `attestations: write`) signs a statement naming the
-  workflow, the run and the **commit**, and the verify job compares that commit with the
+  workflow, the run and the commit, and the verify job compares that commit with the
   tag's own — `gh attestation verify` alone only says "a workflow in this repo", so the
   digest comparison is the check and the signature is not. Two things it deliberately does
-  not cover: the **AMO-signed xpi**, since AMO repacks and the file Firefox installs is
+  not cover: the AMO-signed xpi, since AMO repacks and the file Firefox installs is
   byte-comparable with nothing that was attested, and the honesty of the source, since
   provenance says where a build came from and never what is in it. The release notes
   publish the verify command, which makes it a promise —
@@ -111,7 +111,7 @@ shaped the way they are.
   they would find is a dev add-on already installed on dogfooders' profiles. The GitHub
   asset satisfies none of it; `--upload-source-code` does, and `scripts/sign-dev.ts` builds
   the archive itself rather than taking a path from the workflow, so no upload path can
-  skip it. It is safe on a path that runs on **every push to main** because attaching
+  skip it. It is safe on a path that runs on every push to main because attaching
   source does not delay unlisted signing: in addons-server, source creates a
   `NeedsHumanReview` only for a version *already pending rejection*
   (`Version.flag_if_sources_were_provided`), and none of `AutoApprovalSummary`'s checks
@@ -127,7 +127,7 @@ shaped the way they are.
 - **A release published with `GITHUB_TOKEN` triggers NO workflow**, so `on: release` is a
   dead trigger for every release this repo cuts — GitHub suppresses those events to stop
   workflows recursing. Proof rather than folklore: `publish-dev-manifest.yml` has declared
-  `on: release: [published]` since July and has **one** run ever, a manual dispatch, across
+  `on: release: [published]` since July and has one run ever, a manual dispatch, across
   ~150 releases; it works only because `ci.yml` *calls* it. `verify-release.yaml` is wired
   the same way — `workflow_call` with the tag as an input, invoked by `ci.yml` and
   `release.yaml` after they publish — and keeps `on: release` only for a release a person
@@ -140,8 +140,8 @@ shaped the way they are.
   xpi is an esbuild bundle of `src/`, so no `node_modules` package ships and every current
   advisory is transitive dev tooling with no upstream fix (`image-size` under
   `addons-linter`, `brace-expansion` under two `minimatch` lines, `nanoid`, `qs`). `npm
-  audit fix` advertises a fix and changes nothing — check its `--dry-run` first. **Don't
-  silence any of it with `overrides`**: forcing a transitive dev dependency past what its
+  audit fix` advertises a fix and changes nothing — check its `--dry-run` first. Don't
+  silence any of it with `overrides`: forcing a transitive dev dependency past what its
   dependent declares is a standing compatibility risk taken for a warning no user sees.
   After any change here `npm run lint:ext` is the check that matters — web-ext is the only
   thing that consumes these packages.
