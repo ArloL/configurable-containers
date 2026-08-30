@@ -1,7 +1,6 @@
 BUILD INSTRUCTIONS
 
-Built with Node 24, which is what this project's CI builds and verifies the
-checksum on. Other versions are untested here.
+Node 24, which is what CI builds and verifies the checksum on.
 
     git clone https://github.com/ArloL/configurable-containers
     cd configurable-containers
@@ -9,69 +8,52 @@ checksum on. Other versions are untested here.
     npm ci
     BUILD_TIMESTAMP={{timestamp}} npm run package -- {{package_args}}
 
-The result, dist/configurable-containers-{{version}}.xpi, matches the submitted file
-byte for byte, so comparing checksums is enough. Compare it against the submitted
-file, not against a signed copy: signing repacks the archive, so those hashes
-differ by design.
+dist/configurable-containers-{{version}}.xpi then matches the submitted file byte
+for byte — not a signed copy, which is repacked.
 
 esbuild bundles three TypeScript entry points into background.js, options.js and
-choice.js. Nothing is minified; everything else is copied verbatim, except the
-version (and, on the dev channel, the id, name and update_url) which the packaging
-script stamps into manifest.json.
+choice.js, unminified. The only other edit is the version, plus the id, name and
+update_url on the dev channel.
 
 WHAT IT DOES
 
 Routes each site into a Firefox container per a YAML config the user edits in the
-options page. Unmatched sites open in a fresh temporary container.
-
-That config is mirrored into storage.sync, so an edit on one machine reaches the
-user's other machines. The toolbar button pauses routing in the current container
-and records the sites seen while it is paused, together with the container each
-would have gone to, so the user can write rules from what happened.
+options page; unmatched sites open in a fresh temporary container.
 
 PERMISSIONS
 
-- webRequest, webRequestBlocking, <all_urls> — the whole mechanism. A blocking
-  onBeforeRequest listener on main_frame decides the container; if it differs from
-  the current one the request is cancelled and the tab reopened there. It must
-  block because the decision precedes the request, and any domain may be routed.
+- webRequest, webRequestBlocking, <all_urls> — the mechanism. A blocking
+  onBeforeRequest listener on main_frame decides the container; if it differs the
+  request is cancelled and the tab reopened there. It must block because the
+  decision precedes the request, and any domain may be routed.
 - cookies — Firefox requires it for tabs.create({ cookieStoreId }), which
-  otherwise throws "No permission for cookieStoreId". Also used by the optional
-  cookie-seeding feature.
+  otherwise throws. Also used by the optional cookie-seeding feature.
 - contextualIdentities, tabs — create/query/remove containers and tabs.
-- storage — storage.local holds the user's config, the pause recordings and the
-  disposer's note of when each temporary container went empty. storage.sync holds
-  a mirror of the config text only, which is what carries it between the user's
-  machines; see WHERE DATA GOES.
+- storage — storage.local holds the config; the disposer's note of when each
+  temporary container went empty; and the pause recordings — the sites seen while
+  the toolbar button has routing paused, with the container each would have gone
+  to. storage.sync holds a mirror of the config text only; see WHERE DATA GOES.
 - webNavigation — a "view-source:" load reaches webRequest wearing the INNER url,
-  so the blocking listener sees an ordinary GET for the page being printed and
-  would reopen it elsewhere, losing the view-source wrapper and taking the source
-  tab down with it. webNavigation.onBeforeNavigate is the only event that names
-  the view-source: URL, and Firefox fires it before that navigation's request.
-  Observed only; nothing is cancelled from this listener.
-- notifications — one toast, when a navigation carries a request body. tabs.create
-  can only issue a GET, so re-opening a POST elsewhere would drop the body (a SAML
-  assertion, a card payment); it is left where it is instead and the user is told
-  which container it would otherwise have gone to. Without the permission that
-  message is dropped with no error.
+  so the blocking listener would reopen it elsewhere and lose the wrapper.
+  onBeforeNavigate is the only event naming the view-source: url. Observed only.
+- notifications — one toast, when a navigation carries a request body:
+  tabs.create can only issue a GET, so re-opening a POST would drop it. The
+  request stays put and the user is told which container it would have used.
 
 CONTENT SCRIPTS
 
-The config has an optional "scripts" key. If the user sets it,
-src/engine/script-injector.ts passes that string to contentScripts.register().
-The code comes only from their own storage.local config, never the network. No
-eval, no new Function, no remotely loaded code. The shipped default has no
-"scripts" entries.
+The config has an optional "scripts" key; src/engine/script-injector.ts passes
+that string to contentScripts.register(). The code comes only from the user's own
+storage.local config, never the network: no eval, no new Function, no remote
+code. The shipped default has no "scripts" entries.
 
 WHERE DATA GOES
 
-There is no server, and src/ contains no fetch, XMLHttpRequest or sendBeacon call:
-nothing reaches the author or any third party.
+No server: src/ contains no fetch, XMLHttpRequest or sendBeacon call, so nothing
+reaches the author or any third party.
 
 One thing leaves the machine. src/extension/config-sync.ts writes the config text
-into storage.sync, chunked under ccConfigMeta and ccConfigPart<N>
-(src/config/sync-record.ts), so Firefox carries it over the user's own Firefox
-Account — end-to-end encrypted, between their machines only. It is on for every
-install and has no toggle; a profile with no account signed in keeps the record
-locally. Nothing else is published there: the pause recordings and the disposer's
-empty-since notes stay in storage.local.
+into storage.sync, so Firefox carries it over the user's own Firefox Account —
+end-to-end encrypted, between their machines only. It has no toggle; a profile
+with no account signed in keeps it locally. Nothing else is published there: the
+pause recordings and the empty-since notes stay in storage.local.

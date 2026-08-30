@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { globSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { buildAmoMetadata, readListingCopy, SUMMARY_LIMIT } from "../../scripts/amo-metadata";
+import { AMO_FIELD_LIMITS, buildAmoMetadata, readListingCopy } from "../../scripts/amo-metadata";
+import type { AmoMetadata } from "../../scripts/amo-metadata";
 import { sourceFiles } from "../fitness/sources";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
@@ -67,6 +68,21 @@ const COPY = {
   reviewerNotes: "checkout v{{version}}\nBUILD_TIMESTAMP={{timestamp}} npm run package -- {{package_args}}\n",
 };
 
+/**
+ * The AMO field names a built metadata document carries, flattened — `version.approval_notes`
+ * is the field `approval_notes`, which is what the API validates and names in its rejection.
+ */
+function fieldsSubmitted(meta: AmoMetadata): string[] {
+  return [...Object.keys(meta).filter((key) => key !== "version"), ...Object.keys(meta.version)].sort();
+}
+
+/**
+ * The values that make the shipped copy LONGEST: the widest version this project's clock
+ * produces (`YYMM.DD.HHMM`) and a full ISO timestamp with offset. The caps apply to the
+ * substituted document, so measuring it against short stand-ins measures nothing.
+ */
+const WORST_CASE = { version: "2612.31.2359", timestamp: "2026-12-31T23:59:59+00:00" } as const;
+
 describe("buildAmoMetadata", () => {
   it("fills the reviewer notes with the version and timestamp of this very build", () => {
     // The whole point of automating this: the notes shipped a `<version>` placeholder and
@@ -117,8 +133,54 @@ describe("buildAmoMetadata", () => {
     // On either channel: the dev upload runs on every push to main, so the cap has to be
     // caught there too rather than by AMO on a release day.
     expect(() =>
-      buildAmoMetadata({ ...COPY, version: "1", timestamp: "T", channel: "unlisted", summary: "x".repeat(SUMMARY_LIMIT + 1) }),
+      buildAmoMetadata({ ...COPY, version: "1", timestamp: "T", channel: "unlisted", summary: "x".repeat(AMO_FIELD_LIMITS.summary + 1) }),
     ).toThrow(/251/);
+  });
+
+  it("refuses reviewer notes over AMO's cap, measured AFTER the placeholders are filled", () => {
+    // The cap this CI failure hit. It applies to what is SENT, and substitution grows the
+    // document: `{{timestamp}}` is 13 characters of template and 25 of value. A template
+    // measured as written therefore fits while the submit body does not, which is exactly
+    // how a document one placeholder under the cap gets rejected by AMO.
+    const notes = "x".repeat(AMO_FIELD_LIMITS.approval_notes - 20) + "{{timestamp}}";
+    expect(notes.length).toBeLessThan(AMO_FIELD_LIMITS.approval_notes);
+
+    expect(() =>
+      buildAmoMetadata({ ...COPY, ...WORST_CASE, channel: "listed", reviewerNotes: notes }),
+    ).toThrow(/3005 characters, over AMO's cap of 3000/);
+  });
+
+  it("refuses a description over AMO's cap", () => {
+    expect(() =>
+      buildAmoMetadata({ ...COPY, version: "1", timestamp: "T", channel: "listed", description: "x".repeat(AMO_FIELD_LIMITS.description + 1) }),
+    ).toThrow(/15001 characters, over AMO's cap of 15000/);
+  });
+
+  it("refuses a URL in the summary, which AMO DELETES rather than rejects", () => {
+    // The summary is a NoURLsField (addons-server, translations/fields.py): its cleaner
+    // runs `URL_RE.sub("", …)` over the text and stores the remainder. So a link pasted
+    // there is not an error a release would notice — it is a sentence with a hole in it on
+    // the public listing, published by an upload that reported success.
+    expect(() =>
+      buildAmoMetadata({ ...COPY, version: "1", timestamp: "T", channel: "listed", summary: "See https://example.test for the config format." }),
+    ).toThrow(/url/i);
+  });
+
+  it("refuses empty reviewer notes, which leave a reviewer no way to reproduce the build", () => {
+    expect(() =>
+      buildAmoMetadata({ ...COPY, version: "1", timestamp: "T", channel: "listed", reviewerNotes: "\n  \n" }),
+    ).toThrow(/reviewer notes/);
+  });
+
+  // An exact inventory rather than a bound, as everywhere else here: the point is not that
+  // three fields are capped, it is that the fields SENT and the fields capped are the same
+  // set. A fourth added to the submit body — release notes, developer comments, both of
+  // which AMO caps at 3000 too — arrives with no guard otherwise, and learning its limit
+  // from a rejected upload is what this whole change is about.
+  it("caps every field the submit body carries, and no others", () => {
+    const meta = buildAmoMetadata({ ...COPY, version: "1", timestamp: "T", channel: "listed" });
+
+    expect(fieldsSubmitted(meta)).toEqual(Object.keys(AMO_FIELD_LIMITS).sort());
   });
 
   it("refuses empty copy, which is what a mis-read file looks like", () => {
@@ -141,8 +203,24 @@ describe("the copy this repo actually ships", () => {
     }
   });
 
+  // The CI failure this replaces: `sign:dev` runs on every push to main, so the reviewer
+  // notes grew past 3000 characters and every push failed at the upload — after the build,
+  // after the tag on a release. Measured on both channels because `--dev` is the longer
+  // `package_args`, and at the widest version and timestamp for the same reason.
+  it("keeps every shipped field inside its cap, on both channels", () => {
+    const copy = readListingCopy();
+
+    for (const channel of ["listed", "unlisted"] as const) {
+      const meta = buildAmoMetadata({ ...copy, ...WORST_CASE, channel });
+
+      expect(meta.summary["en-US"]!.length).toBeLessThanOrEqual(AMO_FIELD_LIMITS.summary);
+      expect(meta.description["en-US"]!.length).toBeLessThanOrEqual(AMO_FIELD_LIMITS.description);
+      expect(meta.version.approval_notes.length).toBeLessThanOrEqual(AMO_FIELD_LIMITS.approval_notes);
+    }
+  });
+
   it("keeps the summary inside the cap", () => {
-    expect(readListingCopy().summary.length).toBeLessThanOrEqual(SUMMARY_LIMIT);
+    expect(readListingCopy().summary.length).toBeLessThanOrEqual(AMO_FIELD_LIMITS.summary);
   });
 
   // What a reviewer opens this file for. `test/fitness/manifest.test.ts` pins the manifest
