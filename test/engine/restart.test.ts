@@ -210,9 +210,14 @@ describe("a background restart — state that cannot be", () => {
     session = await restartTheBackground(session, browser, clock, redirectorConfig);
     await advance(REDIRECTOR_DELAY_MS * 2);
 
-    // A pending setTimeout dies with the background page that scheduled it, so a stranded
-    // shim tab survives a config save. Correct, and worth pinning: it also proves the
-    // harness retires a dead session's timers.
+    // A pending setTimeout dies with the background context that scheduled it, so a
+    // restart strands the shim tab it was going to close. Correct, and worth pinning: it
+    // also proves the harness retires a dead session's timers.
+    //
+    // Not a config save any more — a save applies in place, so the timer it schedules
+    // outlives it and the tab IS closed. What is left here is a browser restart, an
+    // extension update and a disable/enable, where a stranded shim tab is the cheaper
+    // outcome than a close fired against a tab id the browser has since reused.
     expect(browser.closedTabIds).toEqual([]);
   });
 
@@ -235,8 +240,12 @@ describe("a background restart — state that cannot be", () => {
 
     await submitsAForm("3");
     await browser.settle();
-    // Clearing warnedHosts is wanted, not incidental: a restart means a config save, so
-    // the rule that went unapplied may not be the one the user was told about.
+    // Clearing warnedHosts is wanted, not incidental: the extension came back, so the
+    // rules may have changed while it was down — an update, or edits adopted from another
+    // machine — and the rule that went unapplied may not be the one the user was told
+    // about. Deliberately NOT what a config save does: a save applies in place, so
+    // `warnedHosts` survives it (src/engine/engine.ts, and
+    // test/fitness/retained-state.test.ts prices it as a structure nothing empties).
     expect(browser.notifications).toHaveLength(2);
   });
 });

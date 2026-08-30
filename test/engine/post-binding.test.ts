@@ -150,6 +150,15 @@ describe("engine — a non-GET navigation is never reopened (F9)", () => {
     const created = browser.openedTabs[0]!;
     const openedTab = [...browser.openTabs.values()].find((t) => t.cookieStoreId === created.cookieStoreId)!;
 
+    // Pre-commit, as Firefox leaves a tab it has just opened: its own onBeforeRequest
+    // fires before the url commits, so the tab still reads about:blank even though it is
+    // already in Work. Load-bearing, not scene-setting — with the tab left reading
+    // work.example this case passes with the reopenedNav guard removed entirely (resolve
+    // answers `stay` for a tab already in its container, and `stay` never reaches the F9
+    // check either). Measured by backing the guard out: green as written below, red
+    // without this line.
+    openedTab.url = "about:blank";
+
     // A form POST arriving as the reopened tab's own first request is ours already —
     // it returns at the reopenedNav guard and never reaches the F9 check.
     const blockingResponse = await browser.navigates(aNavigationTo({ tabId: openedTab.id, requestId: "2" }));

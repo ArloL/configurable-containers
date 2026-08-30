@@ -27,9 +27,11 @@ const MANY_PART_CONFIG =
 // The background is the only writer of the sync area and it publishes in its startup
 // tail, so a config reaches storage.sync without anyone saving anything. That is what
 // makes these two cases cheap: park once, open the editor once, read what it found.
-// Driving a Save instead would mean re-parking after runtime.reload(), on a window handle
-// that is by then a torn-down extension page — which hangs the driver rather than failing.
-// The save-to-publish handoff is covered at test/extension/config-sync.test.ts.
+// Driving a Save would add the editor interaction and observe nothing more: it is the same
+// publish, reached a second way. (It used to add a re-park as well — a save called
+// runtime.reload() and left the driver on a torn-down extension page — but a save applies
+// its config in place now, so that is history rather than the reason.) The save-to-publish
+// handoff is covered at test/extension/config-sync.test.ts.
 function syncCase(
   name: string,
   behaviour: string,
