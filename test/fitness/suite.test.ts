@@ -25,7 +25,7 @@ describe("fitness — the run that says green ran everything", () => {
     // realtime cases by filename rather than skipping them. The single exception is the
     // reopen picker's e2e: `commands.onCommand` is a chrome-level key event that
     // WebDriver cannot deliver at all, so the case is kept as an executable description
-    // of what the L3 test already pins (CLAUDE.md, "e2e: what the driver cannot do").
+    // of what the L3 test already pins (docs/e2e-and-probe.md, "what the driver cannot do").
     //
     // There was a second: options.test.ts's config-save case, unobservable on a build where
     // `runtime.reload()` does not bring a temporarily installed extension back (140.14.0esr).
