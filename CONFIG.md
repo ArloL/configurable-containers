@@ -385,7 +385,7 @@ signed-in-for-age-gate YouTube:
 3. Redirect back to `youtube.com`. Different registrable domains, so plain isolation would
    spawn a new temp and drop the login — but both are in the `[google.com, …, youtube.com]`
    group, so the navigation is same-site, stays in **T**, and the video plays.
-4. When **T** is disposed, 15 minutes after its last tab closes, the login evaporates.
+4. When **T** is disposed, five minutes after its last tab closes, the login evaporates.
 
 Step 3 works only if `accounts.google.com`'s group membership is still recognised even
 though it resolved via `inherit` in step 2 — hence the constraint. **Residual risk:** a

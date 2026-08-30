@@ -85,12 +85,14 @@ Why a function is shaped the way it is lives in its own comment. This file carri
   no F9 toast — nothing went unapplied, the user turned routing off. It adds nothing to
   `handled` and never cancels.
 
-  **Its recordings are the ONE thing CC keeps that outlives the browser**, so they are the
-  one place a cap is not optional. Everything else here dies with the background context;
-  the pause state is in `storage.local`, and `record()` appends a row per distinct host and
-  `persist()`s the whole state on each new one. A container armed and forgotten therefore
-  grew a stored array, and wrote it from the blocking path, for as long as browsing
-  continued. `MAX_RECORDED_HOSTS` bounds both — and the hosts past it are **counted into
+  **Its recordings are the ONE thing CC APPENDS TO that outlives the browser**, so they are
+  the one place a cap is not optional. The four other `storage.local` keys — the config, its
+  stamp, the replaced copy, the disposer's `tmpEmptySince` — are each rewritten whole rather
+  than grown, and everything else here dies with the background context. The pause state is
+  in `storage.local`, and `record()` appends a row per distinct host and `persist()`s the
+  whole state on each new one. A container armed and forgotten therefore grew a stored
+  array, and wrote it from the blocking path, for as long as browsing continued.
+  `MAX_RECORDED_HOSTS` bounds both — and the hosts past it are **counted into
   `Recording.dropped`**, not dropped in silence: rules are written from that list, and one a
   reader takes for the whole flow while it quietly is not is the same silent wrong answer a
   half-parsed config would be. `dropped` is optional in **`StoredRecording`** and required in

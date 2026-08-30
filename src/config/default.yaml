@@ -89,8 +89,9 @@ rules:
   # - match: [github.com, githubusercontent.com]
   #   open: Code
 
-  # # Offer a choice: a screen appears, and "Personal" is preselected. Use the
-  # # reserved name "Temporary" for a throwaway.
+  # # Several eligible containers: "Personal" opens automatically and "Temporary" becomes
+  # # a manual switch target. Drop the "default:" line for a choice screen on every entry.
+  # # "Temporary" is the reserved name for a throwaway.
   # - match: youtube.com
   #   open: [Personal, Temporary]
   #   default: Personal

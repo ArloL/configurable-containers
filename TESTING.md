@@ -141,8 +141,11 @@ no single-decision example finds them:
   (an adoption is itself a change the other machine hears, so a converged pair would adopt
   each other's identical config forever), and the
   equal-stamp tie-break must give the two machines **opposite** answers, so exactly one
-  publishes. The tie is the *normal* first startup — every pre-sync config backfills to
-  the same stamp.
+  publishes. The tie is the *normal* first startup — an EDITED pre-sync config backfills
+  to the same stamp on every machine. An untouched seed is deliberately not in that tie: it
+  backfills below it (`UNEDITED` against `PRE_SYNC_EDIT`, `config-sync.ts`) and loses
+  outright, or a fresh install wins half the ties and publishes the shipped default over
+  another machine's rules.
 - *No rollback* — the published stamp only ever moves forward. The way it would move
   backwards is a read that caught the record mid-arrival: the parts and the meta land as
   ordinary storage changes with nothing making them land together, so `decodeRecord` has
