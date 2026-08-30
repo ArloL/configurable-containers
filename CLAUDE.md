@@ -890,6 +890,21 @@ Why a function is shaped the way it is lives in its own comment. This file carri
   hand-pasted notes this replaced told a reviewer to rebuild at `<version>` with
   `BUILD_TIMESTAMP=<value>`, which nobody substituted and which no checksum could match.
 
+  **Every field the submit body carries has an AMO length cap, and the cap applies to the
+  SUBSTITUTED text.** `AMO_FIELD_LIMITS` is the priced set — `summary` 250,
+  `description` 15000, `approval_notes` 3000 — each read off the addons-server model field
+  the API validates against (`addons/models.py`, `versions/models.py`), and it is an exact
+  inventory rather than a bound: a fourth field added to the document without a row there
+  fails `test/extension/amo-metadata.test.ts` instead of being learnt from a rejected
+  upload, which is how `approval_notes` was learnt (the notes reached 4055 characters and
+  every push to main failed at the upload, after the build had already succeeded). The
+  substituted half is not a detail: `{{timestamp}}` is 13 characters of placeholder and 25
+  of value, so a file measured as written sits under the cap while every upload of it is
+  refused. **The summary's cap is not the only thing it enforces** — that field is a
+  `NoURLsField`, whose cleaner runs `URL_RE.sub("", …)` and stores the remainder, so a link
+  pasted there is not an error anyone would see: it is a sentence with a hole in it on the
+  public listing, published by an upload that reported success.
+
   Because that upload happens on **every push to main**, prose in `amo/` that has gone
   stale is drift that gets PUBLISHED rather than merely sitting in the repo. Four claims are
   therefore pinned by `test/extension/amo-metadata.test.ts` against what they describe.
