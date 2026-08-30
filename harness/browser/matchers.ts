@@ -30,8 +30,9 @@ interface MatcherContext {
 // that fills on the third read it threw on the first (`toHaveValue #cc-config held`), which
 // is exactly the pre-hydration race the assertion was written to wait out; and against one
 // already full it burned the entire timeout before passing (10s per `openEditor`, five times
-// over in test/e2e/options.test.ts). So the negated form polls until `holds` STOPS holding,
-// and `pass` is reported in positive terms for vitest to flip.
+// over in test/e2e/options.test.ts — 61.8s of that one file, which is what backing this out
+// costs). So the negated form polls until `holds` STOPS holding, and `pass` is reported in
+// positive terms for vitest to flip.
 async function settle<T>(
   ctx: MatcherContext,
   locator: Locator,
@@ -60,7 +61,8 @@ async function settle<T>(
           // The reader is given a zero budget — the waiting is THIS poll's job — so it
           // gives up the moment the element is not resolvable. That is "not in the document
           // yet", which is the normal state of a page the driver reached by url: measured on
-          // the options page, whose #cc-sync arrived after `pageAt` had answered. Retry it.
+          // the options page, whose #cc-sync arrived after `pageAt` had answered — one full
+          // run in ten failed on it while this branch read the absence as a verdict. Retry it.
           // Anything else (a dead driver, a closed session) is not something to wait out.
           if (e instanceof PollTimeoutError) return RETRY;
           throw e;

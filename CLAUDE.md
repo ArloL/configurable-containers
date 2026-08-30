@@ -4,6 +4,7 @@ A Firefox WebExtension that routes each site into the right container from one u
 
 Covered elsewhere: `README.md` (goals, build, release), `CONFIG.md` (config format),
 `TESTING.md` (the L1–L5 pyramid, the F1–F14 bug matrix), `test/` (the behaviour spec),
+`docs/amo-listing.md` (the listing copy, its fields and the reproducibility check),
 `docs/superpowers/`, `FOLLOWUPS.md`, `docs/drift-reviews.md` (the agent reviews for what no
 gate can see — a true statement that stopped being true, which every check here is blind to
 because `test/fitness/` reads source with comments stripped).
@@ -575,57 +576,14 @@ Why a function is shaped the way it is lives in its own comment. This file carri
   `harness/browser/matchers`), so the shape to avoid is
   `expect(await locator.innerText()).toBe(…)`: it reads once, which is the flake the
   retrying form exists to remove. **`.not` on one of these polls for the condition to STOP
-  holding**, which is not what vitest does on its own: it inverts `pass` and nothing else,
-  so a matcher that always waited for its condition would mean the opposite of itself under
-  negation — `not.toHaveValue("")` polling until the field IS empty, then calling that a
-  failure. `settle` takes the matcher context for this and nothing else. It also **waits for the
-  element, not only for what it says**: the reader is given a zero budget because the waiting
-  is the matcher's job, so a `PollTimeoutError` out of it means "not in the document yet" and
-  is retried — reading it as a verdict is what made `#cc-sync` fail one full run in ten. An
-  element that never appears fails in BOTH directions, or `.not` passes for a page that
-  rendered nothing — and that promise belongs to the **reader**, not to `settle`: it holds
-  for the matchers whose reader raises `PollTimeoutError` on an unresolvable element.
-  `toBeVisible` and `toHaveCount` are deliberately outside it, reading a missing element as
-  `false` and `0`, which is Playwright's behaviour and what `.not.toBeVisible()` and
-  `toHaveCount(0)` are asking for. **`toBeEnabled` was outside it by accident** —
-  `isEnabled()` answers `false` for an element that is not there, so "disabled" and "never
-  rendered" arrived as one reading and `.not.toBeEnabled()` passed on an empty document. It
-  asks `Locator.enabledState()` now, which answers `null` for the third case. Backing it out
-  costs the full timeout on every negated assertion that is already satisfied (61.8s of
-  `options.test.ts`, measured) and turns the pre-hydration race it guards into a hard
-  failure. `test/fitness/e2e-discipline.test.ts` pins the rest of this bullet — no `driver`,
-  no sleep, no read-then-compare, no deadline loop — each rule carrying an exact list of the
-  files that are allowed to break it and why, because the migration that established the
-  rules left a file breaking every one of them, and said in its own commit message that it
-  had not. **Read-then-compare matches BOTH forms**: assigning the reading first
-  (`const value = await …inputValue()`) evaded it entirely until 2026-08-26, and two files
-  were doing that — both defensibly, which is the point, since an exception no check can see
-  is a hole rather than an exception. It reads one line at a time, so a read split across two
-  still evades it.
-
-  **A window handle is a SNAPSHOT, and the extension closes tabs on its own schedule**, so
-  anchoring on one — `newPage` before it can open a tab, `close` re-attaching after — is a
-  poll over the list rather than a switch to its head. `getAllWindowHandles` names a tab, the
-  auto-temp startup sweep replaces it, and the switch raises `NoSuchWindowError` on line one
-  of a case whose own comment says nothing has to be re-anchored for it. Measured by
-  `npm run test:flake`: one run in three, and never locally. Retry by re-READING the list —
-  retrying the same dead handle spins — and let `close` give up in silence, since every Page
-  operation switches to its own handle first.
-
-  **That rule reaches `describe` and `pageAt` too, and it reaches them differently.**
-  `describe` is what a poll's timeout prints, and `diagnose` catches its throw and answers
-  *"could not be described"* — so an unguarded walk made the report vanish exactly when the
-  tabs were churning, which is when a timeout happens and when its tab list is worth having.
-  It now gathers in two independent halves, the TAB LIST FIRST because that half survives
-  this page's own tab being closed, and the tab a poll was waiting on is the likeliest one
-  to have gone: `PageReport.url` is `null` then, `tabs` carries `GONE` where a handle would
-  not answer, and only a browser that will not list its windows at all still throws.
-  `pageAt`, by contrast, must NOT swallow everything — `retry.ts` is explicit that a driver
-  which has died is not something to wait out, and a bare `catch { continue }` there polled
-  a dead session for the full budget and then reported it as "no page at &lt;url&gt;". It
-  distinguishes `isRetryable` as `newPage` does. `close` keeps its bare catch on purpose:
-  it returns nothing, its re-attach is a courtesy, and the next real command reports a dead
-  driver anyway.
+  holding**, which is not what vitest does on its own, and an element that never appears
+  fails in BOTH directions — except under `toBeVisible` and `toHaveCount`, which read a
+  missing element as `false` and `0` because that is what `.not.toBeVisible()` and
+  `toHaveCount(0)` are asking for. Why each of those is where it is — `settle` and its
+  reader contract, `Locator.enabledState`, `Page.describe`'s two independent halves,
+  `pageAt`'s retry policy against `close`'s bare catch — is argued at the code, in
+  `harness/browser/{matchers,locator,page,session}.ts`, each with the measurement that
+  moved it there. This bullet is what a case has to know without opening them.
 
   Three things a new case gets wrong otherwise. **A textarea's content is its VALUE** —
   `toHaveValue(/…/)`, not `toContainText`, which reads `innerText` and sees `""`.
@@ -634,6 +592,14 @@ Why a function is shaped the way it is lives in its own comment. This file carri
   does — otherwise leaves the next command *anywhere later in the file* failing with
   `NoSuchWindow`. And **a timeout names what it waited for, the page's url, the ids present
   and the tab list**, which is the report `NoSuchElementError: *[id="cc-sync"]` was not.
+
+  `test/fitness/e2e-discipline.test.ts` pins the rest of this bullet — no `driver`, no
+  sleep, no read-then-compare, no deadline loop — each rule carrying an exact list of the
+  files that are allowed to break it and why, because the migration that established the
+  rules left a file breaking every one of them, and said in its own commit message that it
+  had not. **Read-then-compare matches BOTH forms**: assigning the reading first
+  (`const value = await …inputValue()`) evaded it entirely until 2026-08-26. It reads one
+  line at a time, so a read split across two still evades it.
 
   Outside the layer on purpose, because none of it is Selenium's problem:
   `navigateToContainerTab` (a navigation CC cancels never returns to WebDriver, so it
@@ -908,28 +874,16 @@ Why a function is shaped the way it is lives in its own comment. This file carri
   public listing, published by an upload that reported success.
 
   Because that upload happens on **every push to main**, prose in `amo/` that has gone
-  stale is drift that gets PUBLISHED rather than merely sitting in the repo. Four claims are
-  therefore pinned by `test/extension/amo-metadata.test.ts` against what they describe.
-  **The PERMISSIONS bullets are an exact set against `extensions/cc/manifest.json`** —
-  `test/fitness/manifest.test.ts` already stops a permission arriving without a caller, but
-  nothing stopped one arriving without an explanation, and `webNavigation` and `notifications` had both done exactly that. It is
-  exact in the other direction too: a bullet outliving its permission tells a reviewer the
-  add-on asks for something it does not. The parser reads the `- <names> — <why>` heads of
-  the section under the bare `PERMISSIONS` heading, and **throws** when that heading or a
-  bullet's em dash is missing, because a parser that quietly found nothing would compare
-  two empty sets and pass. **And the Node version is the one the workflows really set** —
-  the notes said "Needs Node 22+" while every workflow said 24, `package.json` declares no
-  `engines`, and the whole point of that paragraph is a reviewer reproducing the checksum.
-  **The storage bullet names every area `src/` reaches**, exactly and in both directions —
-  it read "storage.local only" for as long as config-sync had been mirroring the config
-  into `storage.sync`, so the notes told a reviewer the config never leaves the profile
-  while every startup published it. Scoped to that bullet, so a mention elsewhere in the
-  file cannot satisfy a claim made under `PERMISSIONS`. **`description.md` names
-  Firefox Sync for exactly as long as `src/` writes to `storage.sync`** — the listing's
-  privacy paragraph said "nothing is transmitted … stays in your browser" while the options
-  page it ships with rendered "Synced via Firefox Sync". That one is a keyword rather than
-  a sentence: what can be pinned is that the copy says *something* about the config leaving
-  the machine, not how it words it.
+  stale is drift that gets PUBLISHED rather than merely sitting in the repo — so the four
+  claims most worth keeping honest are pinned rather than reviewed:
+  `test/extension/amo-metadata.test.ts` holds the PERMISSIONS bullets to an exact set
+  against `extensions/cc/manifest.json`, the storage bullet to every area `src/` reaches,
+  the Node version to what the workflows really set, and `description.md`'s privacy
+  paragraph to whether `src/` still writes to `storage.sync`. Each case carries the drift
+  it was written for; all four are exact in BOTH directions, because a bullet outliving
+  its permission tells a reviewer the add-on asks for something it does not. Add a claim
+  to `amo/` and the question is whether it can join them — a hand-read is what let all
+  four of these ship.
 - **Never derive a dev version from the clock** — `YYMM.DD.HHMM` outranks every
   `YYMM.0.<micro>` for the rest of the month, so one local build would own the update
   channel. Nothing enforces this; it is a rule for whoever sets `VERSION`.
