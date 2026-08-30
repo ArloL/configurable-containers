@@ -13,7 +13,7 @@ taken.
 
 - **`typescript@7` is the Go port, and it exports no JS compiler API** — the package's
   `exports` are `lib/version.cjs` plus `unstable/*`. typescript-eslint builds every
-  type-aware rule on the API that is gone, so making it work means resolving a **second**
+  type-aware rule on the API that is gone, so making it work means resolving a second
   TypeScript 5 for the linter alone and letting lint and `npm run typecheck` disagree
   about the language. `oxlint` + `oxlint-tsgolint` reads types through tsgo — the same
   compiler `npm run typecheck` runs. Type-aware rules only fire with `--type-aware`; the
@@ -30,7 +30,7 @@ taken.
 - **A suppression comment disables the line after the DIRECTIVE, not after the reason.**
   `// oxlint-disable-next-line <rule> -- because…` spanning three lines suppresses the
   second comment line and nothing else, silently. Put the prose above and the directive
-  immediately over the code. **Stryker is the other way round** and the two rules must not
+  immediately over the code. Stryker is the other way round and the two rules must not
   be swapped: its `next-line` binds to the start line of the *node* the comment leads
   (`@stryker-mutator/instrumenter`, `directive-bookkeeper.js`), so the multi-line reasons
   in `config/parse.ts` reach the code below them and "fixing" them would be a no-op at best.
@@ -39,9 +39,9 @@ taken.
   found one on the push that added the flag: a `typescript/no-explicit-any` directive over
   the `declare module "vitest"` merge, where the rule is pedantic and has never been on.
 - **The workflows have their own two gates — `actionlint` and `zizmor`** (`check-actions.yaml`),
-  and zizmor fails the build on any finding. There are **no** zizmor suppressions, and its
+  and zizmor fails the build on any finding. There are no zizmor suppressions, and its
   `cache-poisoning` finding on a release trigger is the reason: the fix is real, not an
-  ignore. **`actions/setup-node` caches BY DEFAULT** — `package-manager-cache` defaults to
+  ignore. `actions/setup-node` caches BY DEFAULT — `package-manager-cache` defaults to
   `true` and turns caching on as soon as `package.json` declares `packageManager` or
   `devEngines.packageManager` — so omitting `cache:` disables nothing, and a suppression
   would go on lying the day that field is added. Both verifiers
@@ -55,10 +55,10 @@ taken.
   worth keeping: the reasoning, where a reviewer would see it, in a project that can be
   recreated. Suppression is per rule and path
   (`sonar.issue.ignore.multicriteria.<id>.{ruleKey,resourceKey}`), and each id in that file
-  carries the comment saying why. Unlike zizmor — which has **no** suppressions on purpose —
+  carries the comment saying why. Unlike zizmor — which has no suppressions on purpose —
   a few of these rules are simply wrong about this code, and one of them is wrong in the
-  direction that matters: **`S2871` asks for `localeCompare` behind the `.sort()` in
-  `scripts/package.ts`, and taking that advice breaks reproducible builds**, since that sort
+  direction that matters: `S2871` asks for `localeCompare` behind the `.sort()` in
+  `scripts/package.ts`, and taking that advice breaks reproducible builds, since that sort
   is what makes the xpi's entry order the same on every machine and collation is not. The
   other two are `S4036` (absolute paths for `git`/`gh`/`npm`/`curl` in dev scripts) and
   `S5332` (the `"http://" + hostish + "/"` in `bareHost`, which parses a string and fetches
