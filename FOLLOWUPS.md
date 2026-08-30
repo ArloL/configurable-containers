@@ -3,13 +3,14 @@
 Things deliberately left needing a re-check, and where to look. Delete an entry once it is
 resolved.
 
-## The live `Config` object mutates under six siblings, and no type says so (2026-08-29)
+## The live `Config` object mutates under four siblings, and no type says so (2026-08-29)
 
 `wireBackground` creates one `Config` and fills it in place with `Object.assign` inside
-`useConfig`; six siblings hold a reference. The invariant every one of them depends on —
+`useConfig`; four siblings hold a reference — `engine`, `picker`, `cookie-seeder` and
+`redirector-closer`. The invariant every one of them depends on —
 *this object mutates under you; read it at event time, never at construction* — appears in
 no type. `CookieSeederOptions { config: Config }` is indistinguishable from a signature
-taking a snapshot, so a seventh sibling written the idiomatic way (`const { rules } =
+taking a snapshot, so a fifth sibling written the idiomatic way (`const { rules } =
 config`) would freeze on the empty config forever, and nothing would catch it: not the
 compiler, not the coverage gate, and not an L3 case, since the composed-background tests
 apply a config before navigating.
@@ -26,8 +27,19 @@ reference, since a function cannot be destructured into a stale snapshot.
 `script-injector`'s existing `apply(config)` already demonstrates the shape from the other
 direction.
 
-Take it when the seventh sibling is written, not before — that is the moment the rule stops
-being kept by one file's comment and starts being kept by reviewer attention.
+Take it when the next sibling holding a `config` reference is written — the FIFTH — not
+before; that is the moment the rule stops being kept by one file's comment and starts being
+kept by reviewer attention. A `test/fitness/` inventory of the holders, in the exact-list
+style of `retained-state.test.ts`, would make that trigger mechanical instead of leaving it
+to whoever remembers this file.
+
+The count was wrong here until 2026-08-30, and the shape of the mistake is worth keeping:
+`grep -rn "config: Config" src/engine src/extension/wiring.ts` answers with six FILES, two
+of which hold nothing — `script-injector` takes the config as an `apply(config)` argument
+(the review's own named exception, the contract form this entry wants) and `wiring.ts` is
+the owner. Stated as an ordinal, "the seventh sibling" was a trigger nobody could recognise:
+anyone checking it counts four and concludes it has not arrived. The 2026-08-29 modularity
+review says six for the same reason; it is a dated record and is left as it stands.
 
 ## `reopenedNav` does not survive a background restart (2026-07-28)
 
@@ -52,7 +64,12 @@ against it:
 - **The window coincides with peak activity, not idleness.** It runs while the extension
   has just handled a blocking request and is mid-reopen. Firefox suspends an event page
   when it is *idle*, so the involuntary-suspension frequency that justified revisiting
-  this is much lower than the MV2-vs-MV3 framing suggested.
+  this is much lower than the MV2-vs-MV3 framing suggested. Lower still than that sentence
+  says, on what CC actually ships: `extensions/cc/manifest.json` declares `background.scripts`
+  with no `persistent` key, and MV2 defaults it to `true`, so this is a persistent background
+  page and Firefox does not idle-suspend it at all. The bullet is an argument about the MV3
+  world, not this one — every restart CC sees today is a browser restart, an update, a
+  disable/enable or a crash.
 - **Persisting it adds a worse failure than the one it removes.** Entries are keyed by tab
   id, and tab ids restart with the browser, so a stale entry — the reopened tab's request
   never arrived, load aborted, tab closed — could be claimed by an unrelated later tab of
