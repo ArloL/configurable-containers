@@ -82,8 +82,7 @@ back. See [CONFIG.md](CONFIG.md#syncing-between-machines).
 
 ## Building from source
 
-Requires Node 22 or newer (verified on 24). Building needs nothing else; the end-to-end
-tests additionally need a system Firefox.
+Requires Node 22 or newer (verified on 24). Building needs nothing else.
 
 ```
 npm ci
@@ -114,6 +113,15 @@ npm test              # unit + e2e; launches real Firefox via Selenium
 npm run test:mutation # nightly guard rail: mutates the pure modules, gated at 100%
 ```
 
+`npm test` needs two things the build does not: a system Firefox, and a checkout of
+Multi-Account Containers in `mac/`, whose xpi the MAC-interop case builds from source. That
+checkout is gitignored and absent from a fresh clone, and the case **fails** on a bare
+ENOENT rather than skipping without it:
+
+```
+git clone --depth 1 https://github.com/mozilla/multi-account-containers.git mac
+```
+
 Releases are cut by `.github/workflows/release.yaml`, which stamps the version from a
 CalVer tag and submits to AMO.
 
@@ -134,13 +142,14 @@ Two ways around that:
   **unlisted** channel — signed automatically in minutes, no review — and publishes it as
   an immutable `v<version>` GitHub **prerelease**. Install the newest one by hand once;
   Firefox picks up every later build on its own (about:addons → gear → Check for Updates
-  forces a poll). Locally it is `VERSION=<version> npm run sign:dev`, which also needs
-  `WEB_EXT_API_KEY` and `WEB_EXT_API_SECRET` — the version comes from the environment,
-  not an argument, and the script refuses to start without all three. Like a listed
-  submission it uploads a source archive, because AMO's requirement follows the esbuild
-  bundle rather than the channel — and that archive is built from **HEAD**, so commit
-  before signing or AMO gets source that does not rebuild what you signed (the script
-  warns).
+  forces a poll). Locally it is `VERSION=<version> BUILD_TIMESTAMP=<epoch> npm run
+  sign:dev`, which also needs `WEB_EXT_API_KEY` and `WEB_EXT_API_SECRET` — the version
+  comes from the environment, not an argument, and the script refuses to start without all
+  four. The timestamp is required because the reviewer notes uploaded beside the build name
+  the value a rebuild has to pass back. Like a listed submission it uploads a source
+  archive, because AMO's requirement follows the esbuild bundle rather than the channel —
+  and that archive is built from **HEAD**, so commit before signing or AMO gets source that
+  does not rebuild what you signed (the script warns).
 
 The dev build is a **separate add-on** (`configurable-containers-dev@k5d.de`), which is
 the point twice over: its uploads land on their own AMO record and cannot disturb a listed
