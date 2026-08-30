@@ -3,48 +3,6 @@
 Things deliberately left needing a re-check, and where to look. Delete an entry once it is
 resolved.
 
-## Three L1 properties assert nothing (2026-08-30)
-
-Found by drift review D6. `test/resolver/resolve.props.test.ts` carries five properties;
-three of them cannot fail, and TESTING.md's L1 section credits F4 and F5 to them.
-
-- **F5, "matchRule equals a first-match oracle".** The subject is `deps.matchRule`, which
-  is `realMatchers()` from `test/resolver/helpers.ts` — a test double whose own comment
-  says "NOT the production matcher" — and the oracle beside it is a character-for-character
-  inlining of that double's body. It compares a function with a copy of itself. Measured:
-  rewriting `src/matcher/matcher.ts`'s `matchRule` to take the LAST match instead of the
-  first leaves all five properties green.
-- **F4, "group membership is a function of the URL only".** It draws two arbitrary
-  containers, discards them with `void cA; void cB;`, and asserts `matchGroup(url, groups)`
-  equals a `matchGroup(url, groups)` taken a line earlier — `f(x) === f(x)` on a pure
-  function. `matchGroup` takes no nav-context parameter to vary, so the stated property is
-  a fact about the signature and nothing in the body can observe it. Measured: replacing
-  `matchGroup`'s body with `return null` leaves this file green
-  (`test/matcher/matcher.test.ts` is what goes red).
-- **F4/F5 independence, "changing a rule's open target never changes group answers".** It
-  mutates `cfg.rules` and then reads `mutated.groups`, which the object spread leaves
-  reference-identical to `cfg.groups`. The same tautology, one indirection on.
-
-None of the three is a coverage hole on its own: `test/matcher/matcher.rules.test.ts`
-pins first-match on the production `matchRule` and `matchGroup` by table, and F3's
-monotonicity property below them is real (it compares `resolve` against an oracle built
-from the same deps, which is the point of an oracle). What is missing is the FUZZED half —
-the generated rule lists TESTING.md says the precedence and totality claims rest on — and
-what is false is the file's own account of what it covers.
-
-**Left open deliberately: a replacement is a design decision, not a comment fix.** F5
-pointed at the production `matchRule` needs its generated rules wrapped in `hostMatcher()`
-(bare strings are not a `Matcher`), which moves a killer suite of the mutation gate onto a
-different module and could move the score; F4's real content ("at most one group, first
-match wins") is an oracle over `matchGroup` that belongs in `test/matcher/` rather than
-here, where L1 and L2 divide; and the independence property needs a mutation the groups
-array actually sees. Deleting them is also defensible, and cheaper — but it drops what
-TESTING.md L1 advertises rather than fixing it, so it wants the same decision.
-
-Do not "fix" this by making the assertions look stricter without re-measuring: the way
-each of these passes today is by comparing something with itself, and that is invisible
-in the assertion's shape.
-
 ## The live `Config` object mutates under six siblings, and no type says so (2026-08-29)
 
 `wireBackground` creates one `Config` and fills it in place with `Object.assign` inside

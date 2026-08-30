@@ -80,12 +80,13 @@ No `browser.*`, no clock, no I/O. F4, F5, F6 and the routing side of F3 are prov
   (`www.google.com → mail.google.com`; inherit-hop membership; a domain in both an open
   rule and a group).
 - **Property-based invariants** (fast-check generates configs and nav contexts):
-  - *First-match determinism* — `resolve` equals a "scan in order, take first" oracle for
-    any generated rule list. (F5)
-  - *Group totality* — every URL resolves to at most one group, and membership is a
-    function of the target URL only. (F4)
-  - *Independence* — routing and group membership come from disjoint inputs; changing a
-    rule's `open:` target never changes a group answer. (F4/F5)
+  - *Precedence* — a rule matching at the head of a generated list decides whatever
+    follows it, and a rule that does not match shadows nothing below it: `resolve` reads
+    the rule that matched and no other. (F5)
+  - *Group totality* — the first group naming both ends of a hop keeps it whatever groups
+    follow, and a group naming only the target is not a group the two share. (F4)
+  - *Independence* — a rule naming a container answers the same whatever the groups say:
+    routing outranks continuity. (F4/F5)
   - *`inherit` neutrality* — an `inherit` match never yields `temp` or `named`, and for a
     fixed initiator its result is invariant under the rest of the config. (F6)
   - *Continuity monotonicity* — same registrable domain or same group ⇒ never a new temp;
