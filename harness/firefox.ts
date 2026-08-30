@@ -316,7 +316,7 @@ export async function launch(opts: LaunchOptions = {}): Promise<Session> {
 }
 
 // `driver.quit()` talks to a browser that may be wedged (a cancelled navigation blocks every
-// WebDriver call — CLAUDE.md on F9), and an afterAll hanging here dies on vitest's
+// WebDriver call — docs/e2e-and-probe.md on F9), and an afterAll hanging here dies on vitest's
 // hookTimeout with the browser still up. Bound it, let the reaper finish, swallow the throw.
 async function quit(driver: WebDriver): Promise<void> {
   let timer: NodeJS.Timeout | undefined;

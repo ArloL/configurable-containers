@@ -133,8 +133,9 @@ here.
 To be clear about what is *not* temporary: the call sites. `getDomAttribute`,
 `getProperty`, `switchTo().activeElement()` and `clear()` + `sendKeys()` are the
 spec's own commands, they work on ESR through Nightly, and they would stay the right
-calls even if Firefox reverted the privileged-context change that forced them (CLAUDE.md,
-the e2e section). Only the type declarations are a stopgap.
+calls even if Firefox reverted the privileged-context change that forced them
+(`docs/e2e-and-probe.md`, on what operating an extension page may not do). Only the type
+declarations are a stopgap.
 
 **Nothing will announce it.** Merging an interface into a class turns same-named methods
 into *overloads*, not a conflict: measured 2026-08-25, redeclaring even `getAttribute`

@@ -95,13 +95,16 @@ nothing else, silently.
 ## D3 — Measured facts past their shelf life
 
 **Has the platform moved past this measurement, and is the number still what the code does?**
-Scope: measured claims in `CLAUDE.md` and `TESTING.md`.
+Scope: measured claims in `CLAUDE.md`, `TESTING.md`, and the three task-scoped platform
+files `CLAUDE.md` routes to — `docs/e2e-and-probe.md`, `docs/releasing.md`,
+`docs/static-analysis.md`. Those three hold the measurements a session sees LEAST often,
+which is exactly why nobody re-checks them by accident.
 
 A measurement is true *of a version on a date*, and these files are full of them — which is
 why the platform notes are trustworthy, and why they need re-checking. Find them with:
 
 ```
-grep -n 'measured\|esr\|FF1\|[0-9]\+\.[0-9]\+a\?[0-9]*' CLAUDE.md TESTING.md
+grep -n 'measured\|esr\|FF1\|[0-9]\+\.[0-9]\+a\?[0-9]*' CLAUDE.md TESTING.md docs/e2e-and-probe.md docs/releasing.md docs/static-analysis.md
 ```
 
 For each, name the version and date it was measured on, and the current version of that thing.
@@ -210,7 +213,10 @@ Where an entry's condition cannot be checked from the repo, say so rather than g
 ## D8 — Cross-document contradictions
 
 **Where two current documents describe the same thing, do they agree?**
-Scope: `CLAUDE.md`, `TESTING.md`, `README.md`, `CONFIG.md`.
+Scope: `CLAUDE.md`, `TESTING.md`, `README.md`, `CONFIG.md`, and the four files
+`CLAUDE.md` routes to — `docs/{e2e-and-probe,releasing,static-analysis,amo-listing}.md`.
+A split raises this review's odds rather than lowering them: prose that used to sit in
+one file now sits in two, and the pointer between them is the thing that goes stale.
 
 These overlap deliberately, and overlap means they can disagree with no way for a reader to
 tell which is right. Read each account of the topics that appear twice: the test levels and
@@ -226,7 +232,13 @@ working correctly. Past-tense history is exempt for the same reason.
 
 **Is each section highly relevant to every session, and does the file match the documented
 guidance?**
-Scope: `CLAUDE.md`.
+Scope: `CLAUDE.md`, plus the task-scoped files it routes to.
+
+`CLAUDE.md` is the only file loaded every session; the routing table at its head names the
+rest. So this review asks two questions now, not one: whether anything still in `CLAUDE.md`
+belongs behind a row of that table, and whether anything behind a row is in fact
+cross-cutting and should come back. The second direction is the one a split makes easy to
+forget, and it is the one that costs a wrong change rather than tokens.
 
 **A finding here is a measured judgement, not a contradiction**, so the bar is written out
 rather than assumed. Nothing in the file has to be false: CLAUDE.md is read at the start of
