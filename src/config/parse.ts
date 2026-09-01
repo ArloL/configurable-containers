@@ -83,6 +83,13 @@ function warn(ctx: Ctx, path: string, message: string): void {
   });
 }
 
+// A price of 1 buys nothing: `requiredVersion` starts at 1, so folding a 1 into the running
+// maximum cannot move it. Deleting such a call is therefore an EQUIVALENT mutant, not an
+// untested one, and every call site reading an all-1 table carries a `CallExpression`
+// disable saying so. What stops those from rotting into a real gap is the exact inventory in
+// `test/config/parse.version.test.ts` ("prices every key and match form"): the day a table
+// gains an entry above 1 that test goes red, and whoever reprices it is one line from the
+// directive to lift.
 function use(ctx: Ctx, version: number): void {
   // Stryker disable next-line EqualityOperator: `>=` reassigns the value it already holds.
   if (version > ctx.requiredVersion) ctx.requiredVersion = version;
@@ -183,6 +190,7 @@ function toMatcher(entry: unknown, path: string, ctx: Ctx): Matcher {
   if (GLOB_META.test(entry)) {
     throw new ConfigError(`${path}: "${entry}" is not a bare hostname — a wildcard needs the full pattern form, as in "*://*.example.com/*"`, { path });
   }
+  // Stryker disable next-line CallExpression: `matchForm.host` is 1 — see `use`.
   use(ctx, MATCH_FORM_VERSIONS.host);
   return built(path, () => hostMatcher(entry));
 }
@@ -278,6 +286,7 @@ const COOKIE_FIELDS: Record<Exclude<keyof CookieSpec, "name" | "url">, Checked> 
 function parseCookie(raw: unknown, path: string, ctx: Ctx): CookieSpec {
   if (!isMapping(raw)) throw new ConfigError(`${path} must be a mapping`, { path });
   for (const k of Object.keys(raw)) {
+    // Stryker disable next-line CallExpression: COOKIE_KEYS prices every key 1 — see `use`.
     if (Object.hasOwn(COOKIE_KEYS, k)) use(ctx, COOKIE_KEYS[k]!);
     else unknownKey(ctx, path, `unknown key "${k}" in ${path}`);
   }
@@ -316,6 +325,7 @@ function parseCookies(raw: unknown, path: string, ctx: Ctx): CookieSpec[] {
 function parseScript(raw: unknown, path: string, ctx: Ctx): ScriptSpec {
   if (!isMapping(raw)) throw new ConfigError(`${path} must be a mapping`, { path });
   for (const k of Object.keys(raw)) {
+    // Stryker disable next-line CallExpression: SCRIPT_KEYS prices every key 1 — see `use`.
     if (Object.hasOwn(SCRIPT_KEYS, k)) use(ctx, SCRIPT_KEYS[k]!);
     else unknownKey(ctx, path, `unknown key "${k}" in ${path}`);
   }
@@ -355,6 +365,7 @@ function knownFields(raw: Record<string, unknown>, path: string, ctx: Ctx): Reco
   const fields: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(raw)) {
     if (Object.hasOwn(RULE_KEYS, k)) {
+      // Stryker disable next-line CallExpression: RULE_KEYS prices every key 1 — see `use`.
       use(ctx, RULE_KEYS[k]!);
       fields[k] = v;
     } else {
@@ -514,6 +525,7 @@ export function parseConfigDetailed(yamlText: string): ParseResult {
   // A top-level typo costs the whole config — `rulez:` matches nothing anywhere, so every
   // site opens in a throwaway while this page reports no problem at all. Loud beats that.
   for (const k of Object.keys(doc)) {
+    // Stryker disable next-line CallExpression: DOCUMENT_KEYS prices every key 1 — see `use`.
     if (Object.hasOwn(DOCUMENT_KEYS, k)) use(ctx, DOCUMENT_KEYS[k]!);
     else if (!k.startsWith(RESERVED_PREFIX)) unknownKey(ctx, k, `unknown key "${k}" at the top level`);
   }
