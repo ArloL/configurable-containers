@@ -13,6 +13,16 @@ permissions: {}
 
 jobs:
   analyze:
+    # Dependency bumps don't need an analysis, and Dependabot pull requests
+    # can't read SONAR_TOKEN from the sonarcloud environment anyway. This keys
+    # on the actor because a branch name is something any collaborator can
+    # forge, and skipping this job is what lets a pull request merge
+    if: >-
+      github.event_name != 'pull_request'
+      || (
+        github.actor != 'dependabot[bot]'
+        && github.actor != 'renovate[bot]'
+      )
     runs-on: ubuntu-latest
     # SONAR_TOKEN is an ENVIRONMENT secret, not a repo one, so a job that omits this
     # resolves it to the empty string and fails inside the scanner on authentication
@@ -43,6 +53,10 @@ jobs:
     - run: npm run test:coverage
 
     - uses: SonarSource/sonarqube-scan-action@22918119ff8e1ca75a623e15c8296b6ea4fbe28f # v8.2.1
+      with:
+        # Wait for the quality gate so a failure fails this workflow's own
+        # required status check, which also reports on the bumps we skip
+        args: -Dsonar.qualitygate.wait=true
       env:
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         # The action targets SonarQube Server by default. Cloud needs the host named
@@ -63,5 +77,8 @@ jobs:
     - name: Check that all jobs were successful
       env:
         RESULTS: ${{ toJSON(needs) }}
+      # analyze has no needs, so "skipped" can only mean its own if was
+      # false: a dependency bump pull request it deliberately opted out of
       run: |
-        echo "$RESULTS" | jq --exit-status 'all(.result == "success")' || exit 1
+        echo "$RESULTS" | jq --exit-status \
+          'all(.result == "success" or .result == "skipped")' || exit 1
