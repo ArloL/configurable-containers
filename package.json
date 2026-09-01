@@ -20,7 +20,7 @@
     "submit": "tsx scripts/submit.ts"
   },
   "dependencies": {
-    "tldts": "^7.4.9",
+    "tldts": "^7.4.11",
     "yaml": "^2.5.0"
   },
   "devDependencies": {
