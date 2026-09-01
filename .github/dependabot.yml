@@ -18,3 +18,17 @@ updates:
   cooldown:
     default-days: 7
   open-pull-requests-limit: 10
+  # Grouped because these families peer-pin each other to an EXACT version, so a PR
+  # bumping one alone cannot install: `@stryker-mutator/vitest-runner@9.6.1` declares
+  # `peer @stryker-mutator/core@"9.6.1"`, and `@vitest/coverage-v8@4.1.10` declares
+  # `peer vitest@"4.1.10"`. Ungrouped, both halves of a stryker 10.0.0 bump opened as
+  # separate PRs and both died in `npm ci` with ERESOLVE (#160, #163) — one red PR per
+  # package, neither mergeable on its own.
+  groups:
+    stryker:
+      patterns:
+      - "@stryker-mutator/*"
+    vitest:
+      patterns:
+      - "vitest"
+      - "@vitest/*"
