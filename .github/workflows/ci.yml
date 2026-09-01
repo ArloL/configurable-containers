@@ -108,7 +108,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - uses: ArloL/calver-tag-action@6cc2895eee289523746b1092b0e91b6b15846c0e # v2608.0.103
+      - uses: ArloL/calver-tag-action@3f0c5cbd7acfa52ddeef19ae080b540c03d231f7 # v2608.0.107
         id: version
       # BUILD_TIMESTAMP exactly as release.yaml captures it: zip records mtimes, so the
       # build is only reproducible against a known instant, and the source archive has no
