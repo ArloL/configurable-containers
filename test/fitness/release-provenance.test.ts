@@ -26,7 +26,7 @@ interface Job {
   permissions?: Record<string, string>;
 }
 
-const workflows = [".github/workflows/ci.yml", ".github/workflows/release.yaml"] as const;
+const workflows = [".github/workflows/ci.yaml", ".github/workflows/release.yaml"] as const;
 
 function jobsOf(path: string): [string, Job][] {
   const doc = parse(readRepoFile(path)) as { jobs: Record<string, Job> };
@@ -61,7 +61,7 @@ describe("fitness — a published artefact says which commit it came from", () =
     // An inventory rather than "at least one", because the failure is a THIRD path that
     // publishes without attesting — the whole reason the other assertions here are not
     // enough on their own.
-    expect(publishers.map((p) => p.id).sort()).toEqual(["ci.yml:prerelease", "release.yaml:release"]);
+    expect(publishers.map((p) => p.id).sort()).toEqual(["ci.yaml:prerelease", "release.yaml:release"]);
   });
 
   it("attests the reproducible xpi and the source archive from both of them", () => {

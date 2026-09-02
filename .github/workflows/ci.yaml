@@ -232,7 +232,7 @@ jobs:
       contents: read
       pages: write
       id-token: write
-    uses: ./.github/workflows/publish-dev-manifest.yml
+    uses: ./.github/workflows/publish-dev-manifest.yaml
 
   required-status-check:
     name: ci.required-status-check

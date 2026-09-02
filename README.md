@@ -171,7 +171,7 @@ published release and its assets cannot be changed — the asset is uploaded in 
 call that creates the release, and the URL Firefox downloads from can never serve
 different bytes. The manifest pointing at those releases has to change on every merge, so
 it lives on GitHub Pages at a constant URL (`scripts/dev-updates.js` rebuilds it from the
-releases API and `ci.yml` deploys it). Rolling back means **deleting** a dev release and
+releases API and `ci.yaml` deploys it). Rolling back means **deleting** a dev release and
 re-running the manifest job, never editing a published one.
 
 That Pages URL is baked into every signed build and polled forever, so it cannot be

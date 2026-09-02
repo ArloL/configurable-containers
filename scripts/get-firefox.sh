@@ -66,5 +66,5 @@ case "$want" in
 esac
 
 echo
-echo "FIREFOX_BIN=$dest/latest/firefox npm test   # the channel ci.yml calls latest"
+echo "FIREFOX_BIN=$dest/latest/firefox npm test   # the channel ci.yaml calls latest"
 echo "FIREFOX_BIN=$dest/esr/firefox npm test      # the channel it calls latest-esr"

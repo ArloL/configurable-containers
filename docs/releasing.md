@@ -126,10 +126,10 @@ shaped the way they are.
   "this release does not reproduce".
 - **A release published with `GITHUB_TOKEN` triggers NO workflow**, so `on: release` is a
   dead trigger for every release this repo cuts — GitHub suppresses those events to stop
-  workflows recursing. Proof rather than folklore: `publish-dev-manifest.yml` has declared
+  workflows recursing. Proof rather than folklore: `publish-dev-manifest.yaml` has declared
   `on: release: [published]` since July and has one run ever, a manual dispatch, across
-  ~150 releases; it works only because `ci.yml` *calls* it. `verify-release.yaml` is wired
-  the same way — `workflow_call` with the tag as an input, invoked by `ci.yml` and
+  ~150 releases; it works only because `ci.yaml` *calls* it. `verify-release.yaml` is wired
+  the same way — `workflow_call` with the tag as an input, invoked by `ci.yaml` and
   `release.yaml` after they publish — and keeps `on: release` only for a release a person
   creates in the UI, which does fire.
 - **GitHub immutable releases are ENABLED**: assets can't be edited, so the dev xpi ships

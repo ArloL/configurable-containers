@@ -128,7 +128,7 @@ mechanics of L4/L5.
 
 - **A machine with no Firefox can get one: `./scripts/get-firefox.sh`.** It fetches both
   channels into `.firefox/`, and then `FIREFOX_BIN=.firefox/esr/firefox npm test` runs the
-  suite exactly as `ci.yml`'s `latest-esr` leg does. It fetches linux64 only, which is
+  suite exactly as `ci.yaml`'s `latest-esr` leg does. It fetches linux64 only, which is
   what CI runs; on macOS take the dmg from
   `download.mozilla.org/?product=firefox-esr-latest-ssl&os=osx` and point `FIREFOX_BIN` at
   `Firefox.app/Contents/MacOS/firefox` inside it. geckodriver needs no setup —

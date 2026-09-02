@@ -45,7 +45,7 @@ taken.
   `true` and turns caching on as soon as `package.json` declares `packageManager` or
   `devEngines.packageManager` — so omitting `cache:` disables nothing, and a suppression
   would go on lying the day that field is added. Both verifiers
-  (`verify-release.yaml`, `nightly.yml`'s reproducible-build) therefore pass
+  (`verify-release.yaml`, `nightly.yaml`'s reproducible-build) therefore pass
   `package-manager-cache: false`: a job deciding whether a published artefact is
   trustworthy must not install from a mutable cache an earlier run could have poisoned, or
   a tampered build gets certified reproducible. zizmor only reports the pairing on a

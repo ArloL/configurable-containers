@@ -24,7 +24,7 @@ jobs:
       contents: read
     steps:
       # No mac necessary: this runs one CC-only case. mac/ is needed by
-      # test/e2e/mac-interop.test.ts, which ci.yml already covers on every push.
+      # test/e2e/mac-interop.test.ts, which ci.yaml already covers on every push.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -34,7 +34,7 @@ jobs:
           node-version: 24
           cache: npm
 
-      # Same reason as ci.yml: the runner's default Firefox is a snap, which
+      # Same reason as ci.yaml: the runner's default Firefox is a snap, which
       # geckodriver/Selenium cannot drive reliably.
       - uses: browser-actions/setup-firefox@0bc507ddf224827e3b1af68e014d5e42ab93e795 # v1.7.2
         id: firefox
@@ -148,7 +148,7 @@ jobs:
       - run: npm ci
 
       # Fails on DISAGREEMENT between the runs — a case that fails every time is the suite
-      # being red, which ci.yml already reports — and on a run that failed as a WHOLE with
+      # being red, which ci.yaml already reports — and on a run that failed as a WHOLE with
       # no case to show for it, which is what a dead `beforeAll` looks like and what this
       # job used to call "all consistent". `npm test` deliberately has no --retry to paper
       # over either.
@@ -185,7 +185,7 @@ jobs:
           node-version: 24
           cache: npm
 
-      # The early warning ci.yml's latest/latest-esr matrix cannot give: what Firefox is
+      # The early warning ci.yaml's latest/latest-esr matrix cannot give: what Firefox is
       # about to do, rather than what it does. A break here is months of notice on a
       # webRequest or containers change; a break on `latest` is a break for users today.
       - uses: browser-actions/setup-firefox@0bc507ddf224827e3b1af68e014d5e42ab93e795 # v1.7.2
@@ -306,7 +306,7 @@ jobs:
           report "Firefox Nightly tripwire is failing" "$(cat <<EOF
         \`npm test\` failed against Firefox Nightly: $RUN_URL
 
-        This is the early warning, not a break for users: ci.yml runs the same suite
+        This is the early warning, not a break for users: ci.yaml runs the same suite
         against \`latest\` and \`latest-esr\` on every push, and both were green when this
         was written. What it means is that something Firefox is ABOUT to ship changes an
         answer CC depends on.
