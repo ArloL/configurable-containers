@@ -77,10 +77,12 @@ describe("hostMatcher / matches — shorthand semantics", () => {
     // Rejected by the URL parser, not the character class: these carry none of the
     // punctuation it looks for and are still not hostnames. The catch re-raises as the same
     // rejection — the parser's own TypeError would reach the options page as "Cannot read
-    // properties of undefined".
+    // properties of undefined". Only an input every parser refuses belongs here: `xn--`,
+    // an undecodable punycode label, was pinned as one until ada 4.0.0 (Node 24.20.0)
+    // began passing it through as a plain host, and two runners in one CI run then
+    // disagreed on it. `canonicalHost` owns no IDNA rule of its own, so neither can this.
     expect(() => hostMatcher("")).toThrow('not a bare hostname: ""');
     expect(() => hostMatcher("[")).toThrow('not a bare hostname: "["');
-    expect(() => hostMatcher("xn--")).toThrow('not a bare hostname: "xn--"'); // undecodable punycode
   });
 });
 
