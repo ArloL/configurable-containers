@@ -135,6 +135,8 @@ jobs:
       # A called workflow cannot hold more than its caller grants, so the provenance check
       # inside it needs the scope named here as well as there.
       attestations: read
-    uses: ./.github/workflows/verify-release.yaml
+    # `$/…` is zizmor's fix for this and actionlint rejects it as a malformed
+    # workflow-call, so the two gates disagree (rhysd/actionlint#732).
+    uses: ./.github/workflows/verify-release.yaml # zizmor: ignore[self-repository]
     with:
       tag: v${{ needs.release.outputs.version }}
