@@ -39,13 +39,15 @@ taken.
   found one on the push that added the flag: a `typescript/no-explicit-any` directive over
   the `declare module "vitest"` merge, where the rule is pedantic and has never been on.
 - **The workflows have their own two gates — `actionlint` and `zizmor`** (`check-actions.yaml`),
-  and zizmor fails the build on any finding. There are no zizmor suppressions, and its
-  `cache-poisoning` finding on a release trigger is the reason: the fix is real, not an
-  ignore. `actions/setup-node` caches BY DEFAULT — `package-manager-cache` defaults to
-  `true` and turns caching on as soon as `package.json` declares `packageManager` or
-  `devEngines.packageManager` — so omitting `cache:` disables nothing, and a suppression
-  would go on lying the day that field is added. Both verifiers
-  (`verify-release.yaml`, `nightly.yaml`'s reproducible-build) therefore pass
+  and zizmor fails the build on any finding. It has exactly one suppression, and the reason
+  it is not two is its `cache-poisoning` finding on a release trigger: that fix is real, not
+  an ignore. The one is `self-repository` on the three `uses: ./.github/workflows/…` calls,
+  where the `$/…` it asks for is a malformed workflow-call to actionlint — the two gates
+  want different text, and FOLLOWUPS.md holds the re-check. `actions/setup-node` caches BY
+  DEFAULT — `package-manager-cache` defaults to `true` and turns caching on as soon as
+  `package.json` declares `packageManager` or `devEngines.packageManager` — so omitting
+  `cache:` disables nothing, and a suppression would go on lying the day that field is
+  added. Both verifiers (`verify-release.yaml`, `nightly.yaml`'s reproducible-build) pass
   `package-manager-cache: false`: a job deciding whether a published artefact is
   trustworthy must not install from a mutable cache an earlier run could have poisoned, or
   a tampered build gets certified reproducible. zizmor only reports the pairing on a
@@ -55,7 +57,8 @@ taken.
   worth keeping: the reasoning, where a reviewer would see it, in a project that can be
   recreated. Suppression is per rule and path
   (`sonar.issue.ignore.multicriteria.<id>.{ruleKey,resourceKey}`), and each id in that file
-  carries the comment saying why. Unlike zizmor — which has no suppressions on purpose —
+  carries the comment saying why. Unlike zizmor — whose one suppression is there only
+  because the other workflow gate rejects its fix —
   a few of these rules are simply wrong about this code, and one of them is wrong in the
   direction that matters: `S2871` asks for `localeCompare` behind the `.sort()` in
   `scripts/package.ts`, and taking that advice breaks reproducible builds, since that sort

@@ -3,6 +3,20 @@
 Things deliberately left needing a re-check, and where to look. Delete an entry once it is
 resolved.
 
+## zizmor and actionlint disagree about how this repo calls its own workflows (2026-09-02)
+
+zizmor's `self-repository` audit asks for `uses: $/.github/workflows/x.yaml` where we write
+`./…`; actionlint rejects `$/…` outright as a malformed workflow-call, and both gates run on
+every push. The three call sites — `verify-release` and `publish-dev-manifest` in `ci.yaml`,
+`verify-release` in `release.yaml` — therefore carry `# zizmor: ignore[self-repository]`
+with the reason on the line above. It is the only zizmor suppression here, against a policy
+of having none, and it buys nothing but a green run of the other gate.
+
+<https://github.com/rhysd/actionlint/pull/732> adds the syntax. Once an actionlint release
+carries it, drop the three ignores and write `$/…`: `uvx zizmor .` then reports nothing
+without them and `actionlint` stays clean, which is the whole check. The check-actions
+workflow pins neither tool to a version, so this arrives on its own.
+
 ## The live `Config` object mutates under four siblings, and no type says so (2026-08-29)
 
 `wireBackground` creates one `Config` and fills it in place with `Object.assign` inside
