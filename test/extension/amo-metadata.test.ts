@@ -247,17 +247,28 @@ describe("the copy this repo actually ships", () => {
   // it has to be one this project actually stands behind. It said "Needs Node 22+" while CI
   // built and verified on 24 only, `package.json` declares no `engines`, and nothing
   // anywhere established that a Node 22 rebuild produces the same bytes.
+  //
+  // The version lives in `.tool-versions`, to the patch, and every workflow reads it
+  // through `node-version-file`. It was `node-version: 24` in each, and a major alone
+  // is a request for whatever 24.x the runner image has cached: the two legs of one CI
+  // run built on 24.19.0 and 24.20.0 and disagreed on the same commit, since 24.20.0's
+  // URL parser answers `xn--` differently. Renovate bumps the file; the notes name only
+  // the major, so a patch bump does not have to touch them.
   it("names the Node version CI really builds on, rather than a floor nobody tested", () => {
-    const declared = new Set(
-      globSync(".github/workflows/*.y*ml", { cwd: root })
-        .flatMap((file) => [...readFileSync(root + file, "utf8").matchAll(/node-version:\s*(\d+)/g)])
-        .map((m) => m[1]!),
-    );
+    const pinned = /^nodejs (\d+)\.\d+\.\d+$/m.exec(readFileSync(root + ".tool-versions", "utf8"));
+    expect(pinned).not.toBeNull();
 
     // One version across every workflow: if the release build and the reproducibility
-    // verifier ever disagreed, no single sentence here could be true for both.
-    expect([...declared]).toHaveLength(1);
-    expect(readListingCopy().reviewerNotes).toContain(`Node ${[...declared][0]}`);
+    // verifier ever disagreed, no single sentence here could be true for both. So every
+    // setup-node step reads the file, and none spells a version of its own.
+    for (const file of globSync(".github/workflows/*.y*ml", { cwd: root })) {
+      const text = readFileSync(root + file, "utf8");
+      const steps = text.match(/uses: actions\/setup-node@/g)?.length ?? 0;
+      const reads = text.match(/node-version-file: \.tool-versions/g)?.length ?? 0;
+      expect({ file, reads }).toEqual({ file, reads: steps });
+      expect(text).not.toMatch(/node-version:/);
+    }
+    expect(readListingCopy().reviewerNotes).toContain(`Node ${pinned![1]}`);
   });
 
   // The same shape as the permissions case, for the same reason, over the claim a reviewer

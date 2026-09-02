@@ -82,7 +82,8 @@ back. See [CONFIG.md](CONFIG.md#syncing-between-machines).
 
 ## Building from source
 
-Requires Node 22 or newer (verified on 24). Building needs nothing else.
+Requires Node 22 or newer. CI builds and verifies on the exact version in `.tool-versions`
+(asdf and mise read it), which Renovate keeps current. Building needs nothing else.
 
 ```
 npm ci
