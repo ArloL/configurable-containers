@@ -30,7 +30,8 @@ on:
         type: string
   # For a release a PERSON creates in the GitHub UI, which does trigger.
   release:
-    types: [published]
+    types:
+    - published
   # And for checking a release published before this workflow existed.
   workflow_dispatch:
     inputs:
@@ -50,11 +51,10 @@ jobs:
       contents: read
       attestations: read # reads the provenance the publishing job stored
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      # Caching is disabled EXPLICITLY, and omitting `cache:` is not enough to do it:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+    - # Caching is disabled EXPLICITLY, and omitting `cache:` is not enough to do it:
       # setup-node's `package-manager-cache` input defaults to **true**, so it caches on
       # its own as soon as package.json declares `packageManager` or
       # `devEngines.packageManager`. This repo declares neither today, which means an
@@ -66,14 +66,12 @@ jobs:
       # cache-poisoning audit flags the release trigger paired with a caching action, and
       # the fix is this input rather than an ignore: a suppression would go on lying the
       # day package.json gains that field.
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24
-          package-manager-cache: false
-
-      - run: npm ci
-
-      # The half the hash comparison below cannot reach. Rebuilding the xpi from its own
+      uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      with:
+        node-version: 24
+        package-manager-cache: false
+    - run: npm ci
+    - # The half the hash comparison below cannot reach. Rebuilding the xpi from its own
       # published source archive proves the two agree WITH EACH OTHER — a release built by
       # hand, from a tree that never existed in git, reproduces against itself perfectly and
       # passes every other check this repo runs. The provenance names the commit, so this is
@@ -103,40 +101,39 @@ jobs:
       # The tag is checked for shape first, for the reason verify-reproducible.ts's
       # `releaseTag` gives: it goes into an API path, and one carrying "../" or "?" addresses
       # a different release from the one this job believes it is verifying.
-      - name: Verify the release's build provenance
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ inputs.tag || github.event.release.tag_name }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          echo "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$' || {
-            echo "::error::not a release tag: $TAG (expected v<YYMM>.<day>.<micro>)"
+      name: Verify the release's build provenance
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        TAG: ${{ inputs.tag || github.event.release.tag_name }}
+        REPO: ${{ github.repository }}
+      run: |
+        set -euo pipefail
+        echo "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$' || {
+          echo "::error::not a release tag: $TAG (expected v<YYMM>.<day>.<micro>)"
+          exit 1
+        }
+        version="${TAG#v}"
+        dir="$(mktemp -d)"
+        gh release download "$TAG" --repo "$REPO" --dir "$dir" \
+          --pattern "configurable-containers-${version}.xpi" \
+          --pattern "configurable-containers-src-${version}.zip"
+        commit="$(gh api "repos/${REPO}/commits/${TAG}" --jq .sha)"
+        echo "$TAG is commit $commit"
+        for file in "$dir"/*; do
+          built_from="$(gh attestation verify "$file" --repo "$REPO" --format json \
+            --jq '.[].verificationResult.signature.certificate.sourceRepositoryDigest' \
+            | sort -u)"
+          if [ "$built_from" != "$commit" ]; then
+            echo "::error::$(basename "$file") attests a build of '${built_from}', not ${commit}"
             exit 1
-          }
-          version="${TAG#v}"
-          dir="$(mktemp -d)"
-          gh release download "$TAG" --repo "$REPO" --dir "$dir" \
-            --pattern "configurable-containers-${version}.xpi" \
-            --pattern "configurable-containers-src-${version}.zip"
-          commit="$(gh api "repos/${REPO}/commits/${TAG}" --jq .sha)"
-          echo "$TAG is commit $commit"
-          for file in "$dir"/*; do
-            built_from="$(gh attestation verify "$file" --repo "$REPO" --format json \
-              --jq '.[].verificationResult.signature.certificate.sourceRepositoryDigest' \
-              | sort -u)"
-            if [ "$built_from" != "$commit" ]; then
-              echo "::error::$(basename "$file") attests a build of '${built_from}', not ${commit}"
-              exit 1
-            fi
-            echo "$(basename "$file"): built from $built_from"
-          done
-
-      # Downloads the release's own xpi and source archive, rebuilds from the archive with
+          fi
+          echo "$(basename "$file"): built from $built_from"
+        done
+    - # Downloads the release's own xpi and source archive, rebuilds from the archive with
       # the release's own published BUILD_TIMESTAMP, and compares the sha256. A mismatch
       # means the notes promise a reproduction that does not hold.
-      - name: Rebuild the published release and compare hashes
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ inputs.tag || github.event.release.tag_name }}
-        run: npm run verify:reproducible -- "$TAG"
+      name: Rebuild the published release and compare hashes
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        TAG: ${{ inputs.tag || github.event.release.tag_name }}
+      run: npm run verify:reproducible -- "$TAG"

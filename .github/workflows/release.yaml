@@ -17,72 +17,61 @@ jobs:
       # So verify-release can be handed the tag rather than going looking for it.
       version: ${{ steps.version.outputs.new_version }}
     steps:
-      # calver-tag-action pushes the tag with these credentials, so unlike ci.yaml
-      # they must be kept.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: true
-
-      # `npm test` below includes test/e2e/mac-interop.test.ts, which builds MAC's
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        fetch-depth: 0
+        # calver-tag-action pushes the tag with these credentials, so unlike ci.yaml
+        # they must be kept.
+        persist-credentials: true
+    - # `npm test` below includes test/e2e/mac-interop.test.ts, which builds MAC's
       # xpi from an unbuilt mac/src and FAILS rather than skips when it is absent.
       # Without this the release can never reach the tag step. mac/ is gitignored,
       # so it stays out of the source archive built from HEAD further down.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: mozilla/multi-account-containers
-          path: mac
-          persist-credentials: false
-
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24
-          cache: npm
-
-      - uses: browser-actions/setup-firefox@0bc507ddf224827e3b1af68e014d5e42ab93e795 # v1.7.2
-        id: firefox
-        with:
-          firefox-version: latest
-
-      - run: npm ci
-
-      - run: npm run typecheck
-      - run: npm run lint
-
-      # Everything that can reject the build runs BEFORE calver-tag-action, so a
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        path: mac
+        persist-credentials: false
+        repository: mozilla/multi-account-containers
+    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      with:
+        cache: npm
+        node-version: 24
+    - id: firefox
+      uses: browser-actions/setup-firefox@0bc507ddf224827e3b1af68e014d5e42ab93e795 # v1.7.2
+      with:
+        firefox-version: latest
+    - run: npm ci
+    - run: npm run typecheck
+    - run: npm run lint
+    - # Everything that can reject the build runs BEFORE calver-tag-action, so a
       # failure never leaves a pushed tag behind with no release against it.
-      - run: npm run lint:ext
-
-      # A release that has not passed e2e is not a release.
-      - name: Run tests (headless Firefox via Selenium)
-        env:
-          FIREFOX_BIN: ${{ steps.firefox.outputs.firefox-path }}
-        run: npm test
-
-      - uses: ArloL/calver-tag-action@3f0c5cbd7acfa52ddeef19ae080b540c03d231f7 # v2608.0.107
-        id: version
-
-      # zip records mtimes, so the archive is only reproducible against a known
+      run: npm run lint:ext
+    - # A release that has not passed e2e is not a release.
+      name: Run tests (headless Firefox via Selenium)
+      env:
+        FIREFOX_BIN: ${{ steps.firefox.outputs.firefox-path }}
+      run: npm test
+    - id: version
+      uses: ArloL/calver-tag-action@3f0c5cbd7acfa52ddeef19ae080b540c03d231f7 # v2608.0.107
+    - # zip records mtimes, so the archive is only reproducible against a known
       # timestamp. It is captured here and published in the release notes below —
       # nobody can derive it, so it has to be told.
-      - name: Package the xpi at the tagged version
-        env:
-          VERSION: ${{ steps.version.outputs.new_version }}
-        run: |
-          BUILD_TIMESTAMP="$(date --iso-8601=seconds)"
-          export BUILD_TIMESTAMP
-          echo "BUILD_TIMESTAMP=$BUILD_TIMESTAMP" | tee -a "$GITHUB_ENV"
-          npm run package -- "$VERSION"
-
-      # AMO requires reviewable source whenever the shipped JS is bundled, and
+      name: Package the xpi at the tagged version
+      env:
+        VERSION: ${{ steps.version.outputs.new_version }}
+      run: |
+        BUILD_TIMESTAMP="$(date --iso-8601=seconds)"
+        export BUILD_TIMESTAMP
+        echo "BUILD_TIMESTAMP=$BUILD_TIMESTAMP" | tee -a "$GITHUB_ENV"
+        npm run package -- "$VERSION"
+    - # AMO requires reviewable source whenever the shipped JS is bundled, and
       # background.js is an esbuild bundle.
-      - name: Build the source archive
-        env:
-          VERSION: ${{ steps.version.outputs.new_version }}
-        run: |
-          git archive --format=zip --output "dist/configurable-containers-src-${VERSION}.zip" HEAD
-
-      # The same provenance ci.yaml's dev channel attests, over the same two artefacts, for
+      name: Build the source archive
+      env:
+        VERSION: ${{ steps.version.outputs.new_version }}
+      run: |
+        git archive --format=zip --output "dist/configurable-containers-src-${VERSION}.zip" HEAD
+    - # The same provenance ci.yaml's dev channel attests, over the same two artefacts, for
       # the same reason: rebuilding the xpi from its own source archive proves only that the
       # two agree with each other, and a release built by hand from a tree that never existed
       # in git reproduces against itself perfectly. This is what ties the archive to a commit
@@ -92,56 +81,53 @@ jobs:
       # It attests what is on disk here, which is the pre-signing xpi. The copy AMO signs and
       # serves is repacked and is not byte-comparable with it, so nothing about the installed
       # file is being claimed.
-      - name: Attest the reproducible build
-        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
-        with:
-          subject-path: |
-            dist/configurable-containers-${{ steps.version.outputs.new_version }}.xpi
-            dist/configurable-containers-src-${{ steps.version.outputs.new_version }}.zip
-
-      # Attaching the archive to the GitHub release satisfies nothing on AMO's side;
+      name: Attest the reproducible build
+      uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+      with:
+        subject-path: |
+          dist/configurable-containers-${{ steps.version.outputs.new_version }}.xpi
+          dist/configurable-containers-src-${{ steps.version.outputs.new_version }}.zip
+    - # Attaching the archive to the GitHub release satisfies nothing on AMO's side;
       # --upload-source-code is what does.
       #
       # This also publishes the listing copy in amo/ — summary, description and the
       # reviewer notes, which name the VERSION and BUILD_TIMESTAMP above, so both must be
       # in scope here. BUILD_TIMESTAMP arrives through GITHUB_ENV from the package step.
-      - name: Submit to AMO (listed channel)
-        env:
-          WEB_EXT_API_KEY: ${{ secrets.WEB_EXT_API_KEY }}
-          WEB_EXT_API_SECRET: ${{ secrets.WEB_EXT_API_SECRET }}
-          VERSION: ${{ steps.version.outputs.new_version }}
-        run: |
-          npm run submit -- \
-            --upload-source-code "dist/configurable-containers-src-${VERSION}.zip"
-
-      - name: Publish the GitHub release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.version.outputs.new_version }}
-        run: |
-          # --notes is prepended to --generate-notes output. BUILD_TIMESTAMP is
-          # published because the source archive has no .git for anyone to derive it
-          # from, and without it the rebuild will not match byte for byte.
-          gh release create "v${VERSION}" \
-            --title "v${VERSION}" \
-            --generate-notes \
-            --notes "Reproduce this build:
-          \`\`\`
-          npm ci
-          BUILD_TIMESTAMP=${BUILD_TIMESTAMP} npm run package -- ${VERSION}
-          \`\`\`
-          Check what built it, and from which commit:
-          \`\`\`
-          gh attestation verify configurable-containers-${VERSION}.xpi --repo ${GITHUB_REPOSITORY}
-          \`\`\`
-          " \
-            "dist/configurable-containers-${VERSION}.xpi" \
-            "dist/configurable-containers-src-${VERSION}.zip"
-
-  # Called, not triggered. The release above was created with GITHUB_TOKEN, and GitHub
-  # fires no workflow for those — see verify-release.yaml's `on:`. Running it here also
-  # means a listed release is checked before anyone acts on it.
+      name: Submit to AMO (listed channel)
+      env:
+        WEB_EXT_API_KEY: ${{ secrets.WEB_EXT_API_KEY }}
+        WEB_EXT_API_SECRET: ${{ secrets.WEB_EXT_API_SECRET }}
+        VERSION: ${{ steps.version.outputs.new_version }}
+      run: |
+        npm run submit -- \
+          --upload-source-code "dist/configurable-containers-src-${VERSION}.zip"
+    - name: Publish the GitHub release
+      env:
+        GH_TOKEN: ${{ github.token }}
+        VERSION: ${{ steps.version.outputs.new_version }}
+      run: |
+        # --notes is prepended to --generate-notes output. BUILD_TIMESTAMP is
+        # published because the source archive has no .git for anyone to derive it
+        # from, and without it the rebuild will not match byte for byte.
+        gh release create "v${VERSION}" \
+          --title "v${VERSION}" \
+          --generate-notes \
+          --notes "Reproduce this build:
+        \`\`\`
+        npm ci
+        BUILD_TIMESTAMP=${BUILD_TIMESTAMP} npm run package -- ${VERSION}
+        \`\`\`
+        Check what built it, and from which commit:
+        \`\`\`
+        gh attestation verify configurable-containers-${VERSION}.xpi --repo ${GITHUB_REPOSITORY}
+        \`\`\`
+        " \
+          "dist/configurable-containers-${VERSION}.xpi" \
+          "dist/configurable-containers-src-${VERSION}.zip"
   verify-release:
+    # Called, not triggered. The release above was created with GITHUB_TOKEN, and GitHub
+    # fires no workflow for those — see verify-release.yaml's `on:`. Running it here also
+    # means a listed release is checked before anyone acts on it.
     name: Verify the published release
     needs: release
     permissions:
