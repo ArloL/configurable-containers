@@ -18,8 +18,7 @@ jobs:
     # the author because github.actor turns human on a rebase or re-run, and a
     # branch name is something any collaborator can forge
     if: >-
-      github.event_name != 'pull_request'
-      || (
+      github.event_name != 'pull_request' || (
         github.event.pull_request.user.login != 'dependabot[bot]'
         && github.event.pull_request.user.login != 'renovate[bot]'
       )
@@ -40,28 +39,28 @@ jobs:
         # access of its own.
         fetch-depth: 0
         persist-credentials: false
-
-    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+    - 
+      uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
       with:
-        node-version: 24
         cache: npm
-
-    - run: npm ci
-
-    # L1-L3 only, seconds, no browser. The scan step imports the lcov this writes; without
-    # this step the analysis still succeeds and reports the project at 0% covered.
-    - run: npm run test:coverage
-
-    - uses: SonarSource/sonarqube-scan-action@22918119ff8e1ca75a623e15c8296b6ea4fbe28f # v8.2.1
-      with:
-        # Wait for the quality gate so a failure fails this workflow's own
-        # required status check, which also reports on the bumps we skip
-        args: -Dsonar.qualitygate.wait=true
+        node-version: 24
+    - 
+      run: npm ci
+    - 
+      # L1-L3 only, seconds, no browser. The scan step imports the lcov this writes; without
+      # this step the analysis still succeeds and reports the project at 0% covered.
+      run: npm run test:coverage
+    - 
+      uses: SonarSource/sonarqube-scan-action@22918119ff8e1ca75a623e15c8296b6ea4fbe28f # v8.2.1
       env:
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         # The action targets SonarQube Server by default. Cloud needs the host named
         # explicitly; omit it and the scan fails resolving a server that is not there.
         SONAR_HOST_URL: https://sonarcloud.io
+      with:
+        # Wait for the quality gate so a failure fails this workflow's own
+        # required status check, which also reports on the bumps we skip
+        args: -Dsonar.qualitygate.wait=true
 
   required-status-check:
     name: sonarcloud.required-status-check
