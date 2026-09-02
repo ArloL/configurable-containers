@@ -23,32 +23,28 @@ jobs:
     permissions:
       contents: read
     steps:
-      # No mac necessary: this runs one CC-only case. mac/ is needed by
+    - # No mac necessary: this runs one CC-only case. mac/ is needed by
       # test/e2e/mac-interop.test.ts, which ci.yaml already covers on every push.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24
-          cache: npm
-
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      with:
+        cache: npm
+        node-version: 24
+    - id: firefox
       # Same reason as ci.yaml: the runner's default Firefox is a snap, which
       # geckodriver/Selenium cannot drive reliably.
-      - uses: browser-actions/setup-firefox@0bc507ddf224827e3b1af68e014d5e42ab93e795 # v1.7.2
-        id: firefox
-        with:
-          firefox-version: latest
-
-      - run: npm ci
-
-      # A real five-minute timer in a real background page — the one thing the fake
+      uses: browser-actions/setup-firefox@0bc507ddf224827e3b1af68e014d5e42ab93e795 # v1.7.2
+      with:
+        firefox-version: latest
+    - run: npm ci
+    - # A real five-minute timer in a real background page — the one thing the fake
       # clock at L3 and the 500ms grace at L4 structurally cannot prove.
-      - name: Run the real-delay cases (headless Firefox via Selenium)
-        env:
-          FIREFOX_BIN: ${{ steps.firefox.outputs.firefox-path }}
-        run: npm run test:realtime
+      name: Run the real-delay cases (headless Firefox via Selenium)
+      env:
+        FIREFOX_BIN: ${{ steps.firefox.outputs.firefox-path }}
+      run: npm run test:realtime
 
   mutation:
     name: Mutation gate (the pure modules)
@@ -58,42 +54,37 @@ jobs:
     permissions:
       contents: read
     steps:
-      # No Firefox and no mac here — the suite Stryker runs is the pure levels only, on
+    - # No Firefox and no mac here — the suite Stryker runs is the pure levels only, on
       # purpose (vitest.mutation.config.ts says why).
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24
-          cache: npm
-
-      - run: npm ci
-
-      # Fails under 100%. The log names every surviving mutant and the tests that ran
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      with:
+        cache: npm
+        node-version: 24
+    - run: npm ci
+    - # Fails under 100%. The log names every surviving mutant and the tests that ran
       # against it, which is what the follow-up work needs.
-      - name: Mutate the resolver, the matcher, the same-site check, the config parser and the overlays
-        run: npm run test:mutation
-
-      # Stryker writes this on every run and, until now, the runner was torn down with it
+      name: Mutate the resolver, the matcher, the same-site check, the config parser and the overlays
+      run: npm run test:mutation
+    - # Stryker writes this on every run and, until now, the runner was torn down with it
       # still inside: a browsable per-mutant report — the mutated source, what each survivor
       # changed, which tests ran — that nobody could ever open. The clear-text table in the
       # log is a score; this is the thing you need the moment a mutant survives.
       #
       # `always()`, because the run that fails is exactly the run worth reading, and a
       # failing step would otherwise skip its own evidence.
-      - name: Keep the mutation report
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: mutation-report
-          path: reports/mutation/
-          retention-days: 14
+      name: Keep the mutation report
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: mutation-report
+        path: reports/mutation/
+        retention-days: 14
 
   flake:
     name: e2e determinism (sample ${{ matrix.sample }})
-    runs-on: ubuntu-latest
     # Two SAMPLES, ten runs each. Not shards — each leg runs the whole tier and reaches its
     # own verdict; what differs is the machine.
     #
@@ -115,39 +106,37 @@ jobs:
       # to say whether it saw the same one — that comparison is half the diagnosis.
       fail-fast: false
       matrix:
-        sample: [1, 2]
+        sample:
+        - 1
+        - 2
+    runs-on: ubuntu-latest
     # Twenty-odd minutes of testing. Generous, because a run killed at the cap looks
     # exactly like the thing this job exists to report.
     timeout-minutes: 120
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      # test/e2e/mac-interop.test.ts FAILS rather than skips without it, and a case that
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+    - # test/e2e/mac-interop.test.ts FAILS rather than skips without it, and a case that
       # fails every run would be reported here as red rather than as flaky — true, but not
       # what anyone wants this job to say.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: mozilla/multi-account-containers
-          path: mac
-          persist-credentials: false
-
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24
-          cache: npm
-
-      - uses: browser-actions/setup-firefox@0bc507ddf224827e3b1af68e014d5e42ab93e795 # v1.7.2
-        id: firefox
-        with:
-          firefox-version: latest
-
-      - run: npm ci
-
-      # Fails on DISAGREEMENT between the runs — a case that fails every time is the suite
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        path: mac
+        persist-credentials: false
+        repository: mozilla/multi-account-containers
+    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      with:
+        cache: npm
+        node-version: 24
+    - id: firefox
+      uses: browser-actions/setup-firefox@0bc507ddf224827e3b1af68e014d5e42ab93e795 # v1.7.2
+      with:
+        firefox-version: latest
+    - run: npm ci
+    - # Fails on DISAGREEMENT between the runs — a case that fails every time is the suite
       # being red, which ci.yaml already reports — and on a run that failed as a WHOLE with
       # no case to show for it, which is what a dead `beforeAll` looks like and what this
       # job used to call "all consistent". `npm test` deliberately has no --retry to paper
@@ -157,11 +146,11 @@ jobs:
       # seeds so the report can name them). That is what lets this see an order dependence
       # at all: in a fixed order such a case fails identically every run, which reads as red
       # rather than as a race, and the comparison never gets to say anything about it.
-      - name: Run the browser tier ten times and compare
-        env:
-          FIREFOX_BIN: ${{ steps.firefox.outputs.firefox-path }}
-          FLAKE_RUNS: "10"
-        run: npm run test:flake
+      name: Run the browser tier ten times and compare
+      env:
+        FIREFOX_BIN: ${{ steps.firefox.outputs.firefox-path }}
+        FLAKE_RUNS: '10'
+      run: npm run test:flake
 
   firefox-nightly:
     name: Firefox Nightly tripwire
@@ -170,39 +159,33 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: mozilla/multi-account-containers
-          path: mac
-          persist-credentials: false
-
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24
-          cache: npm
-
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        path: mac
+        persist-credentials: false
+        repository: mozilla/multi-account-containers
+    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      with:
+        cache: npm
+        node-version: 24
+    - id: firefox
       # The early warning ci.yaml's latest/latest-esr matrix cannot give: what Firefox is
       # about to do, rather than what it does. A break here is months of notice on a
       # webRequest or containers change; a break on `latest` is a break for users today.
-      - uses: browser-actions/setup-firefox@0bc507ddf224827e3b1af68e014d5e42ab93e795 # v1.7.2
-        id: firefox
-        with:
-          firefox-version: latest-nightly
-
-      - env:
-          FIREFOX_BIN: ${{ steps.firefox.outputs.firefox-path }}
-        run: '"$FIREFOX_BIN" --version'
-
-      - run: npm ci
-
-      - name: Run tests against Firefox Nightly
-        env:
-          FIREFOX_BIN: ${{ steps.firefox.outputs.firefox-path }}
-        run: npm test
+      uses: browser-actions/setup-firefox@0bc507ddf224827e3b1af68e014d5e42ab93e795 # v1.7.2
+      with:
+        firefox-version: latest-nightly
+    - env:
+        FIREFOX_BIN: ${{ steps.firefox.outputs.firefox-path }}
+      run: '"$FIREFOX_BIN" --version'
+    - run: npm ci
+    - name: Run tests against Firefox Nightly
+      env:
+        FIREFOX_BIN: ${{ steps.firefox.outputs.firefox-path }}
+      run: npm test
 
   reproducible-build:
     name: Reproducible release build
@@ -211,24 +194,21 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      # Uncached for the same reason verify-release.yaml is: a verifier must not install
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+    - # Uncached for the same reason verify-release.yaml is: a verifier must not install
       # from a mutable cache an earlier run could have poisoned, or a tampered build gets
       # certified reproducible. `package-manager-cache` defaults to TRUE, so dropping
       # `cache: npm` is not enough — setup-node would resume caching the day package.json
       # declares `packageManager`. zizmor only flags the pairing on a release trigger, so
       # nothing would have reported it here.
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24
-          package-manager-cache: false
-
-      - run: npm ci
-
-      # Every release body says "Reproduce this build:" and gives two commands. This runs
+      uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      with:
+        node-version: 24
+        package-manager-cache: false
+    - run: npm ci
+    - # Every release body says "Reproduce this build:" and gives two commands. This runs
       # them: it rebuilds the last LISTED release from its own published source archive
       # with its own published BUILD_TIMESTAMP, and compares the sha256 with the xpi
       # attached beside it. Nothing else ever checks that promise — AMO repacks uploads,
@@ -239,10 +219,10 @@ jobs:
       # was cut STILL reproduces on today'"'"'s toolchain — a newer Node, a dependency yanked
       # from the registry, a source archive that stopped installing. Delete it and that
       # decay goes unnoticed.
-      - name: Rebuild the last listed release and compare hashes
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm run verify:reproducible
+      name: Rebuild the last listed release and compare hashes
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: npm run verify:reproducible
 
   report-regression:
     name: Report a regression

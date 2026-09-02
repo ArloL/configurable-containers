@@ -11,7 +11,6 @@ permissions: {}
 
 jobs:
   test:
-    runs-on: ubuntu-latest
     # Firefox API drift is the one failure class this suite is otherwise blind to: every
     # level below L4 runs against a mock, and the facts the engine is built on ("Firefox
     # fires onBeforeNavigate before that navigation's request", "tabs.create rejects
@@ -28,61 +27,54 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        firefox: [latest, latest-esr]
+        firefox:
+        - latest
+        - latest-esr
+    runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      # checkout mac to run the integration tests
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: mozilla/multi-account-containers
-          path: mac
-          persist-credentials: false
-
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24
-          cache: npm
-
-      - uses: browser-actions/setup-firefox@0bc507ddf224827e3b1af68e014d5e42ab93e795 # v1.7.2
-        id: firefox
-        with:
-          firefox-version: ${{ matrix.firefox }}
-
-      # Printed on purpose: when a case fails on one channel only, the first question is
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+    - # checkout mac to run the integration tests
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        path: mac
+        persist-credentials: false
+        repository: mozilla/multi-account-containers
+    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      with:
+        cache: npm
+        node-version: 24
+    - id: firefox
+      uses: browser-actions/setup-firefox@0bc507ddf224827e3b1af68e014d5e42ab93e795 # v1.7.2
+      with:
+        firefox-version: ${{ matrix.firefox }}
+    - # Printed on purpose: when a case fails on one channel only, the first question is
       # which build it was, and the answer should be in the log rather than inferred from
       # the job name.
-      - env:
-          FIREFOX_BIN: ${{ steps.firefox.outputs.firefox-path }}
-        run: '"$FIREFOX_BIN" --version'
-
-      - run: npm ci
-      - run: npm run typecheck
-
-      # Source lint. Type-aware, so it needs no browser and no build, and it is the only
+      env:
+        FIREFOX_BIN: ${{ steps.firefox.outputs.firefox-path }}
+      run: '"$FIREFOX_BIN" --version'
+    - run: npm ci
+    - run: npm run typecheck
+    - # Source lint. Type-aware, so it needs no browser and no build, and it is the only
       # gate that reads promises rather than types (.oxlintrc.json says what for).
-      - run: npm run lint
-
-      # `--omit=dev` is the one that means anything here: the xpi is an esbuild bundle of
+      run: npm run lint
+    - # `--omit=dev` is the one that means anything here: the xpi is an esbuild bundle of
       # src/, so no node_modules package ships and every current advisory is dev tooling
       # the user never runs. Gated because the production tree is two packages wide
       # (tldts, yaml) and an advisory in either is a real one.
-      - run: npm run audit
-
-      - run: npm run lint:ext
-
-      # The deterministic levels with a coverage floor (TESTING.md, "Cross-cutting
+      run: npm run audit
+    - run: npm run lint:ext
+    - # The deterministic levels with a coverage floor (TESTING.md, "Cross-cutting
       # gates"). Seconds, and it fails before the Firefox suite spends minutes.
-      - run: npm run test:coverage
-
-      - name: Run tests (headless Firefox via Selenium)
-        env:
-          FIREFOX_BIN: ${{ steps.firefox.outputs.firefox-path }}
-        run: npm test
+      run: npm run test:coverage
+    - name: Run tests (headless Firefox via Selenium)
+      env:
+        FIREFOX_BIN: ${{ steps.firefox.outputs.firefox-path }}
+      run: npm test
 
   prerelease:
     name: Publish unlisted dev build
@@ -98,19 +90,19 @@ jobs:
       # So verify-release can be handed the tag rather than going looking for it.
       version: ${{ steps.version.outputs.new_version }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          # calver-tag-action pushes a tag with these
-          persist-credentials: true
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24
-          cache: npm
-      - run: npm ci
-      - uses: ArloL/calver-tag-action@3f0c5cbd7acfa52ddeef19ae080b540c03d231f7 # v2608.0.107
-        id: version
-      # BUILD_TIMESTAMP exactly as release.yaml captures it: zip records mtimes, so the
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        fetch-depth: 0
+        # calver-tag-action pushes a tag with these
+        persist-credentials: true
+    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      with:
+        cache: npm
+        node-version: 24
+    - run: npm ci
+    - id: version
+      uses: ArloL/calver-tag-action@3f0c5cbd7acfa52ddeef19ae080b540c03d231f7 # v2608.0.107
+    - # BUILD_TIMESTAMP exactly as release.yaml captures it: zip records mtimes, so the
       # build is only reproducible against a known instant, and the source archive has no
       # .git for anyone to derive one from. `sign:dev` packages before it signs, so this
       # stamps the reproducible xpi that step leaves in dist/dev/.
@@ -123,18 +115,17 @@ jobs:
       # exactly as release.yaml does for the listed channel: the requirement is the
       # reviewer's, not the channel's, and an unlisted add-on can be reviewed at any time
       # after submission. The archive it leaves behind is the one published below.
-      - name: Build and sign the unlisted dev build
-        env:
-          WEB_EXT_API_KEY: ${{ secrets.WEB_EXT_API_KEY }}
-          WEB_EXT_API_SECRET: ${{ secrets.WEB_EXT_API_SECRET }}
-          VERSION: ${{ steps.version.outputs.new_version }}
-        run: |
-          BUILD_TIMESTAMP="$(date --iso-8601=seconds)"
-          export BUILD_TIMESTAMP
-          echo "BUILD_TIMESTAMP=$BUILD_TIMESTAMP" | tee -a "$GITHUB_ENV"
-          npm run sign:dev
-
-      # Signs a SLSA provenance statement naming this workflow, this run and the COMMIT the
+      name: Build and sign the unlisted dev build
+      env:
+        WEB_EXT_API_KEY: ${{ secrets.WEB_EXT_API_KEY }}
+        WEB_EXT_API_SECRET: ${{ secrets.WEB_EXT_API_SECRET }}
+        VERSION: ${{ steps.version.outputs.new_version }}
+      run: |
+        BUILD_TIMESTAMP="$(date --iso-8601=seconds)"
+        export BUILD_TIMESTAMP
+        echo "BUILD_TIMESTAMP=$BUILD_TIMESTAMP" | tee -a "$GITHUB_ENV"
+        npm run sign:dev
+    - # Signs a SLSA provenance statement naming this workflow, this run and the COMMIT the
       # artefacts were built from, and stores it against the repo — `gh attestation verify
       # <file> --repo ArloL/configurable-containers` checks it, and verify-release.yaml does.
       #
@@ -150,16 +141,15 @@ jobs:
       #
       # Before `gh release create`, so the attestation exists by the time the release the
       # verify job is handed does.
-      - name: Attest the reproducible build
-        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
-        with:
-          # Named exactly rather than globbed: `dist/dev/` also holds the signed build, and a
-          # pattern that swept it in would attest a file AMO repacked.
-          subject-path: |
-            dist/dev/configurable-containers-${{ steps.version.outputs.new_version }}.xpi
-            dist/dev/configurable-containers-src-${{ steps.version.outputs.new_version }}.zip
-
-      # --prerelease is what tells a dev build from a listed one
+      name: Attest the reproducible build
+      uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+      with:
+        # Named exactly rather than globbed: `dist/dev/` also holds the signed build, and a
+        # pattern that swept it in would attest a file AMO repacked.
+        subject-path: |
+          dist/dev/configurable-containers-${{ steps.version.outputs.new_version }}.xpi
+          dist/dev/configurable-containers-src-${{ steps.version.outputs.new_version }}.zip
+    - # --prerelease is what tells a dev build from a listed one
       # scripts/dev-updates.js filters on it
       #
       # THREE assets, the same set a listed release carries plus the signed build this
@@ -174,44 +164,43 @@ jobs:
       # The signed one must stay distinguishable from the reproducible one by NAME —
       # web-ext derives `configurable_containers_dev-…` from the manifest — because
       # dev-updates.js has to offer Firefox the signed one and only the signed one.
-      - name: Publish the immutable dev release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.version.outputs.new_version }}
-        run: |
-          # --generate-notes writes the commit/PR summary; --notes is PREPENDED to it,
-          # so the reproduce block stays at the top and BUILD_TIMESTAMP is still the
-          # first match verify-reproducible.ts finds in the body. Both are needed:
-          # --generate-notes alone drops the timestamp nobody can derive, and --notes
-          # alone is what this channel shipped, a release page saying only how to
-          # rebuild it and never what changed.
-          #
-          # The provenance command goes BELOW the reproduce block for the same reason it
-          # stays first: BUILD_TIMESTAMP has to be the first match in the body. The two
-          # answer different halves — the rebuild says the xpi matches the source archive
-          # published beside it, `gh attestation verify` says which commit that came from.
-          gh release create "v${VERSION}" \
-            --title "Release v${VERSION}" \
-            --prerelease \
-            --generate-notes \
-            --notes "Reproduce this build:
-          \`\`\`
-          npm ci
-          BUILD_TIMESTAMP=${BUILD_TIMESTAMP} npm run package -- ${VERSION} --dev
-          \`\`\`
-          Check what built it, and from which commit:
-          \`\`\`
-          gh attestation verify configurable-containers-${VERSION}.xpi --repo ${GITHUB_REPOSITORY}
-          \`\`\`
-          " \
-            ./dist/dev/signed/*.xpi \
-            "dist/dev/configurable-containers-${VERSION}.xpi" \
-            "dist/dev/configurable-containers-src-${VERSION}.zip"
-
-  # Called, not triggered: see verify-release.yaml's `on:` — the release this job just
-  # published was created with GITHUB_TOKEN, so its `release: published` event fires
-  # nothing at all.
+      name: Publish the immutable dev release
+      env:
+        GH_TOKEN: ${{ github.token }}
+        VERSION: ${{ steps.version.outputs.new_version }}
+      run: |
+        # --generate-notes writes the commit/PR summary; --notes is PREPENDED to it,
+        # so the reproduce block stays at the top and BUILD_TIMESTAMP is still the
+        # first match verify-reproducible.ts finds in the body. Both are needed:
+        # --generate-notes alone drops the timestamp nobody can derive, and --notes
+        # alone is what this channel shipped, a release page saying only how to
+        # rebuild it and never what changed.
+        #
+        # The provenance command goes BELOW the reproduce block for the same reason it
+        # stays first: BUILD_TIMESTAMP has to be the first match in the body. The two
+        # answer different halves — the rebuild says the xpi matches the source archive
+        # published beside it, `gh attestation verify` says which commit that came from.
+        gh release create "v${VERSION}" \
+          --title "Release v${VERSION}" \
+          --prerelease \
+          --generate-notes \
+          --notes "Reproduce this build:
+        \`\`\`
+        npm ci
+        BUILD_TIMESTAMP=${BUILD_TIMESTAMP} npm run package -- ${VERSION} --dev
+        \`\`\`
+        Check what built it, and from which commit:
+        \`\`\`
+        gh attestation verify configurable-containers-${VERSION}.xpi --repo ${GITHUB_REPOSITORY}
+        \`\`\`
+        " \
+          ./dist/dev/signed/*.xpi \
+          "dist/dev/configurable-containers-${VERSION}.xpi" \
+          "dist/dev/configurable-containers-src-${VERSION}.zip"
   verify-release:
+    # Called, not triggered: see verify-release.yaml's `on:` — the release this job just
+    # published was created with GITHUB_TOKEN, so its `release: published` event fires
+    # nothing at all.
     name: Verify the published dev build
     needs: prerelease
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
