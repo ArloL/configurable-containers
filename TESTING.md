@@ -390,7 +390,7 @@ mutant no other case catches.
   The two triggers ask different questions and neither replaces the other.
   `verify-release.yaml` checks **each release as it is published**, on either channel, with
   the tag handed to it by the job that just published it — so it performs no search, which
-  is the whole point of it. `nightly.yml`'s `reproducible-build` re-checks the newest
+  is the whole point of it. `nightly.yaml`'s `reproducible-build` re-checks the newest
   **listed** release against today's toolchain: whether something that reproduced when it
   was cut still does, after a newer Node or a dependency yanked from the registry.
 
@@ -408,7 +408,7 @@ mutant no other case catches.
   real Firefox through a real network stack and real timers, and one run cannot tell a
   1-in-20 case from a solid one. It runs `test/e2e` **ten times, on each of two runners**,
   and fails on **disagreement** — a case that fails every time is the suite being red,
-  which `ci.yml` already reports.
+  which `ci.yaml` already reports.
 
   **It refuses to answer over nothing, in two places.** `FLAKE_RUNS` is validated at the
   boundary — `Number("")` is 0 and `Number("thre")` is NaN, and `for (let i = 0; i < runs;
@@ -643,7 +643,7 @@ weigh persisting it against a measured cost.
 ## GitHub Actions pipeline
 
 ```yaml
-# .github/workflows/ci.yml  (sketch)
+# .github/workflows/ci.yaml  (sketch)
 name: CI
 on:
   push:
@@ -691,21 +691,21 @@ issue on regression rather than blocking a PR — guard rails, not gatekeepers. 
 
 **Built so far**, against that sketch:
 
-- `.github/workflows/ci.yml` — one `test` job on every push, across a
+- `.github/workflows/ci.yaml` — one `test` job on every push, across a
   `latest`/`latest-esr` Firefox matrix: `typecheck`, `lint`, `audit`, `lint:ext`
   (addons-linter, what AMO runs server-side), `test:coverage`, then `npm test` end to end.
   The static/unit/build/integration split is still not worth its overhead at this size —
   the matrix runs the non-browser steps twice, which is seconds against the minutes the
   browser suite costs and which genuinely differ between channels. `fail-fast: false`, so
   one channel going red never hides the other's answer.
-- `.github/workflows/nightly.yml` — five guard rails: `disposal-realtime`, `mutation`,
+- `.github/workflows/nightly.yaml` — five guard rails: `disposal-realtime`, `mutation`,
   `flake`, `firefox-nightly` and `reproducible-build`, plus a `report-regression` job that
   opens **one** issue per failing rail for a failing streak and comments on it thereafter.
   Scheduled runs go unwatched, so a red night has to come and find us; the rails fail for
   unrelated reasons and are fixed by different work, so they get an issue each, and each
   issue body says what the two or three shapes of that failure mean.
 - `.github/workflows/verify-release.yaml` — the per-release half of the reproducibility
-  gate above, `workflow_call`ed by `ci.yml` and `release.yaml` with the tag they just
+  gate above, `workflow_call`ed by `ci.yaml` and `release.yaml` with the tag they just
   published, so it never has to go looking for its subject. It installs with
   `package-manager-cache: false` on purpose: a job deciding whether a published artefact
   is trustworthy must not take its dependencies from a mutable cache an earlier run could

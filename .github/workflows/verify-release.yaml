@@ -1,6 +1,6 @@
 name: Verify a published release
 
-# The gate that has no subject to look for. `nightly.yml`'s reproducible-build job had to
+# The gate that has no subject to look for. `nightly.yaml`'s reproducible-build job had to
 # go hunting for the release to check, its search silently came back empty, and it passed
 # in zero seconds every night for four weeks. Here the release is NAMED to this workflow —
 # by the job that just published it, or by the event, or by hand — so it never searches,
@@ -20,7 +20,7 @@ on:
   # GITHUB_TOKEN — which is every release this repo publishes — triggers NO workflow:
   # GitHub suppresses those events to stop workflows recursing. So `on: release` alone
   # would make this gate dead on arrival, the very failure it exists to prevent.
-  # `publish-dev-manifest.yml` hit the same wall and is called the same way; its
+  # `publish-dev-manifest.yaml` hit the same wall and is called the same way; its
   # `on: release` has fired exactly zero times in ~150 releases.
   workflow_call:
     inputs:

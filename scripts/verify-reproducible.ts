@@ -10,7 +10,7 @@
 // a fixed 1980 mtime here, filesystem order and real mtimes there). The GitHub release
 // asset is the only copy that can be compared at all.
 //
-// It verifies EITHER channel, and `ci.yml` runs it over the dev prerelease it has just
+// It verifies EITHER channel, and `ci.yaml` runs it over the dev prerelease it has just
 // published on every push to main. Both channels ship the same three artefacts — the
 // reproducible pre-signing xpi, the source archive it was built from, and BUILD_TIMESTAMP in
 // the notes — so "verify a release" means one thing, and `planFor` reads the one difference

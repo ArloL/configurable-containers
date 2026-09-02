@@ -17,7 +17,7 @@ jobs:
       # So verify-release can be handed the tag rather than going looking for it.
       version: ${{ steps.version.outputs.new_version }}
     steps:
-      # calver-tag-action pushes the tag with these credentials, so unlike ci.yml
+      # calver-tag-action pushes the tag with these credentials, so unlike ci.yaml
       # they must be kept.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -82,7 +82,7 @@ jobs:
         run: |
           git archive --format=zip --output "dist/configurable-containers-src-${VERSION}.zip" HEAD
 
-      # The same provenance ci.yml's dev channel attests, over the same two artefacts, for
+      # The same provenance ci.yaml's dev channel attests, over the same two artefacts, for
       # the same reason: rebuilding the xpi from its own source archive proves only that the
       # two agree with each other, and a release built by hand from a tree that never existed
       # in git reproduces against itself perfectly. This is what ties the archive to a commit

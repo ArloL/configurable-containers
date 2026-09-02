@@ -36,7 +36,7 @@ export const UPDATE_URL = DEV_UPDATE_URL;
  * side.
  *
  * Built here rather than in the workflow so that no path that uploads — CI or a local
- * `npm run sign:dev` — can sign without it. The path is the one ci.yml publishes as a
+ * `npm run sign:dev` — can sign without it. The path is the one ci.yaml publishes as a
  * release asset.
  */
 export function buildSourceArchive(version: string, outDir: string): string {
