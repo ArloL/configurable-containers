@@ -30,6 +30,7 @@ Failure classes drawn from the model and from Temporary Containers' source, whos
 | F12 | **Side-effect timing** — a seeded cookie or injected script lands *after* the page read it; or a `redirector` tab closes before its redirect fires, or closes a tab that had already navigated on. | The consent banner reappears, the pref doesn't apply, or a live tab vanishes. |
 | F13 | **Routing a request that is not a page navigation** — `view-source:` fetches the document it prints, so webRequest reports a main_frame GET for the *inner* url in a pre-commit tab. | Routing it "works": a tab opens in the right container, showing the rendered page, and the source tab is gone. |
 | F14 | **Stale tab lineage** — `initiator` read off `openerTabId`, which Firefox keeps for the life of a tab and `supersede` carries across every reopen, rather than off the page the tab is on. | An `inherit` host ping-pongs: each reopen makes the old tab the next one's opener, so two containers take turns forever. Only tabs with an opener are affected, so a typed url works. |
+| F15 | **Undiscoverable lineage** — a tab the browser opened FOR a click is read as being in no container, because it has no page of its own and, for a `window.open` popup, no `openerTabId` either (Firefox sets that only within one window). | A popup already sitting in the right container asks which container to open in; an `inherit` host in one is routed to the *default* container. Clicking the same link in place answers correctly, so it looks like a rule problem. |
 
 Every level states which classes it owns; the [coverage
 matrix](#subtle-bug-coverage-matrix) proves none is orphaned.
@@ -74,7 +75,8 @@ resolve(targetUrl, initiatingContainer, currentTabContainer, config)
   -> Decision   // { temp } | { named: X } | { inherit } | { choice: [...] } | { leaveAlone }
 ```
 
-No `browser.*`, no clock, no I/O. F4, F5, F6 and the routing side of F3 are proven here.
+No `browser.*`, no clock, no I/O. F4, F5, F6, the routing side of F3, and the pure half of
+F15 — whether a tab that inherited a container counts as being in it — are proven here.
 
 - **Table-driven examples** — one row per behaviour and per known edge
   (`www.google.com → mail.google.com`; inherit-hop membership; a domain in both an open
@@ -171,7 +173,7 @@ than by properties of the answers.
 Everything stateful runs here against a mock `browser.*` (fake `tabs`,
 `contextualIdentities`, `webRequest`, `webNavigation`, and a fake clock). We drive
 *sequences* of events and assert invariants after each step. Home of F1, F2, F7, F8, F10,
-F13, F14.
+F13, F14, F15.
 
 - **Model-based property tests** (fast-check `commands`): random sequences of `navigate`,
   `redirect`, `clickLink`, `closeTab`, `openTab`, `macClaims(url)`, with invariants
@@ -230,6 +232,12 @@ assignment, real container create/dispose, real redirects.
   reproduces that lineage across a reopen, are facts only the browser holds — the L3 mock
   keeps the opener because it was written to. So the case asserts the opener itself
   midway; without that it would pass on a browser that had quietly dropped the lineage.
+- **Undiscoverable lineage (F15)** — click a real `window.open` share button out of a
+  container into a host whose rule offers that same container, and assert the popup lands
+  there without the choice screen. Only the browser decides what a popup is told about
+  where it came from: it gets its own window, so `openerTabId` is absent and the request's
+  `originUrl` is the only surviving signal. A mock is free to hand the engine both, which
+  is exactly why the L3 case cannot own this alone.
 - **MAC interop (F2/F7)** — install actual Multi-Account Containers alongside, assign a
   domain in MAC, assert our engine defers: no double-open, no churn.
 - **Redirect-binding fixtures (F9)** — a local mock-IdP serving an OAuth **code (GET
@@ -615,6 +623,7 @@ mutant no other case catches.
 | F12 side-effect timing     |    |    | ✅ | ✅ |    |
 | F13 non-navigation request |    |    | ✅ | ✅ |    |
 | F14 stale tab lineage      |    |    | ✅ | ✅ |    |
+| F15 undiscoverable lineage | ✅ |    | ✅ | ✅ | ✅ |
 
 An L1–L4 tick means a test at that level owns the class. **Mutation** is not a level and
 means something stronger: the decision this class turns on is inside the gate's scope,
@@ -626,7 +635,7 @@ ticks move only when a decision moves into or out of the gate's five modules —
 creeping, since the gate is all-or-nothing.
 
 Every class has a deterministic owner (L1–L3) and, where the browser is the source of
-truth (F1, F2, F7, F9, F10, F11, F12, F13, F14), a real-Firefox confirmation. F9 was the
+truth (F1, F2, F7, F9, F10, F11, F12, F13, F14, F15), a real-Firefox confirmation. F9 was the
 long-standing exception — POST bodies and redirect bindings don't exist in a pure resolver
 — and gained an L3 owner when the decision *not* to reopen a non-GET navigation moved into
 the engine.

@@ -248,4 +248,33 @@ describe("routing — a window.open popup (real Firefox, CC + probe)", () => {
     // The decisive bit: it is in the popup's window, not the one the article is in.
     expect(routedShareTab!.windowId).not.toBe(articleTab.windowId);
   });
+
+  // Reported for Outlook: the web app sits in a container, its re-sign-in popup asked which
+  // container to open in, and the answer was the one the popup was already in.
+  //
+  // The browser owns the fact this turns on, which is why it is here as well as at L3.
+  // `tabs.Tab.openerTabId` is present only while the opener is in the SAME window, and a
+  // popup gets its own — so nothing in the tab says where it came from, and only the
+  // request's `originUrl` crosses that boundary. A mock is free to hand the engine both.
+  it("does not ask which container a popup should open in when it is already in one the rule offers", async () => {
+    // figma.example offers [Personal, Work] and names no default, so it is the config's
+    // ask-every-time rule; the article is on work.example, which puts it in "Work".
+    const figmaUrl = `http://figma.example:${serverPort}/`;
+    const articleUrl = `http://work.example:${serverPort}/?popup=1&link=${encodeURIComponent(figmaUrl)}`;
+    const tab = await firefox.browser.newPage();
+    try {
+      await tab.goto(articleUrl);
+    } catch {
+      // CC reopened the blank tab away — expected.
+    }
+    const article = await awaitContainerTab(firefox.browser, articleUrl);
+    expect(article.name).toBe("Work");
+
+    await article.page.locator("#go").click();
+
+    const popup = await awaitTab(article.page, (t) => t.url.startsWith(figmaUrl));
+    expect(popup.container).toBe("Work");
+    // And the screen was never put in front of the user on the way there.
+    expect((await listTabs(article.page)).filter((t) => t.url.includes("choice.html"))).toEqual([]);
+  });
 });

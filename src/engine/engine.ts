@@ -80,26 +80,47 @@ async function buildNavContext(
   // click and `supersede` carries it across every reopen, so a routed tab points at one in a
   // different container. `inherit` sends the tab back there, the next reopen makes it the
   // opener again, and the tab alternates between two containers forever (F14).
+
+  // The third answer, for the tab that has neither: a `window.open` popup gets its own
+  // WINDOW, and `openerTabId` is present only while the opener is in the same one, so a
+  // popup reports no opener at all. What crosses that boundary is the request's own
+  // `originUrl` — the page that started this navigation — and the popup is in that page's
+  // container because Firefox inherits it. Being per-request, it cannot outlive its click
+  // the way the opener pointer does. Measured: a different windowId, no openerTabId, the
+  // opener's cookieStoreId, `originUrl` = the opener's page (F15).
+  //
+  // Only when there is NO opener. An opener in another container is a lineage the guard
+  // below deliberately refuses, and `originUrl` must not smuggle it back in.
+  //
+  // http(s) only, and measured rather than defensive: CC's own reopens arrive carrying
+  // `originUrl: "moz-extension://<uuid>/"`. Read as a page, that would have every reopened
+  // tab claim to have inherited the container it was just put in, and the rule that moved
+  // it there would never move it again.
+  const origin = current === null && opener === null ? d.originUrl : undefined;
+  const openedBy = origin !== undefined && /^https?:/.test(origin) ? origin : null;
+
   let initiator: ContainerRef | null;
   if (current) {
     initiator = current.container;
+  } else if (opener) {
+    initiator = await registry.toRef(opener.cookieStoreId);
   } else {
-    initiator = opener ? await registry.toRef(opener.cookieStoreId) : null;
+    initiator = openedBy ? await registry.toRef(tab.cookieStoreId) : null;
   }
 
-  // Which PAGE did this tab's container come from? Only the disposable path asks, so that
-  // "open link in a new tab" answers like clicking in place: without it a new tab failed
-  // every same-site and same-group comparison, so a video opened from a YouTube search
-  // result landed in its own throwaway, logged out.
+  // Which PAGE did this tab's container come from? Asked so that "open link in a new tab"
+  // answers like clicking in place: without it a new tab failed every same-site and
+  // same-group comparison, so a video opened from a YouTube search result landed in its own
+  // throwaway, logged out — and a popup was asked which container to open in while sitting
+  // in the right one (F15). `NavContext.inheritedFrom` says which half reads what.
   //
-  // Both conditions matter. The tab must really be IN the opener's container, since
+  // Both conditions on the opener matter. The tab must really be IN its container, since
   // `tabs.create` can name an opener in any container and CC's reopens do. And the opener
   // must be on http(s), because the disposable path reads a non-http url as "a throwaway
   // nobody has browsed in yet" and would park every middle-clicked link in it.
-  const inheritedFrom =
-    opener && initiator && opener.cookieStoreId === tab.cookieStoreId && /^https?:/.test(opener.url)
-      ? { url: opener.url, container: initiator }
-      : null;
+  const inheritedPage =
+    opener && opener.cookieStoreId === tab.cookieStoreId && /^https?:/.test(opener.url) ? opener.url : openedBy;
+  const inheritedFrom = inheritedPage && initiator ? { url: inheritedPage, container: initiator } : null;
 
   return { targetUrl: d.url, current, initiator, inheritedFrom };
 }

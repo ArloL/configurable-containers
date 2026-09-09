@@ -166,6 +166,27 @@ describe("fitness — the blocking path's round-trip budget", () => {
     expect(counted.awaited).toEqual(["getTab", "getIdentity"]);
   });
 
+  it("reads a popup's lineage for free, and pays the one container lookup any tab pays", async () => {
+    // A `window.open` popup has no `openerTabId` to follow — its opener is in another
+    // window — so the lineage comes from the request's own `originUrl`, which is already in
+    // hand. What it does cost is asking which container the popup is in, the same single
+    // lookup a tab with a page of its own pays. The absence to keep is the SECOND `getTab`:
+    // fetching an opener tab to read the same answer would put a round trip in front of
+    // every link opened in a new tab.
+    const browser = aFakeBrowser();
+    const work = browser.addContainerNamed({ name: "Work" });
+    const popup = browser.existingTab({ url: "about:blank", cookieStoreId: work.cookieStoreId });
+    const counted = countingPort(browser.port);
+    createEngine({ port: counted.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
+
+    const response = await browser.navigates(
+      aNavigationTo("https://work.example/", { tabId: popup.id, originUrl: "https://work.example/mail" }),
+    );
+
+    expect(response).toBeUndefined(); // stayed in the container it was opened into
+    expect(counted.awaited).toEqual(["getTab", "getIdentity"]);
+  });
+
   it("pays for a reopen once, and never re-asks on the hops of the navigation it opened", async () => {
     // A reopen is expensive on purpose: a container to find or create, a tab to open, maybe
     // one to close. What must NOT be expensive is the navigation after it — `reopenedNav`

@@ -566,14 +566,45 @@ describe("engine — a link opened in a new tab", () => {
     expect(browser.createdContainers.map((c) => c.name)).toEqual(["tmp2"]);
   });
 
-  // Rules still decide for a tab with no page of its own: `inheritedFrom` feeds the
-  // disposable path only. F14's chain opens exactly this way — a Slack link in a new tab,
-  // in Slack's container, to a host with a multi-open rule — and must still ask.
-  it("does not let the opener's page answer for a rule that would ask", async () => {
+  // A multi-container `open:` names an ELIGIBILITY SET, and a link tab is already in the
+  // container the click came from — so the tab satisfies the set and the screen has nothing
+  // to ask. The alternative is that opening a link in a new tab answers differently from
+  // clicking it in place, which returns `stay` on the same page.
+  //
+  // This is where F14's chain used to open (a Slack link in Haeger, to a host offering
+  // Haeger and HSP), and it no longer opens at all — the tab stays in Haeger. The loop
+  // itself is still reachable whenever the screen genuinely appears, and the case below it
+  // drives that.
+  it("lets the opener's page answer a rule that offers the container it is in", async () => {
     const browser = aFakeBrowser();
     const haeger = browser.addContainerNamed({ name: "Haeger" });
     const slackTab = browser.existingTab({ url: "https://slack.example/", cookieStoreId: haeger.cookieStoreId });
     const linkTab = aLinkTabFrom(browser, slackTab);
+    const asked: string[][] = [];
+    createEngine({
+      port: browser.port,
+      config: parseConfig("rules:\n  - match: azure.example\n    open: [Haeger, HSP]\n"),
+      deps,
+      onChoice: (options) => void asked.push(options),
+      pause: noPause,
+      tmpSuffix: sequentialTmpSuffixes(),
+    });
+
+    const blockingResponse = await browser.navigates(aNavigationTo({ tabId: linkTab.id, url: "https://portal.azure.example/" }));
+
+    expect(blockingResponse).toBeUndefined();
+    expect(asked).toEqual([]);
+    expect(browser.openedTabs).toEqual([]);
+  });
+
+  // The other half of the same rule, and what keeps the screen alive: satisfying the set is
+  // what silences it, not merely having an opener. A link from a container the rule does
+  // not offer is a tab in none of them, which is the question the screen exists to ask.
+  it("still asks when the opener's container is not one the rule offers", async () => {
+    const browser = aFakeBrowser();
+    const chat = browser.addContainerNamed({ name: "Chat" });
+    const chatTab = browser.existingTab({ url: "https://chat.example/", cookieStoreId: chat.cookieStoreId });
+    const linkTab = aLinkTabFrom(browser, chatTab);
     const asked: string[][] = [];
     createEngine({
       port: browser.port,
@@ -911,9 +942,16 @@ rules:
     expect(browser.openedTabs[0]!.cookieStoreId).toBe(haeger.cookieStoreId);
   });
 
-  it("F14: the reported chain — slack link, choice, HSP — leaves the login in HSP", async () => {
+  // The reported chain, with one substitution the report cannot supply any more: it began
+  // on Slack in "Haeger", a container the azure rule OFFERS, and such a link now stays
+  // there instead of asking. The screen — and so the chain — opens whenever the link comes
+  // from a container the rule does not offer, which is what "Chat" is here. Everything the
+  // loop turns on is unchanged: the pick puts the tab in HSP, `supersede` leaves it
+  // pointing at an opener in a DIFFERENT container, and the next hop must not follow it.
+  it("F14: the reported chain — a link, the choice screen, HSP — leaves the login in HSP", async () => {
     const browser = aFakeBrowser();
-    const haeger = browser.addContainerNamed({ name: "Haeger" });
+    const chat = browser.addContainerNamed({ name: "Chat" });
+    browser.addContainerNamed({ name: "Haeger" });
     const hsp = browser.addContainerNamed({ name: "HSP" });
     const config = ssoConfig();
     // Wired as `wireBackground` does: the picker reopens through the engine's F1-guarded
@@ -930,9 +968,9 @@ rules:
     picker = createPicker({ port: browser.port, config, deps, reopen: engine.reopen });
     browser.port.onMessage((msg, sender) => picker.handleMessage(msg, sender));
 
-    const slackTab = browser.existingTab({ url: "https://slack.example/", cookieStoreId: haeger.cookieStoreId });
-    // Slack opens the link in a tab of its own: Haeger, pre-commit, opener set.
-    const linkTab = browser.existingTab({ url: "about:blank", cookieStoreId: haeger.cookieStoreId, openerTabId: slackTab.id });
+    const slackTab = browser.existingTab({ url: "https://slack.example/", cookieStoreId: chat.cookieStoreId });
+    // Slack opens the link in a tab of its own: its container, pre-commit, opener set.
+    const linkTab = browser.existingTab({ url: "about:blank", cookieStoreId: chat.cookieStoreId, openerTabId: slackTab.id });
 
     const portal = "https://portal.azure.example/";
     expect(await browser.navigates(aNavigationTo({ requestId: "1", tabId: linkTab.id, url: portal }))).toEqual({ cancel: true });
@@ -1155,5 +1193,90 @@ describe("engine — what it says it did", () => {
     await browser.navigates(aNavigationTo({ tabId: tab.id, url: "about:config" }));
 
     expect(browser.decisions).toEqual([]);
+  });
+});
+
+// A `window.open` popup gets its OWN WINDOW, and `tabs.Tab.openerTabId` is present only
+// while the opener is in the same window — so the popup's tab reports no opener at all and
+// `buildNavContext` had nothing to read. The tab is nonetheless in the opener's container:
+// Firefox inherits it. What survives the window boundary is webRequest's `originUrl`, the
+// page that started the navigation, which is per-request and so cannot go stale the way
+// F14's opener pointer did.
+//
+// Measured on FF (probe + window.open("…", "share", "width=640,height=480")): the popup
+// tab reports a different `windowId`, no `openerTabId`, the opener's `cookieStoreId`, and
+// its main_frame request carries `originUrl` = the opener's page. The same measurement
+// showed CC's OWN reopens carrying `originUrl: "moz-extension://<uuid>/"`, which is why the
+// fallback tests for http(s) rather than merely for presence.
+//
+// Reported for Outlook: the web app sits in a container, its re-sign-in popup asked which
+// container to open in, and the answer was the one it was already in.
+describe("engine — a window.open popup, which has no opener tab to read", () => {
+  const choiceConfig = () =>
+    parseConfig("rules:\n  - match: outlook.example\n    open: [Haeger, HSP]\n");
+
+  it("stays in the container it inherited instead of asking", async () => {
+    const browser = aFakeBrowser();
+    const haeger = browser.addContainerNamed({ name: "Haeger" });
+    // The popup Firefox just made: pre-commit, in the opener's container, no openerTabId.
+    const popup = browser.existingTab({ url: "about:blank", cookieStoreId: haeger.cookieStoreId });
+    const asked: string[][] = [];
+    createEngine({
+      port: browser.port,
+      config: choiceConfig(),
+      deps,
+      onChoice: (options) => void asked.push(options),
+      pause: noPause,
+      tmpSuffix: sequentialTmpSuffixes(),
+    });
+
+    const blockingResponse = await browser.navigates(
+      aNavigationTo({
+        tabId: popup.id,
+        url: "https://outlook.example/auth",
+        originUrl: "https://outlook.example/mail",
+      })
+    );
+
+    expect(blockingResponse).toBeUndefined();
+    expect(asked).toEqual([]);
+    expect(browser.openedTabs).toEqual([]);
+  });
+
+  it("still asks when the popup came from a page in an ineligible container", async () => {
+    const browser = aFakeBrowser();
+    const chat = browser.addContainerNamed({ name: "Chat" });
+    const popup = browser.existingTab({ url: "about:blank", cookieStoreId: chat.cookieStoreId });
+    const asked: string[][] = [];
+    createEngine({
+      port: browser.port,
+      config: choiceConfig(),
+      deps,
+      onChoice: (options) => void asked.push(options),
+      pause: noPause,
+      tmpSuffix: sequentialTmpSuffixes(),
+    });
+
+    await browser.navigates(
+      aNavigationTo({ tabId: popup.id, url: "https://outlook.example/auth", originUrl: "https://chat.example/" })
+    );
+
+    expect(asked).toEqual([["Haeger", "HSP"]]);
+  });
+
+  it("reads no lineage out of a navigation CC itself opened the tab for", async () => {
+    // CC's reopens carry `originUrl: "moz-extension://<uuid>/"`. Taken as a page, that
+    // would make every reopened tab claim to have inherited the container it was just put
+    // in, and the rule that moved it there would never move it again.
+    const browser = aFakeBrowser();
+    const work = browser.addContainerNamed({ name: "Work" });
+    const tab = browser.existingTab({ url: "about:blank", cookieStoreId: work.cookieStoreId });
+    createEngine({ port: browser.port, config: parseConfig("rules:\n  - match: example.com\n    open: Gmail\n"), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
+
+    await browser.navigates(
+      aNavigationTo({ tabId: tab.id, originUrl: "moz-extension://5c5b6d4e-9f3a-4a21-8b7c-1d2e3f4a5b6c/" })
+    );
+
+    expect(browser.decisions.at(-1)?.decision).toEqual({ kind: "reopen", into: { kind: "permanent", name: "Gmail" } });
   });
 });

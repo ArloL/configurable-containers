@@ -183,7 +183,7 @@ entirely broken, and L3 cases asserting the bug rather than the fix:
 - **The case has outlived its stated reason**, while possibly still pinning something real.
 
 Method: read the comment, then read only the assertions, and ask whether the second could fail
-if the first stopped being true. Where a case names a bug (F1–F14), check the assertion would
+if the first stopped being true. Where a case names a bug (F1–F15), check the assertion would
 catch *that* bug rather than a neighbour.
 
 **A finding here is a contradiction between a comment and the assertions below it.** Not

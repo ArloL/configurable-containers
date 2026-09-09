@@ -284,3 +284,62 @@ describe("resolve — multi-open", () => {
     )).toEqual({ kind: "stay" });
   });
 });
+
+// A tab the browser opened FOR a click — a `target=_blank` link, or the popup window an
+// Outlook re-sign-in throws — has no page of its own, so `current` is null. It is
+// nonetheless already IN a container: Firefox puts it in the opener's. `inheritedFrom`
+// says which, and every question of the form "is this tab already where the rule wants
+// it?" has to read it, or the tab is treated as if it were nowhere.
+//
+// Reported for Outlook: the web app sits in a container, its sign-in popup asked which
+// container to open in, and the answer was the one the popup was already in.
+//
+// The disposable path has read `inheritedFrom` since it was introduced (spec §4 step 7);
+// these are the rest of the resolver catching up with it.
+describe("resolve — a tab that inherited its container from the page that opened it", () => {
+  const outlook: Rule = {
+    match: ["outlook.example"],
+    action: { kind: "open", containers: ["Haeger", "HSP"] },
+  };
+  const haegerPage = { url: "https://outlook.example/mail", container: theContainerNamed("Haeger") };
+
+  it("multi-open stays when the container it inherited is an eligible one", () => {
+    expect(resolve(
+      aNavigationFromALinkOn(haegerPage, "https://outlook.example/auth"),
+      aConfigOf([outlook]), deps,
+    )).toEqual({ kind: "stay" });
+  });
+
+  it("multi-open still asks when the container it inherited is NOT eligible", () => {
+    // The choice screen is the answer to "this tab is in none of them", and a popup from
+    // an unrelated container is exactly that. Widening the first case to "a popup never
+    // asks" would silence it here too.
+    expect(resolve(
+      aNavigationFromALinkOn(
+        { url: "https://chat.example/", container: theContainerNamed("Chat") },
+        "https://outlook.example/auth",
+      ),
+      aConfigOf([outlook]), deps,
+    )).toEqual({ kind: "choice", options: ["Haeger", "HSP"] });
+  });
+
+  it("single open stays instead of reopening into the container it is already in", () => {
+    expect(resolve(
+      aNavigationFromALinkOn(
+        { url: "https://mail.google.com/", container: theContainerNamed("Gmail") },
+        "https://mail.google.com/compose",
+      ),
+      aConfigOf([gmail]), deps,
+    )).toEqual({ kind: "stay" });
+  });
+
+  it("inherit stays in the container the opener's page is in", () => {
+    // Without `inheritedFrom` this navigation has no initiator and no current, so
+    // `inherit` fell through to the DEFAULT container — a sign-in popup routed out of the
+    // session it belongs to.
+    expect(resolve(
+      aNavigationFromALinkOn(haegerPage, "https://accounts.google.com/signin"),
+      aConfigOf([inheritGoogle]), deps,
+    )).toEqual({ kind: "stay" });
+  });
+});

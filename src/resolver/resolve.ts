@@ -48,7 +48,7 @@ function disposablePath(nav: NavContext, config: Config, deps: Deps): Decision {
 // of them outranks `default`, since the user put it there.
 function openAction(
   action: Extract<Action, { kind: "open" }>,
-  current: ContainerRef | null,
+  contained: ContainerRef | null,
   nav: NavContext,
   config: Config,
   deps: Deps,
@@ -57,22 +57,32 @@ function openAction(
 
   if (containers.length === 1) {
     if (containers[0] === TEMPORARY) return disposablePath(nav, config, deps);
-    return toward(current, { kind: "permanent", name: containers[0] });
+    return toward(contained, { kind: "permanent", name: containers[0] });
   }
 
-  if (current?.kind === "permanent" && containers.includes(current.name)) {
+  if (contained?.kind === "permanent" && containers.includes(contained.name)) {
     return { kind: "stay" };
   }
   if (def !== undefined) {
     if (def === TEMPORARY) return disposablePath(nav, config, deps);
-    return toward(current, { kind: "permanent", name: def });
+    return toward(contained, { kind: "permanent", name: def });
   }
   return { kind: "choice", options: containers };
 }
 
 export function resolve(nav: NavContext, config: Config, deps: Deps): Decision {
   const rule = deps.matchRule(nav.targetUrl, config.rules);
-  const current = nav.current?.container ?? null;
+
+  // WHERE THE TAB IS, which is not the same question as what page it is on. A tab the
+  // browser opened for a click has no page of its own, so `current` is null — but Firefox
+  // has already put it in the opener's container, and `inheritedFrom` names it. Every
+  // "already where the rule wants it?" test below reads this, or such a tab is treated as
+  // being nowhere: a sign-in popup asked which container to open in while sitting in the
+  // right one, and `inherit` sent it to the default container for want of an initiator.
+  //
+  // `current` still answers separately, because the two disagree on purpose: the disposable
+  // path needs the SITE the tab was on, and the opener's page is not it.
+  const contained = nav.current?.container ?? nav.inheritedFrom?.container ?? null;
 
   // No rule is the founding premise rather than a fallthrough: anything unmatched is
   // disposable.
@@ -87,9 +97,9 @@ export function resolve(nav: NavContext, config: Config, deps: Deps): Decision {
       return { kind: "stay" }; // hop is not isolated
 
     case "inherit":
-      return toward(current, nav.initiator ?? current ?? { kind: "default" });
+      return toward(contained, nav.initiator ?? contained ?? { kind: "default" });
 
     case "open":
-      return openAction(action, current, nav, config, deps);
+      return openAction(action, contained, nav, config, deps);
   }
 }

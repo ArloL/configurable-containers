@@ -7,7 +7,7 @@ case here passes while the feature it names is broken.
 
 Everything that applies to any change — the placement rules, the Firefox facts the engine
 is built around, the config and startup order, and the L1–L3 hazards — stays in
-`CLAUDE.md`. `TESTING.md` owns the L1–L5 pyramid and the F1–F14 matrix; this file owns the
+`CLAUDE.md`. `TESTING.md` owns the L1–L5 pyramid and the F1–F15 matrix; this file owns the
 mechanics of L4/L5.
 
 ## What a green e2e run can still hide
