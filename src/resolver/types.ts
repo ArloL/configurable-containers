@@ -65,13 +65,17 @@ export interface NavContext {
   // The page this tab's container came from: where a link was clicked, for a tab the
   // browser opened FOR that click and put in the clicked page's container. Null when the
   // tab has a page of its own (`current` is then the better answer), and null when the tab
-  // is NOT in its opener's container — an extension can open a tab anywhere and still name
+  // is NOT in that page's container — an extension can open a tab anywhere and still name
   // an opener, and then the opener's page says nothing about this tab.
   //
-  // Only the disposable path reads it, only to ask whether this navigation may keep the
-  // throwaway it is in. Deliberately NOT `current`: a tab with no page is not "already
-  // correctly contained" in anything, and treating the opener's page as its own would
-  // silence the choice screen on a tab's first navigation (how F14's chain opens).
+  // Read two ways, and the split is the point. Its URL is the disposable path's, asking
+  // whether this navigation may keep the throwaway it is in. Its CONTAINER is
+  // `resolve`'s `contained`, the tab's real whereabouts while it has no page of its own —
+  // a popup that inherited an eligible container must not be asked which one to use.
+  //
+  // Deliberately still not `current`: a tab with no page of its own is on no SITE, and
+  // handing the opener's site to the same-site and same-group comparisons would answer
+  // "already contained" for a link that is leaving.
   inheritedFrom: { url: string; container: ContainerRef } | null;
 }
 

@@ -14,7 +14,7 @@ its own file — **read the matching one before you start, not when something br
 | change lint config, answer a Sonar finding, or add a suppression | `docs/static-analysis.md` |
 
 Covered elsewhere: `README.md` (goals, build, release), `CONFIG.md` (config format),
-`TESTING.md` (the L1–L5 pyramid, the F1–F14 bug matrix), `test/` (the behaviour spec),
+`TESTING.md` (the L1–L5 pyramid, the F1–F15 bug matrix), `test/` (the behaviour spec),
 `docs/superpowers/`, `FOLLOWUPS.md`, `docs/drift-reviews.md` (the agent reviews for what no
 gate can see — a true statement that stopped being true, which every check here is blind to
 because `test/fitness/` reads source with comments stripped).
@@ -204,19 +204,43 @@ because `test/fitness/` reads source with comments stripped).
   truly blank tab are indistinguishable. Hence: `about:blank` is not an auto-temp
   candidate, or every link opened in a new tab dies pre-load (cost:
   `newtabpage.enabled=false` users go uncontainerized, as in TCP); `buildNavContext`
-  reports `current: null` there, since a tab with no page of its own is not "already
-  correctly contained" and treating an inherited container as its own would silence the
-  choice screen on a tab's first navigation; and `reopenedNav`'s requestId is the only
+  reports `current: null` there, since a tab with no page of its own is on no SITE, which
+  is what the disposable path's comparisons need; and `reopenedNav`'s requestId is the only
   thing separating our tab from theirs.
 - **A link opened in a new tab must still answer the continuity question, and `current`
-  cannot** — hence `NavContext.inheritedFrom`, the *page* the tab's container came from,
-  read by the disposable path only. Without it every new-tab link failed every
-  same-site and same-group comparison, so opening a YouTube video from the search results
-  bought a throwaway and landed logged out. `buildNavContext` fills it only when the tab
-  is genuinely IN the opener's container (`tabs.create` can name an opener in any
-  container, and every CC reopen does) and the opener is on http(s) — the disposable
-  path reads a non-http url as "a throwaway nobody has browsed in yet" and would park
-  every middle-clicked link in its opener's throwaway.
+  cannot** — hence `NavContext.inheritedFrom`, the *page* the tab's container came from.
+  Without it every new-tab link failed every same-site and same-group comparison, so
+  opening a YouTube video from the search results bought a throwaway and landed logged
+  out. `buildNavContext` fills it only when the tab is genuinely IN the container it
+  inherited (`tabs.create` can name an opener in any container, and every CC reopen does)
+  and the page is http(s) — the disposable path reads a non-http url as "a throwaway
+  nobody has browsed in yet" and would park every middle-clicked link in its opener's
+  throwaway.
+- **`current` is the PAGE, `contained` is the CONTAINER, and `resolve` needs both**
+  (`src/resolver/resolve.ts`). `contained` is `current?.container ?? inheritedFrom?.container`,
+  and every "is this tab already where the rule wants it?" test reads it: a tab the browser
+  opened for a click has no page of its own, but Firefox has already put it in the opener's
+  container. On `current` alone such a tab counts as being nowhere, so a multi-container
+  `open:` asked which container to use while the tab sat in an eligible one, and `inherit`
+  sent it to the DEFAULT container for want of an initiator — reported for an Outlook
+  re-sign-in popup. The disposable path had read `inheritedFrom` since it was introduced;
+  this is the rest of the resolver agreeing with it. Both halves are pinned in
+  `test/resolver/resolve.test.ts`, the eligible case and the ineligible one: what silences
+  the choice screen is satisfying the eligibility set, never merely having an opener.
+- **`openerTabId` is present only while the opener is in the SAME WINDOW**, so a
+  `window.open` popup — which Firefox gives its own window — reports no opener at all,
+  and `buildNavContext` had nothing to read for the tab that most needs it. What crosses
+  that boundary is the request's own `originUrl`: the page that started the navigation,
+  per-request, so unlike the opener pointer it cannot outlive its click. The popup is in
+  that page's container because Firefox inherits it. Measured (probe + `window.open(…,
+  "share", "width=640,height=480")`): a different `windowId`, no `openerTabId`, the
+  opener's `cookieStoreId`, `originUrl` = the opener's page. The same run showed CC's OWN
+  reopens arriving with `originUrl: "moz-extension://<uuid>/"`, which is why the fallback
+  tests for http(s) rather than for presence — read as a page, that would have every
+  reopened tab claim it inherited the container it was just put in, and the rule that moved
+  it there would never move it again. The fallback is reached only when there is no opener
+  tab: an opener in a different container is a lineage `buildNavContext` deliberately
+  refuses, and originUrl must not smuggle it back in.
 - **`openerTabId` outlives the click that set it** for the life of the tab, and
   `supersede` carries it across every reopen, so a routed tab still points at one in a
   *different* container. So `buildNavContext` reads `initiator` off the page the tab is
