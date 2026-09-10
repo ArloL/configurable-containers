@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { error as seleniumError } from "selenium-webdriver";
 import { Locator } from "../../../harness/browser/locator";
 import type { PageContext } from "../../../harness/browser/types";
 import { fakeDriver, anElement, type FakeScript } from "./fake-driver";
@@ -173,6 +174,41 @@ describe("retrying matchers", () => {
   it("lets toBeVisible and toHaveCount read a missing element as an answer, as Playwright does", async () => {
     await expect(locatorOn({ elements: () => [] })).not.toBeVisible({ timeout: 0 });
     await expect(locatorOn({ elements: () => [] })).toHaveCount(0, { timeout: 0 });
+  });
+
+  // A command the browser REFUSED is not a reading of the page, and a matcher that files it
+  // under "no element matched" sends the reader to the document — where nothing is wrong.
+  // Firefox 157 stopped answering `findElements` on an extension page, and nine of the
+  // sixteen failures said the page had rendered nothing.
+  //
+  // Both directions, because `.not` is where it goes quiet: a verdict of "no element" is
+  // reported in positive terms for vitest to flip, so a refusal passed `.not.toBeVisible()`
+  // outright — an assertion going green off a browser that declined to answer it.
+  const refusing = () =>
+    locatorOn({
+      elements: () => {
+        throw new seleniumError.UnsupportedOperationError(
+          "The command does not support browsing contexts in privileged scope",
+        );
+      },
+    });
+
+  it("reports a refused command as itself, not as an element that never appeared", async () => {
+    await expect(expect(refusing()).toHaveText("Saved", { timeout: 0 })).rejects.toThrow(
+      /privileged scope/,
+    );
+    await expect(expect(refusing()).not.toHaveText("", { timeout: 0 })).rejects.toThrow(
+      /privileged scope/,
+    );
+  });
+
+  it("does not let a refused command satisfy a negated matcher", async () => {
+    await expect(expect(refusing()).not.toBeVisible({ timeout: 0 })).rejects.toThrow(
+      /privileged scope/,
+    );
+    await expect(expect(refusing()).toHaveCount(0, { timeout: 0 })).rejects.toThrow(
+      /privileged scope/,
+    );
   });
 
   // "expected Saved, got Saving…" is the whole diagnosis; a matcher that only says it

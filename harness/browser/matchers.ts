@@ -70,15 +70,21 @@ async function settle<T>(
         return holds(reading.value) === wanted ? undefined : RETRY;
       },
     );
-  } catch {
-    // Never settled: the last reading is the diagnosis either way.
+  } catch (e) {
+    // Out of budget: the last reading is the diagnosis either way. Anything else reaching
+    // here is the DRIVER failing rather than the page — a command the browser refuses, a
+    // dead session — and it is not a verdict about the document. Swallowing it made every
+    // such failure read as "no element matched", the words for a page that rendered
+    // nothing, and under `.not` it did not read as a failure at all.
+    if (!(e instanceof PollTimeoutError)) throw e;
   }
   // An element that never appeared fails in BOTH directions. Reporting it as "the condition
   // did not hold" would make `.not` pass for a page that rendered nothing at all, which is
   // the failure this whole layer is against.
   //
   // Reaching here is the READER's decision, not this function's: it means every attempt
-  // threw `PollTimeoutError`, which the locator raises when the element is not resolvable.
+  // threw `PollTimeoutError`, which the locator raises when the element is not resolvable —
+  // and, since the catch above rethrows anything else, only that.
   // So the promise above holds for a matcher whose reader asks about an ELEMENT, and only
   // for those — `toBeVisible` and `toHaveCount` deliberately read a missing element as an
   // answer (`false`, `0`) rather than an absence, which is Playwright's behaviour for both
