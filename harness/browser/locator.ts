@@ -6,8 +6,9 @@ import { RETRY, poll } from "./retry";
 import type { LocatorState, PageContext, WaitOpts } from "./types";
 
 // Playwright's own definition — a non-empty bounding box that is not visibility:hidden —
-// through two W3C endpoints, because an injected script is refused on an extension page
-// from Firefox 156 on (test/e2e/privileged-protocol.test.ts measures that these are not).
+// through two W3C endpoints rather than one injected script, because this layer operates
+// CC's own extension pages too and a user's Firefox runs no script in one
+// (docs/e2e-and-probe.md; test/e2e/privileged-protocol.test.ts measures that these answer).
 async function isVisibleNow(element: WebElement): Promise<boolean> {
   const { width, height } = await element.getRect();
   if (width === 0 || height === 0) return false;
