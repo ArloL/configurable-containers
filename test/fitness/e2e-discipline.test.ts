@@ -15,6 +15,9 @@ import { describe, it, expect } from "vitest";
 import { filesMatching, sourceFiles } from "./sources";
 
 const e2e = sourceFiles("test/e2e");
+// The layer that operates a page without knowing which KIND of page it is, so a
+// convenience taken here is taken on CC's own pages too.
+const browserLayer = sourceFiles("harness/browser");
 
 describe("fitness — e2e drives the browser through harness/browser", () => {
   it("has cases open at all, so the checks below are about something", () => {
@@ -77,6 +80,31 @@ describe("fitness — e2e drives the browser through harness/browser", () => {
       // fill) goes through `toHaveValue`.
       "test/e2e/privileged-protocol.test.ts",
     ]);
+  });
+
+  it("takes no privileged convenience the browser used to refuse", () => {
+    // Until Firefox 157 this rule was the browser's: an extension page lives in the
+    // extension process, and Marionette refused an injected script there. The harness was
+    // built around that — `Locator.getAttribute` IS `getDomAttribute`, `inputValue()` is Get
+    // Element Property, visibility is Get Element Rect plus Get Element CSS Value — because
+    // Selenium implements `WebElement.getAttribute` as an injected ATOM rather than a
+    // protocol command, which is the trap: it is the same call every http(s) case makes.
+    //
+    // 157 refuses every browsing-context command there instead, so the suite now runs with
+    // geckodriver's `--allow-system-access` (harness/firefox.ts says why) and an injected
+    // script ANSWERS on an extension page again. The discipline has to survive the refusal
+    // that taught it: a case written against a script injected into CC's own options page
+    // would go green here and describe something a user's Firefox will not do.
+    //
+    // `harness/firefox.ts` is deliberately not read: every one of its `executeScript`
+    // helpers reads a probe-written attribute on an http(s) page, which is ordinary web
+    // content, and this check cannot tell one page from another — only which layer is
+    // asking. The cases and the page-agnostic layer are the two that must not.
+    const offenders = filesMatching(
+      [...e2e, ...browserLayer],
+      /execute(?:Async)?Script|setContext\s*\(|Context\.Chrome/,
+    ).map((f) => f.path);
+    expect(offenders).toEqual([]);
   });
 
   it("keeps its own deadline loops out of the cases", () => {

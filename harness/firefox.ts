@@ -201,6 +201,35 @@ async function buildXpiFor(
   return zipDir(EXT_DIRS[ext]);
 }
 
+// geckodriver's own flag, which starts Firefox with `-remote-allow-system-access`. Without
+// it, from Firefox 157, a `moz-extension://` page answers NOTHING: Marionette refuses every
+// command that resolves a browsing context in a privileged scope, and an extension process
+// is one by definition (`isPrivilegedContext`, BrowsingContextUtils.sys.mjs, which names
+// "the parent process, an extension process, or a privileged about: process"). Measured on
+// 157.0a1 (build 20260909211052): `getTitle`, `getPageSource`, `findElement(s)`,
+// `activeElement`, `performActions`, `takeScreenshot` and `executeScript` each an
+// `UnsupportedOperationError`, and BiDi's `script.evaluate` and `locateNodes` with them —
+// sixteen cases across the options page, the choice page, pause and config-sync. 155.0.1 and
+// 156.0b5 refuse `executeScript` alone, which the harness already worked around — so the
+// flag goes on for every channel rather than by version, and one suite runs everywhere.
+//
+// There is no version to wait for. The refusal is deliberate — its check is commented
+// "Without system access no command may run in a privileged browsing context", its opt-out
+// is documented as being for "commands that are safe regardless of the context's privilege
+// level", and every affected command gained a `@throws` line in the same change. It has to
+// be the DRIVER's flag: geckodriver refuses the browser argument itself ("Argument
+// --remote-allow-system-access can't be set via capabilities").
+//
+// What it costs is why this was refused while `executeScript` was the only casualty: the
+// session may now reach chrome scope, and an injected script ANSWERS on an extension page
+// that a user's Firefox would refuse. The browser stopped enforcing that boundary, so
+// `test/fitness/e2e-discipline.test.ts` does — "takes no privileged convenience the browser
+// used to refuse". The alternative was losing L4/L5 coverage of CC's own two pages: the
+// config editor, and the whole keyboard grammar of the choice screen.
+function systemAccessService(): firefox.ServiceBuilder {
+  return new firefox.ServiceBuilder().addArguments("--allow-system-access");
+}
+
 export async function launch(opts: LaunchOptions = {}): Promise<Session> {
   // Probe first, the order every caller used to spell. Nothing here has established that
   // install order matters; this preserves it rather than finding out.
@@ -270,7 +299,11 @@ export async function launch(opts: LaunchOptions = {}): Promise<Session> {
 
   let driver: WebDriver;
   try {
-    driver = await new Builder().forBrowser("firefox").setFirefoxOptions(options).build();
+    driver = await new Builder()
+      .forBrowser("firefox")
+      .setFirefoxOptions(options)
+      .setFirefoxService(systemAccessService())
+      .build();
     for (const { xpiPath } of xpis) {
       await (driver as unknown as firefox.Driver).installAddon(xpiPath, true);
     }
@@ -705,24 +738,18 @@ export function openViewSource(
 // WebDriver refuses that scheme, while an extension may open another extension's pages. The
 // driver must already be on a probe-reported http(s) page for the relay to exist.
 //
-// ONCE THERE, NOTHING MAY RUN A SCRIPT IN THAT PAGE. An extension page lives in the extension
-// process, which Firefox counts as a PRIVILEGED browsing context, and Marionette refuses
-// ExecuteScript and ExecuteAsyncScript in one unless the browser was started with
-// `--remote-allow-system-access` (`isPrivilegedContext`, BrowsingContextUtils.sys.mjs;
-// measured on 156.0a1, where it broke nine cases at once). That rules out `driver.executeScript`
-// AND `WebElement.getAttribute`, which Selenium implements as an injected atom rather than a
-// protocol command — the trap, because it is the same call every http(s) case makes.
+// ONCE THERE, DON'T RUN A SCRIPT IN THAT PAGE. Firefox counts an extension process as a
+// privileged browsing context, and a user's Firefox refuses an injected script in one; the
+// suite only gets an answer because it drives geckodriver with `--allow-system-access` (see
+// `systemAccessService`). What a case needs is a protocol command anyway — `getDomAttribute`
+// for a data-* attribute, `getProperty` for a textarea's value, `getText`, `isEnabled`,
+// `click`, `clear`, `sendKeys`, `switchTo().activeElement()` — and `harness/browser` is
+// built out of exactly those. The trap is `WebElement.getAttribute`, which Selenium
+// implements as an injected atom rather than a protocol command, so it is the same call
+// every http(s) case makes; `Locator.getAttribute` IS `getDomAttribute` for that reason.
 //
-// Everything an extension page needs is a real protocol command and keeps working:
-// `getDomAttribute` (a data-* attribute), `getProperty` (a textarea's value), `getText`,
-// `isEnabled`, `click`, `clear`, `sendKeys` and `switchTo().activeElement()`. The harness's
-// own read helpers below stay on executeScript on purpose: every one of them reads a
-// probe-written attribute on an http(s) page, which is ordinary web content.
-//
-// The flag is not the fix. It re-grants privileged access to the whole session — including
-// the chrome-scope reach these cases have no business having — to keep one convenience call
-// working, and it would make the suite depend on a Firefox that permits what a shipped
-// extension's users never will.
+// The read helpers below stay on `executeScript`: every one of them reads a probe-written
+// attribute on an http(s) page, which is ordinary web content.
 export function openExtensionPage(page: Page, url: string): Promise<{ id: number; url: string }> {
   return openTab(page, url);
 }

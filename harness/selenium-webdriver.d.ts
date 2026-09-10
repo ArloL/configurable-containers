@@ -6,8 +6,8 @@
 // they are declared here rather than reached through a cast at each call site.
 //
 // The suite needs them because they are real WebDriver protocol commands, where
-// `getAttribute` is a SCRIPT Selenium injects: an extension page is a privileged browsing
-// context and Firefox will not run one there. See harness/firefox.ts, on operating an
+// `getAttribute` is a SCRIPT Selenium injects — and this suite operates extension pages,
+// where a user's Firefox runs no script. See harness/firefox.ts, on operating an
 // extension page.
 //
 // Declaration merging: `WebElement` is a class, and an interface of the same name in the

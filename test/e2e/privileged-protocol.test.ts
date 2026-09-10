@@ -5,10 +5,12 @@ import "../../harness/browser/matchers";
 
 const OPTIONS_URL = ccExtensionUrl("options.html");
 
-// harness/browser is built on the claim that these are W3C endpoints rather than scripts
-// Selenium injects, so they answer on an extension page where `getAttribute` and
-// `executeScript` are refused. Firefox 156 widened that refusal once already
-// (isPrivilegedContext, nine cases at once), so this is the tripwire for the next time.
+// Every command harness/browser operates a page with, asked of an EXTENSION page — the kind
+// Firefox counts as privileged. That scope answers nothing at all on 157 unless geckodriver
+// was started with `--allow-system-access` (harness/firefox.ts argues the flag), so this
+// case is what says the flag is still in effect and still enough. The refusal it exists for
+// has widened twice — `executeScript` alone, then every browsing-context command, sixteen
+// cases at once — and the Nightly leg was the notice both times.
 describe("what a privileged page answers (real Firefox)", () => {
   let firefox: Session;
   let options: Page;
@@ -48,10 +50,11 @@ describe("what a privileged page answers (real Firefox)", () => {
     await expect(options.locator("#cc-config")).not.toHaveValue("");
   });
 
-  // Deliberately NOT asserted here: that an injected script is refused. Measured on
-  // 154.0, `executeScript("return 1;")` on this very page answers 1 — the refusal is
-  // 156.0a1's widened `isPrivilegedContext` check and has not reached release. Pinning it
-  // would fail on every channel CI runs while nothing was wrong, and pinning the opposite
-  // would go green today and red the day the widening ships. The harness keeps avoiding
-  // injected scripts either way, because Nightly is where release is going.
+  // Deliberately NOT asserted here: anything about an injected script. It ANSWERS on this
+  // page on every channel now — measured 2026-09-10 on 140.15.0esr, 155.0.1 and 157.0a1 —
+  // because system access lifts the refusal that made the avoidance automatic. So there is
+  // nothing left for a case here to observe, and the rule moved to where it can still be
+  // enforced: `test/fitness/e2e-discipline.test.ts`, "takes no privileged convenience the
+  // browser used to refuse". Pinning the refusal here instead would pin the flag being OFF,
+  // which is the state that takes the other sixteen cases down.
 });

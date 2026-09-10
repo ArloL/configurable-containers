@@ -164,29 +164,27 @@ mechanics of L4/L5.
   `about:blank`, which auto-temp ignores by design. Hence the probe's `newTab` / `tabs` /
   `nav` (by tab id — the driver can't map a handle to one) / `open` commands; the
   driver can only *operate* an extension page something else opened.
-- **And operating one may NOT run a script in it.** An extension page lives in the
-  extension process, which Firefox counts as a privileged browsing context, and
-  Marionette refuses `ExecuteScript`/`ExecuteAsyncScript` there unless the browser was
-  started with `--remote-allow-system-access`. 154 refused only *parent-process* contexts;
-  156.0a1 widened the same check to `isPrivilegedContext` (extension and privileged
-  `about:` processes too) and took nine cases down at once — the Nightly tripwire earning
-  its keep. The trap is that `WebElement.getAttribute` is not a protocol command:
-  Selenium implements it as an injected atom, so the call every http(s) case makes reads as
-  `UnsupportedOperationError` here. `harness/browser` is built so that mistake cannot be
-  made: `Locator.getAttribute` IS `getDomAttribute` (the W3C endpoint — and what
-  Playwright's `getAttribute` returns anyway), `inputValue()` is Get Element Property,
-  visibility is Get Element Rect plus Get Element CSS Value, the focused element is the CSS
-  `:focus`, and `fill()` is `clear()` + `sendKeys()`, which also fires the `input` the
-  editor validates on as assigning `.value` never did.
-  `test/e2e/privileged-protocol.test.ts` pins that each of those answers on an extension
-  page and is the tripwire for the next widening. Re-measured 2026-08-29 on all three
-  channels: `executeScript` on that page ANSWERS on 140.14.0esr and 154.0.1 and is
-  refused on 157.0a1, so the widening rode 156 forward and has not reached release —
-  the avoidance is about where release is going, not where it is. Don't reach for the flag: it re-grants privileged access to the
-  whole session to keep one convenience call working, and pins the suite to a Firefox that
-  permits what the shipped extension's users never will. `harness/firefox.ts`'s own
-  `executeScript` helpers stay as they are — every one reads a probe-written attribute on
-  an http(s) page, which is ordinary web content.
+- **CC's own pages are automatable only because the driver runs with
+  `--allow-system-access`.** Firefox counts an extension process as a privileged browsing
+  context, and from 157 Marionette refuses every browsing-context command in one —
+  `findElements` included, so without the flag a `moz-extension://` page answers nothing but
+  its url. `harness/firefox.ts`'s `systemAccessService` carries the measurement and the
+  argument for taking the flag; what a case here needs to know is the rule it leaves behind.
+  **Operate an extension page with protocol commands, never an injected script.** A user's
+  Firefox refuses one, so a case built on `executeScript` describes something that does not
+  happen — and since the flag makes it answer, the browser no longer tells you.
+  `test/fitness/e2e-discipline.test.ts` does. The trap is `WebElement.getAttribute`, which
+  Selenium implements as an injected atom, so the call every http(s) case makes is the one
+  that lies here. `harness/browser` is built so the mistake cannot be made:
+  `Locator.getAttribute` IS `getDomAttribute` (the W3C endpoint — and what Playwright's
+  `getAttribute` returns anyway), `inputValue()` is Get Element Property, visibility is Get
+  Element Rect plus Get Element CSS Value, the focused element is the CSS `:focus`, and
+  `fill()` is `clear()` + `sendKeys()`, which also fires the `input` the editor validates on
+  as assigning `.value` never did. `test/e2e/privileged-protocol.test.ts` pins that each of
+  those answers on an extension page, and is the tripwire for the next widening — it has
+  been the notice for both so far. `harness/firefox.ts`'s own `executeScript` helpers stay
+  as they are: every one reads a probe-written attribute on an http(s) page, which is
+  ordinary web content.
 - **The command relay is a DOM event injected into http(s) pages only**, so the driver
   must be parked on a probe-reported http(s) page first, and an unanswered command reads
   as an *empty answer*, not an error. `commands.onCommand` cannot be driven at all

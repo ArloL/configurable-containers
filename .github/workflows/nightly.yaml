@@ -297,6 +297,12 @@ jobs:
         windowId for popup windows, and onCreated firing with about:blank before the real
         url (bug 1586612).
 
+        The other class is what the SUITE depends on rather than what CC does: how much of
+        a privileged page WebDriver may still operate. That has moved twice, and both times
+        every failure was a case driving CC's own options or choice page. Read
+        test/e2e/privileged-protocol.test.ts and harness/firefox.ts's systemAccessService
+        before treating such a run as a routing regression.
+
         A failure here is worth a bug filed upstream while there is still time, which is
         the whole reason for running it.
         EOF
