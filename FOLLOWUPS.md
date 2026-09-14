@@ -134,15 +134,22 @@ carry it out is in question.
 
 That file declares two methods — `getDomAttribute` and `getProperty` — that
 `selenium-webdriver` has shipped since **v4.1.1** (its own `CHANGES.md`: "Implements
-'getDomAttribute' … as defined by w3c spec") and that `@types/selenium-webdriver` still
-does not, as of **4.35.6**, the newest published. There is nothing to upgrade to, so the
-declarations live here rather than as a cast at each call site. Delete the file the day
-the types carry them.
+'getDomAttribute' … as defined by w3c spec") and that `@types/selenium-webdriver` did not,
+up to 4.35.6.
 
-**Filed upstream: DefinitelyTyped/DefinitelyTyped#75437**, which adds both plus
-`getAriaRole` and `getAccessibleName` — the other two W3C element commands the package
-is missing. Merged, it republishes `@types/selenium-webdriver` and Renovate carries it
-here.
+**Upstream shipped them in `@types/selenium-webdriver@4.35.7` (2026-09-14)** —
+DefinitelyTyped/DefinitelyTyped#75437 merged, adding both plus `getAriaRole` and
+`getAccessibleName`, with signatures identical to this file's. Measured against that
+package on 2026-09-14: deleting the file typechecks clean on 4.35.7 and fails on 4.35.6
+with five errors across `harness/browser/locator.ts` and `harness/browser/page.ts`. So the
+floor is load-bearing and the deletion is two edits — `rm harness/selenium-webdriver.d.ts`
+and `"@types/selenium-webdriver": "^4.35.7"` in `package.json`.
+
+**What holds it until 2026-09-21 is this repo's own `.npmrc`** (`min-release-age=7`): npm
+refuses to resolve a package published less than a week ago, so `npm install` answers
+`ETARGET … no matching version with a date before …` and Renovate cannot open the bump
+either. The quarantine gates resolution alone — `npm ci` ignores the setting (measured,
+npm 11.19.0), so what it delays is the lockfile write, not a CI leg.
 
 To be clear about what is *not* temporary: the call sites. `getDomAttribute`,
 `getProperty`, `switchTo().activeElement()` and `clear()` + `sendKeys()` are the
@@ -151,10 +158,8 @@ calls even if Firefox reverted the privileged-context change that forced them
 (`docs/e2e-and-probe.md`, on what operating an extension page may not do). Only the type
 declarations are a stopgap.
 
-**Nothing will announce it.** Merging an interface into a class turns same-named methods
-into *overloads*, not a conflict: measured 2026-08-25, redeclaring even `getAttribute`
-with a wrong return type typechecks clean. So an upstream fix will not collide, and a
-stale local signature would silently win over the real one. The trigger to re-check is a
-Renovate bump of `@types/selenium-webdriver`: grep the new package for the two names, and
-if they are there, delete `harness/selenium-webdriver.d.ts` and let `npm run typecheck`
-confirm the call sites still resolve.
+**A stale local declaration will never collide with the real one.** Merging an interface
+into a class turns same-named methods into *overloads*, not a conflict: measured
+2026-08-25, redeclaring even `getAttribute` with a wrong return type typechecks clean. So
+nothing here goes red on the day the quarantine lifts — the trigger is the date, or the
+Renovate bump that becomes possible on it.
