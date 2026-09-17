@@ -3,11 +3,10 @@
 Things deliberately left needing a re-check, and where to look. Delete an entry once it is
 resolved.
 
-## `package.json` overrides a transitive `qs` (2026-09-17)
+## `package.json` has dependency overrides (2026-09-17)
 
-The reason and the removal condition live in `overridesComments` in `package.json`, keyed
-like `overrides` (npm refuses a comment key inside `overrides` itself: "Override without
-name"). Re-check it whenever `@stryker-mutator/core` is bumped.
+Each override's reason and removal condition live in `overridesComments` in `package.json`,
+keyed like `overrides`. Re-check them when bumping the packages they name.
 
 ## zizmor and actionlint disagree about how this repo calls its own workflows (2026-09-02)
 
