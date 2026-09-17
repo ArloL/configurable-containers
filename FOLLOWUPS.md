@@ -5,9 +5,9 @@ resolved.
 
 ## `package.json` overrides a transitive `qs` (2026-09-17)
 
-JSON has no comments, and npm refuses a `"//"` key inside `overrides` ("Override without
-name"), so the reason and the removal condition live in the top-level `"//"` key of
-`package.json`. Re-check it whenever `@stryker-mutator/core` is bumped.
+The reason and the removal condition live in `overridesComments` in `package.json`, keyed
+like `overrides` (npm refuses a comment key inside `overrides` itself: "Override without
+name"). Re-check it whenever `@stryker-mutator/core` is bumped.
 
 ## zizmor and actionlint disagree about how this repo calls its own workflows (2026-09-02)
 
