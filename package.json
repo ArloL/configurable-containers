@@ -42,6 +42,9 @@
     "vitest": "^4.1.10",
     "web-ext": "^10.6.0"
   },
+  "//": [
+    "overrides: typed-rest-client 2.3.1 (via @stryker-mutator/core 10.0.0) pins qs to exactly 6.15.1, which carries a DoS advisory. Remove once Stryker takes typed-rest-client >=3 (qs ^6.16.0); after npm install, npm ls qs must still show >=6.15.2."
+  ],
   "overrides": {
     "typed-rest-client": {
       "qs": "^6.15.3"
