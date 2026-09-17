@@ -3,6 +3,12 @@
 Things deliberately left needing a re-check, and where to look. Delete an entry once it is
 resolved.
 
+## `package.json` overrides a transitive `qs` (2026-09-17)
+
+JSON has no comments, and npm refuses a `"//"` key inside `overrides` ("Override without
+name"), so the reason and the removal condition live in the top-level `"//"` key of
+`package.json`. Re-check it whenever `@stryker-mutator/core` is bumped.
+
 ## zizmor and actionlint disagree about how this repo calls its own workflows (2026-09-02)
 
 zizmor's `self-repository` audit asks for `uses: $/.github/workflows/x.yaml` where we write
