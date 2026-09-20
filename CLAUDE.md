@@ -511,8 +511,8 @@ because `test/fitness/` reads source with comments stripped).
   (`// Stryker disable … : why`), never absorbed by lowering the threshold. Two settings
   in `stryker.config.mjs` fail as `stryker run` dying at startup rather than as a bad
   score: `tsconfigFile: "none"` (its rewriter calls `ts.parseConfigFileTextToJson`, which
-  TypeScript 7 no longer exports) and `vitest.related: false` (Vitest 4 answers "no
-  related test files", so the dry run finds no tests). The run also pins fast-check's seed
+  TypeScript 7 no longer exports) and `vitest.related: false` (Vitest answers "no
+  related test files" — measured on 4 and again on 5 — so the dry run finds no tests). The run also pins fast-check's seed
   — fresh samples make each mutant's verdict a coin flip — via a setup file `npm test`
   deliberately does not load.
 - **`test/engine/mock-port.ts` fidelity is where "L3 green, Firefox broken" comes from.**

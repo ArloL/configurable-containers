@@ -213,18 +213,25 @@ expect.extend({
   },
 });
 
-// The parameter list must match @vitest/expect's own `interface Matchers<T = any>`
-// exactly, or TS refuses the merge (TS2428) even though the matchers work. So the `any`
-// stays; it needs no suppression, because `typescript/no-explicit-any` is a pedantic rule
-// and `.oxlintrc.json` enables `correctness` plus a named list that does not include it.
+// The type parameter list must match vitest's own `interface Matchers` exactly — names,
+// constraints and defaults — or TS refuses the merge (TS2428) even though the matchers
+// work. Vitest 5 widened it from `<T = any>` to the two-parameter jest shape, and the
+// error names only the mismatch, never which side moved: read the declaration in
+// `vitest/dist/chunks/config.*.d.ts` and copy it, rather than guessing at the arity.
+//
+// The return type is `Promise<void>` and NOT `R`. `expect(actual)` hands back
+// `Assertion<void, T>`, so `R` resolves to `void` here, and every one of these matchers
+// is awaited (`settle` polls the page) — `await` on a `void` is what
+// `typescript/await-thenable` exists to catch, so binding the return to `R` would turn
+// this file green and every call site red.
 declare module "vitest" {
-  interface Matchers<T = any> {
-    toHaveText(expected: string | RegExp, opts?: WaitOpts): Promise<T>;
-    toContainText(expected: string, opts?: WaitOpts): Promise<T>;
-    toHaveValue(expected: string | RegExp, opts?: WaitOpts): Promise<T>;
-    toHaveAttribute(name: string, expected: string | RegExp, opts?: WaitOpts): Promise<T>;
-    toHaveCount(expected: number, opts?: WaitOpts): Promise<T>;
-    toBeVisible(opts?: WaitOpts): Promise<T>;
-    toBeEnabled(opts?: WaitOpts): Promise<T>;
+  interface Matchers<R extends void | Promise<void> = void | Promise<void>, T = unknown> {
+    toHaveText(expected: string | RegExp, opts?: WaitOpts): Promise<void>;
+    toContainText(expected: string, opts?: WaitOpts): Promise<void>;
+    toHaveValue(expected: string | RegExp, opts?: WaitOpts): Promise<void>;
+    toHaveAttribute(name: string, expected: string | RegExp, opts?: WaitOpts): Promise<void>;
+    toHaveCount(expected: number, opts?: WaitOpts): Promise<void>;
+    toBeVisible(opts?: WaitOpts): Promise<void>;
+    toBeEnabled(opts?: WaitOpts): Promise<void>;
   }
 }
