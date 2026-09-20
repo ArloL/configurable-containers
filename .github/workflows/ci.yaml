@@ -101,7 +101,7 @@ jobs:
         node-version-file: .tool-versions
     - run: npm ci
     - id: version
-      uses: ArloL/calver-tag-action@3f0c5cbd7acfa52ddeef19ae080b540c03d231f7 # v2608.0.107
+      uses: ArloL/calver-tag-action@825bf3b80af6de7609a7915750b328a2f9884710 # v2609.0.104
     - # BUILD_TIMESTAMP exactly as release.yaml captures it: zip records mtimes, so the
       # build is only reproducible against a known instant, and the source archive has no
       # .git for anyone to derive one from. `sign:dev` packages before it signs, so this
