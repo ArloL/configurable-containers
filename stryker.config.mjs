@@ -9,8 +9,8 @@ export default {
   packageManager: "npm",
   testRunner: "vitest",
   // `related: false` — the runner's default asks Vitest which test files import the
-  // mutated one, and Vitest 4 answers "none" for every file here, so the dry run finds no
-  // tests and Stryker exits before mutating anything. The suite this points at is eight
+  // mutated one, and Vitest answers "none" for every file here (measured on 4 and again
+  // on 5), so the dry run finds no tests and Stryker exits before mutating anything. The suite this points at is eight
   // files and under a second; running all of them is not a cost worth a module graph.
   vitest: { configFile: "vitest.mutation.config.ts", related: false },
 
