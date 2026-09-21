@@ -213,25 +213,25 @@ expect.extend({
   },
 });
 
-// The type parameter list must match vitest's own `interface Matchers` exactly — names,
-// constraints and defaults — or TS refuses the merge (TS2428) even though the matchers
-// work. Vitest 5 widened it from `<T = any>` to the two-parameter jest shape, and the
-// error names only the mismatch, never which side moved: read the declaration in
-// `vitest/dist/chunks/config.*.d.ts` and copy it, rather than guessing at the arity.
+// The parameter list must match @vitest/expect's own `interface Matchers<T = any>`
+// exactly, or TS refuses the merge (TS2428) even though the matchers work. So the `any`
+// stays; it needs no suppression, because `typescript/no-explicit-any` is a pedantic rule
+// and `.oxlintrc.json` enables `correctness` plus a named list that does not include it.
 //
-// The return type is `Promise<void>` and NOT `R`. `expect(actual)` hands back
-// `Assertion<void, T>`, so `R` resolves to `void` here, and every one of these matchers
-// is awaited (`settle` polls the page) — `await` on a `void` is what
-// `typescript/await-thenable` exists to catch, so binding the return to `R` would turn
-// this file green and every call site red.
+// The arity is the vitest major's, not a choice: 4 declares `<T = any>`, 5 widened it to
+// the two-parameter jest shape `<R extends void | Promise<void> = void | Promise<void>,
+// T = unknown>` with the methods returning `Promise<void>`. TS2428 names only the
+// mismatch, never which side moved, so read the declaration in the installed
+// `@vitest/expect` and copy it rather than guessing at the arity. `vitest` is held at 4
+// for the mutation gate (FOLLOWUPS.md), so this block and that pin move together.
 declare module "vitest" {
-  interface Matchers<R extends void | Promise<void> = void | Promise<void>, T = unknown> {
-    toHaveText(expected: string | RegExp, opts?: WaitOpts): Promise<void>;
-    toContainText(expected: string, opts?: WaitOpts): Promise<void>;
-    toHaveValue(expected: string | RegExp, opts?: WaitOpts): Promise<void>;
-    toHaveAttribute(name: string, expected: string | RegExp, opts?: WaitOpts): Promise<void>;
-    toHaveCount(expected: number, opts?: WaitOpts): Promise<void>;
-    toBeVisible(opts?: WaitOpts): Promise<void>;
-    toBeEnabled(opts?: WaitOpts): Promise<void>;
+  interface Matchers<T = any> {
+    toHaveText(expected: string | RegExp, opts?: WaitOpts): Promise<T>;
+    toContainText(expected: string, opts?: WaitOpts): Promise<T>;
+    toHaveValue(expected: string | RegExp, opts?: WaitOpts): Promise<T>;
+    toHaveAttribute(name: string, expected: string | RegExp, opts?: WaitOpts): Promise<T>;
+    toHaveCount(expected: number, opts?: WaitOpts): Promise<T>;
+    toBeVisible(opts?: WaitOpts): Promise<T>;
+    toBeEnabled(opts?: WaitOpts): Promise<T>;
   }
 }

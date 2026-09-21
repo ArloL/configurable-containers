@@ -514,7 +514,13 @@ because `test/fitness/` reads source with comments stripped).
   TypeScript 7 no longer exports) and `vitest.related: false` (Vitest answers "no
   related test files" — measured on 4 and again on 5 — so the dry run finds no tests). The run also pins fast-check's seed
   — fresh samples make each mutant's verdict a coin flip — via a setup file `npm test`
-  deliberately does not load.
+  deliberately does not load. A third fails as neither: **`vitest` is held at 4**, because
+  Stryker's per-test filter names tests with a space where vitest 5 joins the suite chain
+  with `" > "`, so it selects no test, nothing runs against a mutant, and every covered
+  mutant is reported SURVIVED — a gate that has stopped measuring, reporting the silence
+  as work to do. Do not take it to 5 to fix a type error; the `Matchers` declaration in
+  `harness/browser/matchers.ts` moves with the major, and FOLLOWUPS.md has the removal
+  condition.
 - **`test/engine/mock-port.ts` fidelity is where "L3 green, Firefox broken" comes from.**
   It fires `onTabCreated` from `createTab`, fires `onTabRemoved` from `removeTab` (Firefox
   doesn't care who closed the tab — while it didn't, a tab CC itself closed was invisible

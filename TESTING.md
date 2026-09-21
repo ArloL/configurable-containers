@@ -315,6 +315,19 @@ mutant no other case catches.
   same, and not for the cost — a refactor can introduce an *equivalent* mutant honestly,
   which should file an issue for someone to name in a comment, not block a merge.
 
+  The run is held on **vitest 4** for a reason the score cannot show you. Stryker narrows
+  a mutant to its covering tests by writing a regex into `testNamePattern`, built from the
+  suite chain and the test name joined with a space; vitest 5 matches that against
+  `task.fullTestName`, which joins with `" > "`. The regex selects nothing, so no test
+  runs against the mutant, and a mutant no test ran is recorded as SURVIVED. The nightly
+  of 2026-09-21 read 34.55% with 769 survivors; the same commit under vitest 4 reads
+  100.00%, 1172 killed, 0 survived. That is the failure mode this gate is least able to
+  report on itself — not red, but not measuring — so the pin is kept by
+  `renovate.json5`, explained in FOLLOWUPS.md with its removal condition
+  (stryker-mutator/stryker-js#6210), and `test/fitness/mutation-gate.test.ts` fails
+  `npm test` in seconds if a bump lands anyway, rather than leaving it to a nightly a day
+  later. `coverageAnalysis: "all"` is not an escape: measured at the same 769.
+
   The nightly keeps the HTML report as an artifact (`mutation-report`, 14 days, uploaded on
   failure too — the failing run is the one worth reading). It is per-mutant and browsable:
   the mutated source, what each survivor changed, which tests ran against it. Stryker wrote
@@ -558,6 +571,14 @@ mutant no other case catches.
     call sequence for four paths: a navigation that stays put costs `getTab` +
     `getIdentity` and nothing else, a reopen asks MAC only *after* deciding to act, an
     armed container adds nothing, and the hops of a reopen we performed cost nothing.
+  - **The mutation gate's vitest** (`mutation-gate.test.ts`) — `vitest` stays on 4, in the
+    declared range and in the installed tree alike. The odd one out in this list: it pins
+    a dependency rather than a shape, because the property it protects is another gate's
+    ability to measure at all. Under vitest 5 Stryker's per-test filter matches no test,
+    so nothing runs against a mutant and every covered mutant reads as a survivor —
+    769 of them on 2026-09-21, 0 on the same commit under 4. The gate is nightly and the
+    phantom survivors look exactly like work; this fails `npm test` in seconds instead,
+    with the reason and the upstream issue in the message.
 
   House rules for adding one: an **exact inventory, never a bound** (a bound absorbs the
   next violation silently); **no false alarms** (comments stripped before matching,
