@@ -3,6 +3,26 @@
 Things deliberately left needing a re-check, and where to look. Delete an entry once it is
 resolved.
 
+## `vitest` is held at 4 so the mutation gate can measure (2026-09-21)
+
+`@stryker-mutator/vitest-runner@10` narrows a mutant's run to its covering tests by
+writing a regex into `testNamePattern`, built from the suite chain and the test name
+joined with a single space. Vitest 4 matched that against `getTaskFullName(task)`, built
+the same way; vitest 5 matches it against the precomputed `task.fullTestName`, which
+`createTaskName()` joins with `" > "`. Nothing matches, so no test runs against a mutant,
+and a mutant no test ran is reported as SURVIVED. The nightly said 769 survivors across
+five modules on vitest 5 and 0 — 100.00%, 1172 killed — on vitest 4, same suite, same
+commit. `coverageAnalysis: "all"` is not a way out: measured at the same 769, because
+Stryker builds the filter either way.
+
+Upstream is <https://github.com/stryker-mutator/stryker-js/issues/6210>, fix proposed in
+PR #6214. When a `@stryker-mutator/vitest-runner` release carries it: drop the
+`packageRules` entry in `renovate.json5`, take `vitest` and `@vitest/coverage-v8` to 5,
+restore the two-parameter `Matchers` declaration in `harness/browser/matchers.ts` (the
+comment there says what 5 wants), delete `test/fitness/mutation-gate.test.ts`, and check
+`npm run test:mutation` still ends at 100.00% — that run is the whole point of the pin,
+and it is the one thing a green `npm test` does not tell you.
+
 ## `package.json` has dependency overrides (2026-09-17)
 
 Each override's reason and removal condition live in `overridesComments` in `package.json`,

@@ -11,6 +11,22 @@
         "dependencies",
     ],
     "minimumReleaseAge": "7 days",
+    "packageRules": [
+        {
+            // Held at 4 because the nightly mutation gate cannot MEASURE on 5: Stryker's
+            // per-test filter names tests with a space where vitest 5 joins the suite
+            // chain with " > ", so the filter selects nothing, no test runs against a
+            // mutant, and every covered mutant is recorded as survived — 769 phantoms on
+            // 2026-09-21, 0 on vitest 4. Lifting this needs stryker-mutator/stryker-js#6210
+            // (FOLLOWUPS.md), not a version bump; `test/fitness/mutation-gate.test.ts`
+            // fails if one lands anyway.
+            "matchPackageNames": [
+                "vitest",
+                "@vitest/coverage-v8",
+            ],
+            "allowedVersions": "<5",
+        },
+    ],
     "schedule": [
         "on the 20th day of the month",
     ],
