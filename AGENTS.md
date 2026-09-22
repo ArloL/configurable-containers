@@ -489,20 +489,17 @@ because `test/fitness/` reads source with comments stripped).
   shipped false greens twice: three e2e tests passed with auto-temp entirely broken, and
   L3 tests once asserted the bug.
 - **The coverage gate is at 100% and the thresholds ARE 100** (`npm run test:coverage`,
-  every push; `vitest.coverage.config.ts`). It runs L1–L3 only — an e2e drives a packaged
-  extension in another process and contributes nothing here — over `src/**` minus the three
-  files no deterministic level can reach. A number that is also the floor means new code
-  nothing reaches fails on the push that writes it, and there are exactly two honest ways
-  to answer a red one: write the case, or, where the code cannot be reached from a
-  measured run at all, mark it at the line with `/* v8 ignore … -- why */` as
-  `matcher.ts`, `load.ts` and `browser-port.ts`'s two echoes do. Never lower a threshold
-  — the same rule the mutation gate has, for the same reason. Third possibility worth
-  checking first: an unreachable line is often a dead defence and the fix is deleting
-  it. Two were, reaching 100 — a `?? []` over a key taken from that same map, and
-  `createEngine`'s own tmp-suffix counter, which no production caller has ever used
-  because auto-temp and the engine must share one (a second counter mints a colliding
-  `tmp1`, and identity is derived from the name). `EngineOptions.tmpSuffix` is required
-  now; keep it that way.
+  every push; `vitest.coverage.config.ts` argues the shape and names the exclusions). It
+  runs L1–L3 only over `src/**` minus three files no deterministic level can reach. A
+  number that is also the floor means new code nothing reaches fails on the push that
+  writes it, and there are exactly two honest ways to answer a red one: write the case,
+  or, where the code cannot be reached from a measured run at all, mark it at the line
+  with `/* v8 ignore … -- why */`. Never lower a threshold — the same rule the mutation
+  gate has, for the same reason. Worth checking first, though: an unreachable line is
+  often a dead defence, and the fix is deleting it. `EngineOptions.tmpSuffix` is required
+  because one such deletion reached 100 — auto-temp and the engine must share a counter,
+  since a second one mints a colliding `tmp1` and identity derives from the name. Keep it
+  required.
 - **The mutation gate is at 100% and `npm test` does not run it** (`npm run test:mutation`,
   nightly). It mutates only the pure modules — `resolver`, `matcher`, `psl`, `config`,
   `overlays` — and lets only the tests that own each of them kill the mutants
@@ -510,20 +507,14 @@ because `test/fitness/` reads source with comments stripped).
   `same-site`/`parse` needs a case in *that module's* suite; an L3 engine case that covers
   it leaves the gate red. The parser's error messages and `path`s are inside the gate:
   `test/config/parse.rejections.test.ts` pins one row per rejection, so rewording a
-  diagnostic without updating it is a failure, not a silent drift. A survivor is killed or named
-  (`// Stryker disable … : why`), never absorbed by lowering the threshold. Two settings
-  in `stryker.config.mjs` fail as `stryker run` dying at startup rather than as a bad
-  score: `tsconfigFile: "none"` (its rewriter calls `ts.parseConfigFileTextToJson`, which
-  TypeScript 7 no longer exports) and `vitest.related: false` (Vitest answers "no
-  related test files" — measured on 4 and again on 5 — so the dry run finds no tests). The run also pins fast-check's seed
-  — fresh samples make each mutant's verdict a coin flip — via a setup file `npm test`
-  deliberately does not load. A third fails as neither: **`vitest` is held at 4**, because
-  Stryker's per-test filter names tests with a space where vitest 5 joins the suite chain
-  with `" > "`, so it selects no test, nothing runs against a mutant, and every covered
-  mutant is reported SURVIVED — a gate that has stopped measuring, reporting the silence
-  as work to do. Do not take it to 5 to fix a type error; the `Matchers` declaration in
-  `harness/browser/matchers.ts` moves with the major, and FOLLOWUPS.md has the removal
-  condition.
+  diagnostic without updating it is a failure, not a silent drift. A survivor is killed or
+  named (`// Stryker disable … : why`), never absorbed by lowering the threshold.
+  **`vitest` is held at 4** — don't take it to 5 to fix a type error. Vitest 5 breaks
+  Stryker's per-test filter, so every covered mutant reports SURVIVED: a gate that has
+  stopped measuring rather than one that goes red. `test/fitness/mutation-gate.test.ts`
+  fails the fast lane on a bump and carries the measurement; FOLLOWUPS.md has the removal
+  condition. The two settings that make `stryker run` die at startup rather than score
+  badly argue themselves in `stryker.config.mjs`.
 - **`test/engine/mock-port.ts` fidelity is where "L3 green, Firefox broken" comes from.**
   It fires `onTabCreated` from `createTab`, fires `onTabRemoved` from `removeTab` (Firefox
   doesn't care who closed the tab — while it didn't, a tab CC itself closed was invisible
