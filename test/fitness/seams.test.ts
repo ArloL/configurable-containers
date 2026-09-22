@@ -106,7 +106,7 @@ describe("fitness — the browser seam", () => {
     // floated promise, where the engine swallows it into a console.warn and routing quietly
     // stops.
     //
-    // The four extension files are the documented exception (CLAUDE.md, "Where new logic
+    // The four extension files are the documented exception (AGENTS.md, "Where new logic
     // goes"): they are the extension's own plumbing — storage, the options page, the
     // choice page — and were never behind the port. They have no L3 level to lie to.
     expect(pathsMatching(sourceFiles("src"), /\bbrowser\./)).toEqual([

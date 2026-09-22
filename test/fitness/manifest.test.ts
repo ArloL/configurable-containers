@@ -1,7 +1,7 @@
 // Fitness function: the manifest's permissions against the APIs the code calls. Both
 // directions fail silently.
 //
-// A MISSING permission is the failure mode CLAUDE.md opens its Firefox section with: without
+// A MISSING permission is the failure mode AGENTS.md opens its Firefox section with: without
 // `cookies`, `tabs.create({cookieStoreId})` throws and nothing routes; without
 // `contextualIdentities`, MAC's gate rejects the F7 handshake; without `notifications`, the
 // F9 toast is lost with no error; without `webNavigation`, every "View Page Source" is routed

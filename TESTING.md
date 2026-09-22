@@ -765,7 +765,7 @@ issue on regression rather than blocking a PR — guard rails, not gatekeepers. 
 - **Firefox API drift** — narrowed rather than closed. The `latest`/`latest-esr` matrix
   blocks every push and the nightly **Nightly** tripwire gives months of notice, but all
   three run the same suite: a behaviour no case asserts can still change under us. The
-  measured facts are the exposed ones, and CLAUDE.md names them — `onBeforeNavigate`
+  measured facts are the exposed ones, and AGENTS.md names them — `onBeforeNavigate`
   firing before that navigation's `webRequest`, `tabs.create` refusing `about:newtab`,
   `windowId` being honoured for popup windows, `onCreated` firing with `about:blank` first.
 - **Whether a green channel means a green browser** — the matrix proves the suite passes

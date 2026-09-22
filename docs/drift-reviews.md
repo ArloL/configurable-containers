@@ -35,7 +35,7 @@ Read prose making a *present-tense, checkable claim* about a mechanism — "X ca
 runs on every Z", "the only caller is W", "this is the ordinary path" — and check it against
 the code. Highest-yield, in order:
 
-1. **A comment justifying a decision by naming a mechanism.** Load-bearing, and what CLAUDE.md
+1. **A comment justifying a decision by naming a mechanism.** Load-bearing, and what AGENTS.md
    is made of: a dead premise there means the next person takes a reasonable-looking wrong
    action *and the file tells them to*.
 2. **A comment naming a caller, a count, or a frequency.** "The only external consumer", "six
@@ -55,7 +55,7 @@ Not findings:
   deliberately keeps the history that explains its shapes. Only present-tense claims go stale.
 - **A dated design record.** `docs/superpowers/specs/` and `docs/modularity-review/` are
   snapshots of what was decided on a date and are *supposed* to diverge from the code. If a
-  decision was reversed, that belongs in CLAUDE.md, not in an edit to the record.
+  decision was reversed, that belongs in AGENTS.md, not in an edit to the record.
 - A statement of intent ("keep this synchronous") rather than of fact.
 - A claim about Firefox's behaviour, which is a measurement — see D3.
 
@@ -95,8 +95,8 @@ nothing else, silently.
 ## D3 — Measured facts past their shelf life
 
 **Has the platform moved past this measurement, and is the number still what the code does?**
-Scope: measured claims in `CLAUDE.md`, `TESTING.md`, and the three task-scoped platform
-files `CLAUDE.md` routes to — `docs/e2e-and-probe.md`, `docs/releasing.md`,
+Scope: measured claims in `AGENTS.md`, `TESTING.md`, and the three task-scoped platform
+files `AGENTS.md` routes to — `docs/e2e-and-probe.md`, `docs/releasing.md`,
 `docs/static-analysis.md`. Those three hold the measurements a session sees LEAST often,
 which is exactly why nobody re-checks them by accident.
 
@@ -104,7 +104,7 @@ A measurement is true *of a version on a date*, and these files are full of them
 why the platform notes are trustworthy, and why they need re-checking. Find them with:
 
 ```
-grep -n 'measured\|esr\|FF1\|[0-9]\+\.[0-9]\+a\?[0-9]*' CLAUDE.md TESTING.md docs/e2e-and-probe.md docs/releasing.md docs/static-analysis.md
+grep -n 'measured\|esr\|FF1\|[0-9]\+\.[0-9]\+a\?[0-9]*' AGENTS.md TESTING.md docs/e2e-and-probe.md docs/releasing.md docs/static-analysis.md
 ```
 
 For each, name the version and date it was measured on, and the current version of that thing.
@@ -128,9 +128,9 @@ grace, the coverage and mutation thresholds. One grep each against the source.
 ## D4 — Upstream citations
 
 **Does each reference into `mac/` or `tcp/` still resolve, and still say what we claim?**
-Scope: citations in `CLAUDE.md`, and the bugs CC works around.
+Scope: citations in `AGENTS.md`, and the bugs CC works around.
 
-CLAUDE.md cites both **by file and symbol, never line number**, because they track upstream —
+AGENTS.md cites both **by file and symbol, never line number**, because they track upstream —
 which is what makes this cheap: a symbol either exists or does not. Use the **local checkout**,
 not the GitHub API (`mac/` is a test prerequisite; clone with
 `git clone --depth 1 https://github.com/mozilla/multi-account-containers.git mac`).
@@ -213,8 +213,8 @@ Where an entry's condition cannot be checked from the repo, say so rather than g
 ## D8 — Cross-document contradictions
 
 **Where two current documents describe the same thing, do they agree?**
-Scope: `CLAUDE.md`, `TESTING.md`, `README.md`, `CONFIG.md`, and the four files
-`CLAUDE.md` routes to — `docs/{e2e-and-probe,releasing,static-analysis,amo-listing}.md`.
+Scope: `AGENTS.md`, `TESTING.md`, `README.md`, `CONFIG.md`, and the four files
+`AGENTS.md` routes to — `docs/{e2e-and-probe,releasing,static-analysis,amo-listing}.md`.
 A split raises this review's odds rather than lowering them: prose that used to sit in
 one file now sits in two, and the pointer between them is the thing that goes stale.
 
@@ -228,24 +228,24 @@ each quoted. Not findings: the specs under `docs/superpowers/` and the `docs/mod
 snapshots, which are dated records — a contradiction between one and the code is history
 working correctly. Past-tense history is exempt for the same reason.
 
-## D9 — Does every session need all of CLAUDE.md?
+## D9 — Does every session need all of AGENTS.md?
 
 **Is each section highly relevant to every session, and does the file match the documented
 guidance?**
-Scope: `CLAUDE.md`, plus the task-scoped files it routes to.
+Scope: `AGENTS.md`, plus the task-scoped files it routes to.
 
-`CLAUDE.md` is the only file loaded every session; the routing table at its head names the
-rest. So this review asks two questions now, not one: whether anything still in `CLAUDE.md`
+`AGENTS.md` is the only file loaded every session; the routing table at its head names the
+rest. So this review asks two questions now, not one: whether anything still in `AGENTS.md`
 belongs behind a row of that table, and whether anything behind a row is in fact
 cross-cutting and should come back. The second direction is the one a split makes easy to
 forget, and it is the one that costs a wrong change rather than tokens.
 
 **A finding here is a measured judgement, not a contradiction**, so the bar is written out
-rather than assumed. Nothing in the file has to be false: CLAUDE.md is read at the start of
+rather than assumed. Nothing in the file has to be false: AGENTS.md is read at the start of
 **every** conversation, so every line is a tax paid by sessions that will never use it, and
 the question is whether each still earns that.
 
-Opinion is legitimate here — *"CLAUDE.md has drifted too large"* is a real finding even though
+Opinion is legitimate here — *"AGENTS.md has drifted too large"* is a real finding even though
 every sentence in it is true. What it must carry instead of a second citation is a
 **measurement**: a number, a named section, and what that section costs the sessions that never
 use it. A judgement without one is the "this feels long" that every review rejects.

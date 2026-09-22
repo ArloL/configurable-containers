@@ -4,7 +4,7 @@
 - [Firefox is obtainable in a sandbox](firefox-is-obtainable-in-a-sandbox.md) — run `scripts/get-firefox.sh`; never report L4/L5 as unrunnable without naming the blocked host
 - [E2E driver is Selenium not Playwright](e2e-driver-selenium-not-playwright.md) — Playwright can't see WebExtension container tabs; harness uses selenium/geckodriver
 - [Logical commits](logical-commits.md) — split by reason for the change, dependency-ordered, each one green; conventional prefixes
-- [No scratch notes in the repo](no-scratch-notes-in-repo.md) — fold findings into CLAUDE.md/tests, then delete the notes file
+- [No scratch notes in the repo](no-scratch-notes-in-repo.md) — fold findings into AGENTS.md/tests, then delete the notes file
 - [User runs manual Firefox](user-runs-manual-firefox.md) — never launch `npm run manual` yourself; verify headless, hand interactive checks over
 - [CalVer tag action for releases](calver-tag-action-for-releases.md) — their own ArloL/calver-tag-action versions GitHub Actions releases; versions injected at build time
 - [Comments only if they add value](comments-only-if-they-add-value.md) — cut comments that restate the code; keep non-obvious why

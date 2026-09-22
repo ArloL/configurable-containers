@@ -263,7 +263,7 @@ export interface BrowserPort {
   // In every shipped build the implementation folds to `if (false)` — the echo target is a
   // compile-time constant and the build does not minify, so the dead branch is readable
   // proof for an AMO reviewer. It is READ-ONLY, which is what separates it from the
-  // build-time seed CLAUDE.md forbids: a seed that armed a container would make the shipped
+  // build-time seed AGENTS.md forbids: a seed that armed a container would make the shipped
   // extension capable of starting up with routing disabled, while this changes no routing at
   // all.
   echoDecision(e: DecisionEcho): void;
