@@ -323,7 +323,10 @@ because `test/fitness/` reads source with comments stripped).
   `storage.local.configYaml`, so a later build's seed never overrides an edited config —
   the point, not a bug. Four seeds differ: e2e, `npm run manual`, `npm run package`, plus
   a hand-copied duplicate of `TEST_CONFIG_YAML` in `vitest.shared.ts` (unit tests skip
-  esbuild) that nothing asserts.
+  esbuild). `test/fitness/seed-config.test.ts` pins that duplicate — both copies identical
+  and both parsing to rules — because drift there splits the suite's idea of the shipped
+  config rather than breaking a build: a rule added to one copy makes an L3 case pass
+  against behaviour the e2e build has never seen, and both suites stay green.
 - **A broken stored config never falls back to the seed**: `loadConfig` returns the
   *empty* config plus the error, so everything opens in a throwaway — loud, where stale
   rules are a silent wrong answer. `parseConfig("")` is legal and means "nothing matches".
