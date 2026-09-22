@@ -1,4 +1,4 @@
-# CLAUDE.md — Configurable Containers
+# AGENTS.md — Configurable Containers
 
 A Firefox WebExtension that routes each site into the right container from one user config.
 

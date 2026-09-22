@@ -148,7 +148,7 @@ const RETAINED: Retained[] = [
   {
     where: "src/engine/engine.ts",
     name: "viewSourceNav",
-    bound: "nothing — deleted by the tab's next top-level navigation, so it leaks one tab id per tab closed while still showing source (CLAUDE.md prices that at one integer)",
+    bound: "nothing — deleted by the tab's next top-level navigation, so it leaks one tab id per tab closed while still showing source (AGENTS.md prices that at one integer)",
   },
   {
     where: "src/engine/auto-temp.ts",

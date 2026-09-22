@@ -6,7 +6,7 @@
 // to the compiler — a promise nobody awaits or catches, and an async function passed
 // where a void-returning listener was expected (in Firefox that second one claims
 // `runtime.onMessage`'s reply channel from the sibling the message was addressed to,
-// which CLAUDE.md documents and `test/fitness/listeners.test.ts` can only pin the
+// which AGENTS.md documents and `test/fitness/listeners.test.ts` can only pin the
 // registration COUNT of). Both are conventions this repo kept by hand until now.
 //
 // Why oxlint and not typescript-eslint: `typescript@7` is the Go port, and its package
