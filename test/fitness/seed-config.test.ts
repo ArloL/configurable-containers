@@ -3,8 +3,8 @@
 // `__CC_CONFIG_YAML__` is an esbuild define, so it has to be supplied twice by two
 // different mechanisms that never meet: `harness/build-extension.ts` bundles the real
 // extension for the e2e levels, and `vitest.shared.ts` defines it for the unit levels,
-// which never run through esbuild at all. CLAUDE.md records the duplicate and adds
-// "that nothing asserts" — this is that assertion.
+// which never run through esbuild at all. AGENTS.md records the duplicate and points at
+// this file as what pins it.
 //
 // Drift here does not break a build or throw. It splits the suite's idea of what the
 // shipped config says: a rule added to one copy makes an L3 case pass against behaviour
