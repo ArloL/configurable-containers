@@ -76,9 +76,9 @@ function httpUrl(url: string): URL | null {
     return null;
   }
   if (u.protocol !== "http:" && u.protocol !== "https:") return null;
-  // Stryker disable next-line all: unreachable — an http(s) url with no host does not parse
-  // ("http:///" throws). Kept because the null-return contract is this function's, not the
-  // URL parser's.
+  // Stryker disable next-line ConditionalExpression,StringLiteral: unreachable — an http(s)
+  // url with no host does not parse ("http:///" throws). Kept because the null-return
+  // contract is this function's, not the URL parser's.
   /* v8 ignore next -- unreachable, as the note above says. */
   if (u.hostname === "") return null;
   return u;
