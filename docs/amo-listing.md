@@ -68,9 +68,9 @@ upstream reference only; the build never touches them.
 
 ## Claims to keep honest
 
-- **Do not advertise a management-overview UI.** `README.md` lists one as a goal, but the
-  2026-07-28 design spec defers it — the YAML file *is* the overview. Promising a screen
-  that does not exist invites the review that asks where it is.
+- **Do not advertise a management-overview UI.** There is none and none is planned
+  (`README.md` goals, the 2026-07-28 design spec) — the YAML file *is* the overview.
+  Promising a screen that does not exist invites the review that asks where it is.
 - **State the YAML barrier plainly, high up.** Someone who wants a click-through settings
   screen should decide against CC on the listing page rather than after installing.
 - **Keep the privacy wording identical to the manifest declaration.** Firefox shows the

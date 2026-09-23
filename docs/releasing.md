@@ -2,7 +2,7 @@
 
 Read this before cutting a release, running `npm run sign:dev` or `npm run submit`, editing
 anything under `amo/`, or touching the release workflows and
-`scripts/{package,sign-dev,amo-metadata,dev-updates,verify-reproducible}.ts`.
+`scripts/{package,sign-dev,amo-metadata,verify-reproducible}.ts` and `scripts/dev-updates.js`.
 
 The mistakes this file exists to prevent are the irreversible ones: GitHub releases here are
 immutable, an upload publishes the AMO listing over whatever the Developer Hub had, and a
@@ -64,7 +64,7 @@ shaped the way they are.
   `YYMM.0.<micro>` for the rest of the month, so one local build would own the update
   channel. Nothing enforces this; it is a rule for whoever sets `VERSION`.
 - **AMO REPACKS uploads**, so its copy is never byte-comparable with a local rebuild
-  (sorted entries + fixed 1980 mtime here, filesystem order + real mtimes there). Verify
+  (sorted entries + one `BUILD_TIMESTAMP` mtime here, filesystem order + real mtimes there). Verify
   reproducibility against the GitHub release asset and that release's
   `BUILD_TIMESTAMP`.
 - **A listed version is signed at APPROVAL, not upload** — in the queue it downloads back
