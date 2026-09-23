@@ -742,9 +742,8 @@ issue on regression rather than blocking a PR — guard rails, not gatekeepers. 
   is trustworthy must not take its dependencies from a mutable cache an earlier run could
   have poisoned.
 - `.github/workflows/check-actions.yaml` — `actionlint` and `zizmor` over the workflows
-  themselves, on every push and PR. zizmor fails the build on any finding; its one
-  suppression (`self-repository`, whose fix actionlint rejects) is argued in
-  `docs/static-analysis.md`.
+  themselves, on every push and PR. zizmor fails the build on any finding, and nothing
+  in the workflows suppresses one (`docs/static-analysis.md`).
 
 ## What CI still can't catch
 
