@@ -209,7 +209,8 @@ describe("fitness — the declared Firefox floor covers what the build needs", (
     // emitted and says nothing about the APIs the code calls. Narrower is not harmless — a
     // target BELOW the floor is a bundle downlevelled for browsers the add-on refuses to
     // install on, and one ABOVE it is syntax the oldest supported profile may not parse,
-    // which is a background script that never evaluates. Pinned to the same major.
+    // which is a background script that never evaluates. Pinned to the same major — which
+    // is how that one had drifted to `firefox115` while the manifest shipped a 140 key.
     const build = sourceFiles("harness").find((f) => f.path === "harness/build-extension.ts");
     const target = /target:\s*"(firefox\d+)"/.exec(build?.code ?? "");
     expect(target?.[1]).toBe(`firefox${parts(floor)[0]}`);

@@ -159,7 +159,8 @@ export function wireBackground(opts: WiringOptions): Background {
 
   // Applies run one at a time. They are not reentrant: `scripts.apply` unregisters what the
   // previous one registered, so two in flight can interleave into unregister, unregister,
-  // register, register — every snippet registered twice, injected twice, forever. Two are
+  // register, register — every snippet registered twice, injected twice, forever, and the
+  // first handle leaked with no one holding it. Two are
   // reachable from a double-clicked Save, from a Save meeting an adoption, and from a Save
   // meeting the STARTUP injection — `background.ts`'s tail applies the config it loaded, and
   // a `cc-config-apply` message does not wait for that tail. Small window (the editor has to
@@ -218,7 +219,9 @@ export function wireBackground(opts: WiringOptions): Background {
     },
     // The config `background.ts` loaded is already in `config` (through `useConfig`), so
     // this registers rather than re-reading storage — but it goes through the same queue,
-    // because what must not overlap is the REGISTRATION work, whoever asked for it.
+    // because what must not overlap is the REGISTRATION work, whoever asked for it. It
+    // deliberately does NOT swallow a registration failure the way `applyOnce` does — the
+    // tail is its only caller.
     async injectScripts() {
       await enqueue(async () => {
         await scripts.apply(config);

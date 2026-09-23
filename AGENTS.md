@@ -10,7 +10,7 @@ its own file — **read the matching one before you start, not when something br
 | Before you… | Read |
 |---|---|
 | write, move or debug a case in `test/e2e/`, or change `harness/` | `docs/e2e-and-probe.md` |
-| cut a release, run `sign:dev`/`submit`, or edit `amo/` or `scripts/` | `docs/releasing.md` (with `docs/amo-listing.md`) |
+| cut a release, run `sign:dev`/`submit`, edit `amo/` or `scripts/`, or bump a dependency or answer `npm run audit` | `docs/releasing.md` (with `docs/amo-listing.md`) |
 | change lint config, answer a Sonar finding, or add a suppression | `docs/static-analysis.md` |
 
 Covered elsewhere: `README.md` (goals, build, release), `CONFIG.md` (config format),
@@ -34,12 +34,7 @@ because `test/fitness/` reads source with comments stripped).
 
   `patternForUrl` is the same question backwards — the pattern for one observed URL, which
   the pause record hands the user to paste — and it carries the **same "must not widen"
-  duty**: `*://` because HSTS rewrites the scheme before webRequest sees it, no port
-  (a pattern's host cannot carry one), a trailing `*` because a path is anchored at both
-  ends and every OAuth entry point has a query, and the query itself dropped rather
-  than pasted, since a record written during a checkout must not carry the token. It
-  answers `null` where no pattern exists (an IPv6 literal) rather than a string the config
-  editor would then reject.
+  duty**; each of its narrowings is argued above it in `matcher.ts`.
 
   Two more things an edit gets wrong. In a pattern a bare host is only that host, so
   `https://example.com/*` is not `www.example.com`; `*.` asks for the subtree, and
@@ -97,50 +92,10 @@ because `test/fitness/` reads source with comments stripped).
   **Its recordings are the ONE thing CC APPENDS TO that outlives the browser**, so they are
   the one place a cap is not optional. The four other `storage.local` keys — the config, its
   stamp, the replaced copy, the disposer's `tmpEmptySince` — are each rewritten whole rather
-  than grown, and everything else here dies with the background context. The pause state is
-  in `storage.local`, and `record()` appends a row per distinct host and `persist()`s the
-  whole state on each new one. A container armed and forgotten therefore grew a stored
-  array, and wrote it from the blocking path, for as long as browsing continued.
-  `MAX_RECORDED_HOSTS` bounds both — and the hosts past it are counted into
-  `Recording.dropped`, not dropped in silence: rules are written from that list, and one a
-  reader takes for the whole flow while it quietly is not is the same silent wrong answer a
-  half-parsed config would be. `dropped` is optional in `StoredRecording` and required in
-  `Recording`, which is the split below: a recording stored before the cap has no such key
-  and refusing it on hydrate would throw the user's history away, but by the time the
-  blocking handler increments it the normalizer has filled it in.
-
-  **A row is one per URL as well as one per host** (`RecordedHost.urls`, the pattern
-  `patternForUrl` built), which is what makes a rule for a GitHub OAuth hand-off writable
-  from a record at all — and what makes the second cap
-  (`MAX_RECORDED_URLS_PER_HOST`, counted into the host row's own `dropped`) not optional
-  either: a URL row grows with browsing, not with the handful of hops a flow makes.
-  A host whose URLs did not all resolve the same way says `VARIED` rather than picking one,
-  because with path matching `github.com` genuinely has two answers and a row claiming
-  either sends the reader to write the rule that breaks the sign-in.
-
-  Hydration therefore **normalizes rather than validates** (`readRecording`/`readHost`/
-  `readUrl`, which replaced the `isRecording` type guard). A host row written before URL
-  detail has no `urls`, and a build that trusted the stored shape would call `.find` on
-  `undefined` inside the blocking handler, where a throw is a navigation that never
-  completes. Filling the missing fields in is what lets `urls` be required in the type
-  instead of checked at every use.
-
-  **Three types, not one, and which one may carry an optional field is the contract.**
-  `StoredRecording`/`StoredHost` (what any build may have left in `storage.local`, where a
-  field added later is optional), `Recording`/`RecordedHost` (in memory, everything present)
-  and `RecordingView`/`RecordedHostView`/`RecordedUrlView` (`pause-protocol.ts`, what the
-  message carries and the options page renders). The normalizers are the crossing one way,
-  `toView` the other. One declaration served all four roles until 2026-08-29, so a change
-  made for the renderer landed in a schema the blocking handler mutates, and the module was
-  `src/`'s only import cycle — `engine/pause` ↔ `extension/pause-protocol`. Adding a field
-  now costs three edits the compiler asks for. Two things it bought immediately:
-  `cookieStoreId` does not cross to the page (it has no use for a store id), and
-  `record()` says `open.dropped++` rather than `(open.dropped ?? 0) + 1` inside
-  `onBeforeRequest`. `PAUSE_STORAGE_KEY` moved to `pause-protocol.ts` for the same reason:
-  the page names it to subscribe to `storage.onChanged` as a signal, and a key two realms
-  agree on is protocol, not a private detail one of them borrows. So `options.ts` imports
-  nothing from `src/engine/` and `test/fitness/seams.test.ts` pins that the engine's only
-  reach into `src/extension` is a protocol module.
+  than grown; anything new that appends needs a cap and a `dropped` count too. The caps, the
+  three recording types and why hydration normalizes rather than validates are argued where
+  they are declared, in `pause.ts` and `pause-protocol.ts`: read those before changing a
+  recorded field.
 - **Two arming paths, one `arm()`.** The toolbar button takes its container from the `Tab`
   Firefox passes to `browserAction.onClicked`; the options page names one and the
   background validates it. WebDriver cannot click a `browser_action`, so logic living
@@ -173,20 +128,9 @@ because `test/fitness/` reads source with comments stripped).
   `onBeforeNavigate` never fires and every "View Page Source" is routed as a navigation
   (F13).
 - **The floor is `strict_min_version: "140.0"`, and 140 comes from the MANIFEST rather than
-  the code.** Every `browser.*` call in `src/` has been there since Firefox 59 at the
-  latest (`contentScripts.register`); what sets the floor is
-  `browser_specific_settings.gecko.data_collection_permissions`, a 140 key. 140 is also
-  where CI's `latest-esr` leg sits, and below it nothing here has ever been run — which is
-  the argument against lowering it to what the APIs alone would allow: an older Firefox
-  that lacks an API or ignores a key does not refuse to install, it routes wrongly on a
-  profile no gate here has touched. `test/fitness/firefox-floor.test.ts` prices every call
-  site and every manifest key against `@mdn/browser-compat-data` and fails on one that
-  wants more than the floor; it also pins `harness/build-extension.ts`'s esbuild `target`
-  to the same major, which is a claim about *syntax* only and is how that one had drifted
-  to `firefox115` while the manifest shipped a 140 key. Don't add `gecko_android` to
-  quiet addons-linter's warning that the key needs Android 142: containers do not exist on
-  Firefox for Android (`contextualIdentities` is unsupported at every version), so the key
-  would advertise an add-on that cannot route there at all.
+  the code** (`data_collection_permissions`). Don't lower it to what the APIs alone allow,
+  and don't add `gecko_android` to quiet addons-linter: `test/fitness/firefox-floor.test.ts`
+  fails on both and carries the argument.
 - **A `view-source:` load reaches `onBeforeRequest` wearing the INNER url.** Ctrl+U
   fetches the document it prints, so webRequest reports a `main_frame` GET for plain
   `https://site/` in a tab still pre-commit on `about:blank`. Routing it loses the wrapper
@@ -402,17 +346,7 @@ because `test/fitness/` reads source with comments stripped).
   the silent divergence this replaced.
 
   **Everything that touches the REGISTRATIONS goes through the one queue** (`enqueue`), not
-  just `applyStored`. `scripts.apply` unregisters what the previous one registered, so two
-  in flight interleave into unregister, unregister, register, register — every snippet
-  registered twice and injected twice, for the life of the browser, and the first handle
-  leaked with no one holding it. Three ways in, not two: a double-clicked Save, a Save
-  meeting a config-sync adoption, and a Save meeting the STARTUP injection —
-  `background.ts`'s tail calls `injectScripts()`, and a `cc-config-apply` message does not
-  wait for the tail. That third one is reachable because a config that does not parse makes
-  startup open the editor. `injectScripts` registers the config already in memory rather
-  than re-reading storage, which is why it is not simply `applyStored`, and it deliberately
-  does NOT swallow a registration failure the way `applyOnce` does — the tail is its only
-  caller. Hence `enqueue`'s `then(work, work)`: a rejected link must not strand the queue.
+  just `applyStored`; `wiring.ts` argues it above `enqueue` and `injectScripts`.
 
   The reason it is not `runtime.reload()` any more: that is the only step of a save nothing
   can observe, and on a temporarily installed extension on 140.14.0esr it never comes
@@ -448,17 +382,6 @@ because `test/fitness/` reads source with comments stripped).
   disposal punctual: losing one costs lateness, never earliness. Deliberate consequence: a `tmp` container with no stored note starts
   its grace *now*, since emptiness never written down is indistinguishable from a live
   grace.
-- **A `scripts:` snippet in the seed config is the one place nothing type-checks or
-  tests** (it ships as a string inside YAML), and the shipped YouTube original-audio
-  snippet carries two measured facts that make the obvious rewrites wrong. Patching
-  `ytInitialPlayerResponse` does nothing: the player re-derives from its own
-  `/youtubei/v1/player` fetch, so the retarget landed before the player read it and German
-  played anyway. And the player applies an audio-track switch, then reverts it as
-  playback commits, announcing it through none of the 48 event types the page fires — so
-  no one-shot design is reliable, and `video.audioTracks` reads length 0 because YouTube
-  feeds audio through MSE. Hence a held invariant on a poll, which also collapses SPA
-  navigation, back navigation and the revert into one case. Full notes:
-  `docs/superpowers/specs/2026-07-31-youtube-original-audio-design.md` §2.
 
 ## What a green test run can still hide
 
@@ -558,3 +481,9 @@ MAC's xpi from `mac/src` unbuilt, and `mac-interop.test.ts` fails rather than sk
 without it (a bare ENOENT), so a first `npm test` on a new machine reports a broken case
 that is only a missing checkout. Clone `mozilla/multi-account-containers` into `mac/` as
 CI does. Cite both by file and symbol, never line number — they track upstream.
+
+The other half of a fresh machine is Firefox, and `npm test` runs `test/e2e/` too. A
+machine with no Firefox can get one: `./scripts/get-firefox.sh`, then
+`FIREFOX_BIN=.firefox/esr/firefox npm test`. **A blocked `ftp.mozilla.org` is NOT evidence
+that Firefox cannot be downloaded** — `docs/e2e-and-probe.md` names the hosts that serve it
+and why a missing `FIREFOX_BIN` reads as a geckodriver failure.
