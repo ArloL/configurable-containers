@@ -82,10 +82,7 @@ export function reapAll(): void {
 function pidsMatching(pattern: string): number[] {
   const run = spawnSync("pgrep", ["-f", pattern], { encoding: "utf-8" });
   if (run.error) throw new Error(`the harness reaper needs pgrep: ${run.error.message}`);
-  // @types/node types `stdout` as `string` once an encoding is set; a spawn that never
-  // started reports null, which is exactly the case this reaper runs in.
-  // oxlint-disable-next-line typescript/no-unnecessary-condition
-  return (run.stdout ?? "").split("\n").map(Number).filter(Boolean);
+  return run.stdout.split("\n").map(Number).filter(Boolean);
 }
 
 // The geckodriver that started this browser, found through the browser rather than
@@ -104,7 +101,9 @@ function geckodriversOwning(browserPids: number[]): number[] {
 }
 
 const ps = (args: string[]): string[] =>
-  // As pidsMatching: the type says `string`, a failed spawn says null.
+  // @types/node types `stdout` as `string` once an encoding is set; a spawn that never
+  // started has no stdout at all (`undefined` on Node 24). Unlike pidsMatching nothing
+  // checks `error` first, so the missing-`ps` case really does reach this line.
   // oxlint-disable-next-line typescript/no-unnecessary-condition
   (spawnSync("ps", args, { encoding: "utf-8" }).stdout ?? "").split("\n").filter(Boolean);
 
