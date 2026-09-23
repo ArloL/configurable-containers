@@ -82,9 +82,8 @@ Two standing facts, to check against rather than re-derive:
 
 - **`S2871` must stay.** Taking its `localeCompare` advice breaks reproducible builds, because
   that sort is what makes the xpi's entry order identical on every machine and collation is not.
-- **zizmor has one suppression on purpose** — `self-repository`, whose fix actionlint rejects
-  (`docs/static-analysis.md`). A run proposing another has the finding inverted: the fix is
-  real.
+- **zizmor has no suppressions, on purpose** (`docs/static-analysis.md`). A run proposing one
+  has the finding inverted: the fix is real.
 
 Not a finding: a suppression that argues its case. That is one doing its job, and the only
 question is whether the argument still holds.

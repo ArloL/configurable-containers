@@ -39,11 +39,12 @@ taken.
   found one on the push that added the flag: a `typescript/no-explicit-any` directive over
   the `declare module "vitest"` merge, where the rule is pedantic and has never been on.
 - **The workflows have their own two gates — `actionlint` and `zizmor`** (`check-actions.yaml`),
-  and zizmor fails the build on any finding. It has exactly one suppression, and the reason
-  it is not two is its `cache-poisoning` finding on a release trigger: that fix is real, not
-  an ignore. The one is `self-repository` on the three `uses: ./.github/workflows/…` calls,
-  where the `$/…` it asks for is a malformed workflow-call to actionlint — the two gates
-  want different text, and FOLLOWUPS.md holds the re-check. `actions/setup-node` caches BY
+  and zizmor fails the build on any finding. It has no suppressions: its `cache-poisoning`
+  finding on a release trigger was fixed rather than ignored. The three self-calls are
+  written `$/…`, as zizmor's `self-repository` asks; upstream actionlint (rhysd, v1.7.12)
+  still rejects that, and it passes only because `check-actions.yaml` runs the
+  `actionlint.kjanat.dev` fork — going back to upstream before rhysd/actionlint#732 ships
+  brings the conflict back. `actions/setup-node` caches BY
   DEFAULT — `package-manager-cache` defaults to `true` and turns caching on as soon as
   `package.json` declares `packageManager` or `devEngines.packageManager` — so omitting
   `cache:` disables nothing, and a suppression would go on lying the day that field is
