@@ -232,8 +232,9 @@ export function matcherToPatterns(m: Matcher): string[] {
 // The longest path a generated pattern carries. The result stays a pattern that MATCHES the
 // URL it came from — a prefix plus the trailing `*` — so truncation only widens it, and a
 // path longer than this is not one a rule is written at character by character. The cap is
-// here rather than at the caller because the record it feeds is written to disk on every
-// navigation of an armed container, and an unbounded path is an unbounded row.
+// here rather than at the caller because the record it feeds is stored — `pause.record`
+// persists the whole state each time an armed container's navigation adds a URL row — and
+// an unbounded path is an unbounded row.
 export const MAX_PATTERN_PATH = 200;
 
 // The match pattern for ONE observed URL: its host and path, and nothing else. `null` for

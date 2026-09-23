@@ -161,9 +161,9 @@ export function reconcile(
     case "absent":
       return { action: "push" };
     case "ok": {
-      // Required for convergence: an adoption is itself a change the other machine hears,
-      // so if equal text could adopt, a converged pair would go on adopting each other's
-      // identical config forever.
+      // Required for convergence. Without it identical text still gets an answer below —
+      // `push` on an equal or older stamp, the tie-break included — and every push is a
+      // write to the area all machines reconcile on. An adoption itself publishes nothing.
       if (remote.text === local.text) return { action: "none" };
       if (remote.updatedAt > local.updatedAt) {
         return { action: "adopt", text: remote.text, updatedAt: remote.updatedAt };

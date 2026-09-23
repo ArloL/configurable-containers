@@ -35,8 +35,8 @@ import {
 export interface SyncPorts {
   readLocal(): Promise<{ text: string; updatedAt: number }>;
   // Replaces the local config with one from another machine and applies it. Never called
-  // with text equal to the local text: reconcile() guarantees that, and that guarantee is
-  // what stops two machines reloading each other forever.
+  // with text equal to the local text: reconcile() answers `none` for that before any
+  // stamp comparison, which is what keeps a converged pair quiet (sync-record.ts says why).
   adopt(text: string, updatedAt: number): Promise<void>;
   readSync(): Promise<Record<string, unknown>>;
   writeSync(items: Record<string, unknown>, remove: string[]): Promise<void>;

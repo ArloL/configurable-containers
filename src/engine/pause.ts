@@ -17,14 +17,14 @@ export { PAUSE_STORAGE_KEY };
 // A cap on how many recordings are kept, so the list stays readable.
 export const MAX_RECORDINGS = 10;
 
-// A cap on how many distinct hosts ONE recording names, and the only bound in this file
-// that is about memory rather than readability.
+// A cap on how many distinct hosts ONE recording names — with MAX_RECORDED_URLS_PER_HOST
+// below, one of the two bounds in this file that are about memory rather than readability.
 //
-// Everything else CC keeps dies with the browser. This does not: `record()` appends a row
-// per distinct host seen while a container is armed and `persist()`s the whole pause state
-// on each new one, into storage.local. A container armed and forgotten therefore grows a
-// stored array for as long as browsing continues — the one structure here that a restart
-// does not empty.
+// This is the one thing CC APPENDS TO that outlives the browser: the other storage.local
+// keys are rewritten whole, and everything else dies with the background context.
+// `record()` appends a row per distinct host seen while a container is armed and
+// `persist()`s the whole pause state on each new one, so a container armed and forgotten
+// grows a stored array for as long as browsing continues.
 //
 // 200 is two orders of magnitude above a real payment or SSO chain, which is a handful of
 // hops. Reaching it means the recording stopped being the flow the user armed for, and that

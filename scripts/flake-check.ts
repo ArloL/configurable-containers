@@ -233,7 +233,7 @@ function disagreements(verdict: Verdict, runs: number, target: string): string[]
     // the runner. Every "flaky" case in this suite so far has been a real race — a probe
     // reply beating a navigation commit, an assertion made before the probe reported.
     "A disagreement is a race in the case, not noise to be retried away.",
-    "See TESTING.md's e2e section for the ones this harness has already had.",
+    "See TESTING.md, \"Determinism of the browser tier\", for the ones this harness has already had.",
   ];
 }
 

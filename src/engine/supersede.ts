@@ -29,9 +29,9 @@ const EMPTY_PAGES = new Set(["", "about:blank", "about:newtab", "about:home", "a
 // opened. Matched by prefix because it carries its payload in a fragment.
 function hasNothingToLose(port: BrowserPort, url: string): boolean {
   if (EMPTY_PAGES.has(url)) return true;
-  // Only one of our own pages can match, and every port call is on the blocking path's
-  // round-trip budget (test/fitness/decision-cost.test.ts counts them all, round trip or
-  // not). Ordinary navigations — the overwhelming majority — leave here without one.
+  // Only one of our own pages can match, so ordinary navigations — the overwhelming
+  // majority — leave on the prefix test. `getURL` is synchronous, so it is no round trip
+  // either way, and test/fitness/decision-cost.test.ts does not count it.
   return url.startsWith("moz-extension://") && url.startsWith(port.getURL("choice.html"));
 }
 

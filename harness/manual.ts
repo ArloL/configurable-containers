@@ -33,8 +33,8 @@ async function main() {
   console.log("\nPress Ctrl+C to close Firefox and exit.\n");
 
   // No SIGINT handler here: harness/reaper.ts installs one that kills this session's browser
-  // and exits. A second would only race it, and would run after it, since the reaper's is
-  // registered when harness/firefox.ts is imported.
+  // and exits. It is registered by launch() (`claimProfileDir`), not on import, so a second
+  // added after launch() never runs — the reaper's exits first.
 
   // Keep the process alive until interrupted.
   await new Promise<void>(() => {});

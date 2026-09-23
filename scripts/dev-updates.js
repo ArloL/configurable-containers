@@ -34,8 +34,9 @@ function fetchReleases() {
  * Chosen by EXCLUDING the reproducible build, whose name this repo controls
  * (`configurable-containers-<version>.xpi`, from scripts/package.ts), rather than by
  * matching the signed one — web-ext derives that name from the manifest
- * (`configurable_containers_dev-<version>.xpi`) and the case below pins that we never
- * compose it. Releases published before this carry one xpi and are unaffected.
+ * (`configurable_containers_dev-<version>.xpi`), and dev-updates.test.ts ("links to the
+ * asset's own url rather than composing one") pins that we never compose it. Releases
+ * published before this carry one xpi and are unaffected.
  */
 export function signedXpi(release) {
   const reproducible = `configurable-containers-${release.tag_name.replace(/^v/, "")}.xpi`;

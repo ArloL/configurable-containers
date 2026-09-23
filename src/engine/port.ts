@@ -214,7 +214,8 @@ export interface BrowserPort {
   // MAC coexistence handshake (F7).
   sendExternalMessage(extensionId: string, message: unknown): Promise<unknown>;
 
-  // For the disposer (F10) and auto-temp.
+  // Tab lifecycle, for the disposer (F10), auto-temp, pause and the redirector-closer —
+  // `onTabRemoved` and `onTabUpdated` each have two of them listening.
   onTabCreated(handler: (tab: Tab) => void): void;
   onTabRemoved(handler: (tabId: number) => void): void;
   onTabUpdated(handler: (tab: Tab, info: TabUpdateInfo) => void): void;
@@ -263,9 +264,9 @@ export interface BrowserPort {
   // In every shipped build the implementation folds to `if (false)` — the echo target is a
   // compile-time constant and the build does not minify, so the dead branch is readable
   // proof for an AMO reviewer. It is READ-ONLY, which is what separates it from the
-  // build-time seed AGENTS.md forbids: a seed that armed a container would make the shipped
-  // extension capable of starting up with routing disabled, while this changes no routing at
-  // all.
+  // build-time seed docs/e2e-and-probe.md forbids: a seed that armed a container would make
+  // the shipped extension capable of starting up with routing disabled, while this changes
+  // no routing at all.
   echoDecision(e: DecisionEcho): void;
 
   // Text only, because the colour never changes: the real adapter sets it once at startup

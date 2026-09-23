@@ -320,8 +320,8 @@ because `test/fitness/` reads source with comments stripped).
   still landing — and the sender adopts the rollback. The integrity check is a hash, not a
   length.
 - **Both convergence properties in `reconcile` fail as a loop, not a wrong answer**: equal
-  text never returns `adopt` (an adoption is itself a change the other machine hears, so a
-  converged pair would adopt each other's identical config forever), and the equal-stamp
+  text answers `none` before any stamp is compared (otherwise it would `push`, and a push is
+  a change every machine reconciles on — an adoption publishes nothing), and the equal-stamp
   tie-break compares texts so exactly one side publishes. The tie is the *normal* first startup — pre-existing configs backfill to
   `PRE_SYNC_EDIT`.
 - **The background is the pause state's ONLY writer; the options page only reads.** Arming
