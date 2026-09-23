@@ -81,7 +81,12 @@ function fakeBrowser() {
       },
       remove: async (csid: string) => { f.contextualIdentities.removed = csid; return { cookieStoreId: csid, name: "tmp1", color: "blue", icon: "circle" }; },
       removed: null as unknown,
-    },
+      // 155+ only. Rejects a host normalizeSite refuses, as Firefox does.
+      getSiteAssociation: async (d: { site: string }): Promise<unknown> => {
+        if (d.site.includes("*")) throw new Error(`Invalid site: ${d.site}`);
+        return d.site === "work.test" ? { site: d.site, cookieStoreId: "firefox-container-2" } : null;
+      },
+    } as Record<string, unknown> & { removed: unknown },
     cookies: {
       set: async (d: Record<string, unknown>) => {
         f.cookies._set = d;
@@ -226,6 +231,27 @@ describe("createBrowserPort", () => {
     expect(t).toEqual({ id: 77, url: "https://a.test/", cookieStoreId: "firefox-container-9", index: 2, active: false, openerTabId: 5 });
   });
 
+  it("forwards the container the request runs in, which is Firefox's target during a switch (F16)", async () => {
+    const seen: WebRequestDetails[] = [];
+    const port = createBrowserPort();
+    port.onBeforeRequest(async (d) => void seen.push(d));
+    const reg = f.webRequest.onBeforeRequest.onBeforeRequest_last as { fn: (d: unknown) => Promise<unknown> };
+
+    await reg.fn({ requestId: "5", tabId: 3, url: "https://a.test/", type: "main_frame", method: "GET", cookieStoreId: "firefox-container-8" });
+
+    expect(seen[0]?.cookieStoreId).toBe("firefox-container-8");
+  });
+
+  it("getSiteAssociation answers the associated store, or null for none, a refused host, or a Firefox without the API", async () => {
+    const port = createBrowserPort();
+    expect(await port.getSiteAssociation("work.test")).toBe("firefox-container-2");
+    expect(await port.getSiteAssociation("other.test")).toBeNull();
+    expect(await port.getSiteAssociation("*.test")).toBeNull();
+
+    delete f.contextualIdentities.getSiteAssociation; // before 155
+    expect(await port.getSiteAssociation("work.test")).toBeNull();
+  });
+
   it("sendExternalMessage delegates to runtime.sendMessage", async () => {
     const port = createBrowserPort();
     expect(await port.sendExternalMessage("@mac", { method: "getAssignment" })).toEqual({ echoed: { method: "getAssignment" } });
@@ -240,8 +266,8 @@ describe("createBrowserPort", () => {
     expect(reg.filter).toEqual({ urls: ["<all_urls>"], types: ["main_frame"] });
     expect(reg.extra).toEqual(["blocking", "requestHeaders"]);
 
-    const result = await reg.fn({ requestId: "7", tabId: 2, url: "https://a.test/", type: "main_frame", requestHeaders: [{ name: "Cookie", value: "a=1" }] });
-    expect(seen).toMatchObject({ requestId: "7", tabId: 2, url: "https://a.test/", type: "main_frame", requestHeaders: [{ name: "Cookie", value: "a=1" }] });
+    const result = await reg.fn({ requestId: "7", tabId: 2, url: "https://a.test/", type: "main_frame", requestHeaders: [{ name: "Cookie", value: "a=1" }], cookieStoreId: "firefox-container-8" });
+    expect(seen).toMatchObject({ requestId: "7", tabId: 2, url: "https://a.test/", type: "main_frame", requestHeaders: [{ name: "Cookie", value: "a=1" }], cookieStoreId: "firefox-container-8" });
     expect(result).toEqual({ requestHeaders: [{ name: "Cookie", value: "a=1" }] });
   });
 

@@ -113,6 +113,8 @@ export interface MockPort {
 
   // Arranged conditions.
   macAssigns(url: string, value: unknown): void;
+  /** A native site association (F16): Firefox's own, keyed on the exact host. */
+  firefoxAssociates(host: string, cookieStoreId: string): void;
   macIsAbsent(on: boolean): void;
   tabCreationFails(on: boolean): void;
   /**
@@ -159,6 +161,7 @@ export function aFakeBrowser(): MockPort {
   const openTabs = new Map<number, Tab>();
   const containers = new Map<string, ContextualIdentity>();
   const macMap = new Map<string, unknown>();
+  const siteAssociations = new Map<string, string>();
   const openedTabs: CreateTabProps[] = [];
   const closedTabIds: number[] = [];
   const createdContainers: CreateIdentityProps[] = [];
@@ -284,6 +287,9 @@ export function aFakeBrowser(): MockPort {
         return macMap.get(m.url ?? "") ?? null;
       }
       return null;
+    },
+    async getSiteAssociation(host) {
+      return siteAssociations.get(host) ?? null;
     },
     onTabCreated(h) {
       onTabCreatedHs.push(h);
@@ -449,6 +455,7 @@ export function aFakeBrowser(): MockPort {
       await yieldTurn();
     },
     macAssigns: (url, value) => void macMap.set(url, value),
+    firefoxAssociates: (host, cookieStoreId) => void siteAssociations.set(host, cookieStoreId),
     macIsAbsent: (on) => void (macThrows = on),
     tabCreationFails: (on) => void (createTabThrows = on),
     tabRemovalFails: (on) => void (removeTabThrows = on),

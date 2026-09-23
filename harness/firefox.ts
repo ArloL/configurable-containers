@@ -80,6 +80,9 @@ export interface LaunchOptions {
   // Page the first tab opens on. Marionette otherwise starts at about:blank, which
   // auto-temp ignores by design — pass "about:newtab" to exercise the startup sweep.
   startupUrl?: string;
+  // Firefox 155+ moves a navigation to a host it associates with a container into that
+  // container (F16) only under this pref, off by default and set by enterprise policy.
+  switchDuringNavigation?: boolean;
 }
 
 // installAddon wants a file, not a directory. fflate rather than a `zip` binary, as
@@ -283,6 +286,9 @@ export async function launch(opts: LaunchOptions = {}): Promise<Session> {
     "extensions.webextensions.uuids",
     JSON.stringify({ [CC_EXTENSION_ID]: CC_EXTENSION_UUID }),
   );
+  if (opts.switchDuringNavigation) {
+    options.setPreference("privacy.containers.switchDuringNavigation.enabled", true);
+  }
   if (opts.startupUrl) {
     options.setPreference("browser.startup.page", 1); // 1 = open the homepage
     options.setPreference("browser.startup.homepage", opts.startupUrl);
@@ -703,6 +709,14 @@ export async function awaitTabs(
       return holds(tabs) ? tabs : RETRY;
     },
   );
+}
+
+// Associate a host with a named container through Firefox's own API (F16), creating the
+// container if needed. `null` where the API is missing — before 155, so the ESR leg.
+export async function associateSite(page: Page, site: string, container: string): Promise<string | null> {
+  const reply = await probeCommand<{ cookieStoreId?: string; error?: string }>(page, "associate", { site, container });
+  if (reply.error) throw new Error(`associateSite(${site}, ${container}): ${reply.error}`);
+  return reply.cookieStoreId ?? null;
 }
 
 // Navigate a specific tab by its browser.tabs id — what typing a URL into its address bar

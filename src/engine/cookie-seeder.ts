@@ -8,7 +8,7 @@ export interface CookieSeederOptions {
   deps: Pick<Deps, "matchRule">;
 }
 
-// Mirrors TCP's maybeSetAndAddToHeader: set each configured cookie into the tab's OWN store
+// Mirrors TCP's maybeSetAndAddToHeader: set each configured cookie into the request's OWN store
 // (F11) and, unless it is already on the wire, splice it into the outgoing Cookie header
 // (F12). Never moves a tab.
 export function createCookieSeeder(opts: CookieSeederOptions): void {
@@ -23,7 +23,9 @@ export function createCookieSeeder(opts: CookieSeederOptions): void {
     const tab = await port.getTab(d.tabId);
     if (!tab) return; // tab raced away — fail open
 
-    const store = tab.cookieStoreId;
+    // The request's own store: while Firefox moves a load into an associated container
+    // (F16) the tab it leaves still reads the old one.
+    const store = d.cookieStoreId ?? tab.cookieStoreId;
     const jar = parseCookieHeader(d.requestHeaders);
     let changed = false;
 

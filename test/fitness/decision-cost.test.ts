@@ -135,6 +135,9 @@ describe("fitness — the blocking path's round-trip budget", () => {
     // navigation actually being reopened reaches.
     expect(counted.awaited).toEqual([
       "getTab", // (2) which tab is this
+      // F16 — Firefox's association, asked only now, like MAC. A request Firefox is already
+      // moving would have deferred without it: that half is read off the request for free.
+      "getSiteAssociation",
       "sendExternalMessage", // (4) F7 — MAC asked only now, having decided to act
       "queryIdentities", // find-or-create the "Work" container
       "createIdentity",

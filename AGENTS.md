@@ -14,7 +14,7 @@ its own file — **read the matching one before you start, not when something br
 | change lint config, answer a Sonar finding, or add a suppression | `docs/static-analysis.md` |
 
 Covered elsewhere: `README.md` (goals, build, release), `CONFIG.md` (config format),
-`TESTING.md` (the L1–L5 pyramid, the F1–F15 bug matrix), `test/` (the behaviour spec),
+`TESTING.md` (the L1–L5 pyramid, the F1–F16 bug matrix), `test/` (the behaviour spec),
 `docs/superpowers/`, `FOLLOWUPS.md`, `docs/drift-reviews.md` (the agent reviews for what no
 gate can see — a true statement that stopped being true, which every check here is blind to
 because `test/fitness/` reads source with comments stripped).
@@ -222,6 +222,16 @@ because `test/fitness/` reads source with comments stripped).
   L3-invisible until you cross a site: the L3 chain case was same-site (`linked.test` →
   `www.linked.test`) and stayed green while `routing.test.ts` went red in CI. Both sites now
   have an L3 case.
+- **Firefox 155+ can route a site itself, and it always beats a reopen** (F16). A host
+  associated through `contextualIdentities.setSiteAssociation` (MAC 8.4 mirrors every
+  assignment there) has its load built in that container and moved to a new tab. That covers
+  CC's reopen too, but only under `privacy.containers.switchDuringNavigation.enabled`: off by
+  default, set by enterprise policy, and unreadable from an extension. The associations
+  persist with it off. So `firefoxOwns` in `engine.ts` defers only on evidence Firefox is
+  acting. Either the request's `cookieStoreId` differs from its tab's (Firefox is moving it
+  now, measured on 156), or the tab already sits in the associated container. Deferring on
+  the association alone routes the host nowhere once the pref is off. The seeder writes the
+  REQUEST's store for the same reason: the tab left behind still reads the old one.
 - **Firefox honours `windowId` on `tabs.create` even for popup windows** (FF153). Omit it
   and a `window.open` share popup is replaced in the last focused *normal* window, then
   closed with its navigation. `Tab.windowId` is required, not optional — an optional field

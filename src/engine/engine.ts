@@ -48,6 +48,21 @@ async function macOwns(port: BrowserPort, url: string): Promise<boolean> {
   }
 }
 
+// F16: Firefox 155+ moves a navigation to a host it associates with a container into that
+// container, and moves CC's reopen too — but only under a pref an extension cannot read, while
+// the associations persist without it. So defer only where Firefox is provably in charge:
+// it is moving THIS load (the request already runs in another container than its tab), or
+// the tab already sits in the associated container. Anywhere else CC routes as before.
+async function firefoxOwns(port: BrowserPort, d: WebRequestDetails, tab: Tab): Promise<string | null> {
+  if (d.cookieStoreId !== undefined && d.cookieStoreId !== tab.cookieStoreId) {
+    return "deferred: Firefox is moving this load into the container it associates with the site (F16)";
+  }
+  if ((await port.getSiteAssociation(new URL(d.url).hostname)) === tab.cookieStoreId) {
+    return "deferred: the tab is in the container Firefox associates with the site (F16)";
+  }
+  return null;
+}
+
 async function buildNavContext(
   d: WebRequestDetails,
   tab: Tab,
@@ -319,7 +334,14 @@ export function createEngine(opts: EngineOptions): Engine {
     return true;
   }
 
-  // Everything above this is deciding; this is doing. Both effects defer to MAC first (F7)
+  // Neither effect is ours to perform when Firefox (F16) or MAC (F7) owns the url.
+  async function deferral(d: WebRequestDetails, tab: Tab): Promise<string | null> {
+    const firefox = await firefoxOwns(port, d, tab);
+    if (firefox) return firefox;
+    return (await macOwns(port, d.url)) ? "deferred: MAC has an assignment for this url (F7)" : null;
+  }
+
+  // Everything above this is deciding; this is doing. Both effects defer to an owner first
   // and take `handled` BEFORE the async effect, so a re-fire of the same request cancels
   // rather than acting twice.
   async function perform(
@@ -328,20 +350,19 @@ export function createEngine(opts: EngineOptions): Engine {
     key: string,
     decision: Decision,
   ): Promise<BlockingResponse | void> {
-    switch (decision.kind) {
-      case "leaveAlone":
-      case "stay":
-        return say(d, "left where it is", decision);
+    if (decision.kind === "leaveAlone" || decision.kind === "stay") return say(d, "left where it is", decision);
 
+    const owner = await deferral(d, tab);
+    if (owner) return say(d, owner, decision);
+
+    switch (decision.kind) {
       case "choice":
-        if (await macOwns(port, d.url)) return say(d, "deferred: MAC has an assignment for this url (F7)", decision);
         handled.add(key);
         onChoice(decision.options, { tabId: d.tabId, url: d.url });
         say(d, "choice screen shown", decision);
         return { cancel: true };
 
       case "reopen":
-        if (await macOwns(port, d.url)) return say(d, "deferred: MAC has an assignment for this url (F7)", decision);
         handled.add(key); // guard BEFORE the async effects
         try {
           await reopen(tab, d.url, decision.into);
@@ -430,7 +451,7 @@ export function createEngine(opts: EngineOptions): Engine {
       return say(d, "not routed: routing is paused in this container, and the decision recorded", decision);
     }
 
-    // Before macOwns (no reason to ask about a navigation we will not act on) and before
+    // Before any owner is asked (no reason to ask about a navigation we will not act on) and before
     // handled.add (adds no state, so it fails open).
     if (declinePost(d, tab, decision)) {
       // no cancel — the POST proceeds where it is

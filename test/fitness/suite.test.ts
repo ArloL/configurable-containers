@@ -20,7 +20,7 @@ describe("fitness — the run that says green ran everything", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("skips exactly the one case that is documented as undriveable, and no others", () => {
+  it("skips exactly the documented cases, and no others", () => {
     // TESTING.md states the suite "skips nothing" and backs it up by EXCLUDING the
     // realtime cases by filename rather than skipping them. The single exception is the
     // reopen picker's e2e: `commands.onCommand` is a chrome-level key event that
@@ -36,10 +36,14 @@ describe("fitness — the run that says green ran everything", () => {
     // because that one skipped at RUNTIME from the browser version: the easier kind to add
     // in a hurry, and an inventory that only knew the static form would have been evaded by
     // it. Pinned as an exact list so either kind has to be argued for here.
+    //
+    // site-association.test.ts is that runtime kind, argued: before 155 Firefox has no site
+    // associations, so there is nothing for CC to defer to (F16). The `latest` leg always runs
+    // it; only the ESR leg skips, until an ESR reaches 155.
     const skips = filesMatching(tests, /\b(it|test|describe)\.skip\s*\(|\b\w+\.skip\s*\(\s*\)/).map(
       (f) => f.path,
     );
-    expect(skips).toEqual(["test/e2e/choice.test.ts"]);
+    expect(skips).toEqual(["test/e2e/choice.test.ts", "test/e2e/site-association.test.ts"]);
   });
 
   it("keeps the realtime cases out of `npm test` by filename, not by a skip", () => {

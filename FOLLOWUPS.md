@@ -3,20 +3,6 @@
 Things deliberately left needing a re-check, and where to look. Delete an entry once it is
 resolved.
 
-## Firefox 155 routes per-site associations itself, and CC has not been measured against it (2026-09-23)
-
-Bug 2052136 (fixed in 155) added `contextualIdentities.setSiteAssociation` and a Settings
-dialog for it; Firefox then picks the container for a top-level navigation natively
-(`ContextualIdentityService.containerForNavigation`). MAC 8.4 mirrors its assignments into
-it both ways (`mac/src/js/background/siteAssociation.js`). `macOwns` in `engine.ts` asks MAC
-only, so on 155+ without MAC a native association owns the URL and CC never learns of it —
-whether the two then fight over the tab is unknown. ESR 140 has no such API.
-
-Re-measure on `latest`: probe plus CC, no MAC; `setSiteAssociation({ site: "nomatch.example",
-cookieStoreId: "firefox-container-1" })`; navigate to `http://nomatch.example/` on port 80
-(a port-qualified site matches nothing); record which container the tab ends in and whether
-it is reopened. If they fight, F7 grows a second owner to defer to.
-
 ## CI's `latest-esr` leg is about to leave the 140 floor (2026-09-23)
 
 `FIREFOX_ESR_NEXT` is 153.3.0esr and 140 ESR reaches end of life around 2026-09-29. When
