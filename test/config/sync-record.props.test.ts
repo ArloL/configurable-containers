@@ -154,12 +154,11 @@ describe("the sync record — properties", () => {
 });
 
 describe("reconciling two copies of the config — properties", () => {
-  it("never adopts text it already has, however the stamps compare", () => {
-    // Load-bearing, and it is a convergence property rather than a tidiness one: an
-    // adoption is itself a change the other machine hears, so a pair that had already
-    // converged would adopt each other's identical config forever. (When adoption ended in
-    // runtime.reload() the loop was more visibly a restart loop; applying in place made it
-    // quieter, not absent.)
+  it("does nothing about text it already has, however the stamps compare", () => {
+    // Load-bearing, and it is a convergence property rather than a tidiness one: without
+    // the equal-text check the stamps decide, and on an equal or older remote stamp that is
+    // a `push` — a write to the area every machine reconciles on. An adoption publishes
+    // nothing; the push is what a converged pair would keep trading.
     fc.assert(
       fc.property(arbShortText, arbStamp, arbStamp, (text, mine, theirs) => {
         const decision = reconcile({ text, updatedAt: mine }, { state: "ok", text, updatedAt: theirs, parts: 1 });

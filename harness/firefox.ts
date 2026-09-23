@@ -51,8 +51,9 @@ const DEFAULT_LOCAL_DOMAINS = [
 
 export interface Session {
   driver: WebDriver;
-  // The same browser through the auto-waiting API. `driver` stays for now: the harness's
-  // own internals use it, and the e2e files move over one at a time.
+  // The same browser through the auto-waiting API. `driver` stays for the one thing no
+  // Page can do — the reopen picker's chrome key chord in choice.test.ts, the only e2e use
+  // test/fitness/e2e-discipline.test.ts allows.
   browser: BrowserSession;
   serverUrl: string;
   // The profile directory this browser was launched into: the token the reaper identifies
@@ -400,7 +401,7 @@ export async function readContainerList(page: Page): Promise<string[]> {
   return commaList(await attribute(page, "html", "data-cc-containers"));
 }
 
-// Block until the probe has reported on the document the driver is CURRENTLY on.
+// Block until the probe has reported on the document `page` is CURRENTLY on.
 //
 // The probe writes its attributes from an async `tabs.executeScript` issued after two awaited
 // `cookies.getAll` round-trips, so they land AFTER `driver.get` resolves — while
@@ -749,8 +750,9 @@ export function openViewSource(
 // implements as an injected atom rather than a protocol command, so it is the same call
 // every http(s) case makes; `Locator.getAttribute` IS `getDomAttribute` for that reason.
 //
-// The read helpers below stay on `executeScript`: every one of them reads a probe-written
-// attribute on an http(s) page, which is ordinary web content.
+// The probe readers above already use protocol commands (`Locator.getAttribute`,
+// `Page.title`). Only `setCookieHere`, `readLocalStorage` and `probeCommand` inject a
+// script, and each on an http(s) page, which is ordinary web content.
 export function openExtensionPage(page: Page, url: string): Promise<{ id: number; url: string }> {
   return openTab(page, url);
 }

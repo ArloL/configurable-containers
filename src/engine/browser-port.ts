@@ -27,9 +27,9 @@ declare const __CC_NOTIFY_ECHO_TO__: string;
 // A second define is the honest price of this, and it is a second rather than a first —
 // `launch()` already sets the notify echo unconditionally, so no test build has ever been
 // byte-equivalent to a packaged one. What matters is the other rule: this is READ-ONLY.
-// AGENTS.md forbids a build-time seed that ARMS a container, because that would make the
-// shipped extension capable of starting up with routing disabled; an echo changes no routing
-// and can only describe what already happened.
+// docs/e2e-and-probe.md forbids a build-time seed that ARMS a container, because that would
+// make the shipped extension capable of starting up with routing disabled; an echo changes
+// no routing and can only describe what already happened.
 declare const __CC_DECISION_ECHO_TO__: string;
 
 // Keep this logic-free: every decision belongs in resolve() or the engine. One Firefox

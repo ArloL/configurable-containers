@@ -496,8 +496,9 @@ export function parseConfigDetailed(yamlText: string): ParseResult {
       throw new ConfigError(`YAML syntax error: ${e.message}`, { line: pos?.line, col: pos?.col });
     }
     // Not every failure in `parse` is a YAMLParseError: an unresolved alias (`*a`) raises
-    // a plain ReferenceError and a circular one a TypeError, neither carrying a position.
-    // Rethrown as they are, they leave parseConfig as something that is not a ConfigError,
+    // a plain ReferenceError, which carries no position. (A circular alias is no error: it
+    // parses to a cyclic value, and the walk below reads it like any other.)
+    // Rethrown as it is, it leaves parseConfig as something that is not a ConfigError,
     // and the options page — which reports `e.message` and underlines `path` — has nothing
     // to say beyond the raw stringified error.
     throw new ConfigError(`YAML error: ${(e as Error).message}`);

@@ -339,13 +339,19 @@ describe("every way a config is refused", () => {
   });
 
   it("refuses a YAML alias it cannot resolve, as a config error like any other", () => {
-    // `yaml` raises a plain ReferenceError here and a TypeError for a circular alias —
-    // neither a YAMLParseError, so neither carries a line. Unwrapped they would reach the
-    // options page as a stringified exception rather than as something it can report.
+    // `yaml` raises a plain ReferenceError here — not a YAMLParseError, so it carries no
+    // line. Unwrapped it would reach the options page as a stringified exception rather than
+    // as something it can report.
     const e = rejection(`rules: *nowhere\n`);
     expect(e.message).toMatch(/^YAML error: /);
     expect(e.line).toBeUndefined();
     expect(e.path).toBeUndefined();
+  });
+
+  it("reads a circular alias as the value it parses to, not as a YAML error", () => {
+    // `yaml` does not throw on one: it hands back a cyclic value, and the grammar walk
+    // refuses that like any other wrong shape.
+    expect(rejection(`rules: &a [*a]\n`).message).toBe("rules[0] must be a mapping");
   });
 
   it("refuses a null where a mapping belongs, rather than reading it as an empty one", () => {
