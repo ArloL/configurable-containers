@@ -175,9 +175,11 @@ Everything stateful runs here against a mock `browser.*` (fake `tabs`,
 *sequences* of events and assert invariants after each step. Home of F1, F2, F7, F8, F10,
 F13, F14, F15.
 
-- **Model-based property tests** (fast-check `commands`): random sequences of `navigate`,
-  `redirect`, `clickLink`, `closeTab`, `openTab`, `macClaims(url)`, with invariants
-  checked continuously:
+- **Invariants, pinned by hand-written event sequences** — plus three fast-check
+  properties over a random config and URL in `engine.props.test.ts` (bounded effect,
+  target fidelity, MAC defer). Nothing generates random event SEQUENCES: there is no
+  fast-check `commands` model, so each invariant is only as wide as the cases written
+  for it:
   - *No double-open* — one top-level navigation never yields two tabs. (F1)
   - *Loop-free* — a tab already in its resolved container is never reopened. (F1/F2)
   - *No fight with MAC* — when the mock MAC claims a URL the engine backs off: TCP's

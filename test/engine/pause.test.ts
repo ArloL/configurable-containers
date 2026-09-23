@@ -315,7 +315,7 @@ describe("pause — recording", () => {
     expect(pause.snapshot().recordings[0]!.hosts).toEqual([]);
   });
 
-  it("writes through when a new host appears, so a config save cannot destroy the record", async () => {
+  it("writes through when a new host appears, so a browser restart cannot destroy the record", async () => {
     const { browser, pause, csid } = await anArmedPause();
 
     pause.record(csid, get("https://payment.acme.test/"), intoTemporary);

@@ -1264,10 +1264,10 @@ describe("engine — a window.open popup, which has no opener tab to read", () =
     expect(asked).toEqual([["Haeger", "HSP"]]);
   });
 
-  it("reads no lineage out of a navigation CC itself opened the tab for", async () => {
-    // CC's reopens carry `originUrl: "moz-extension://<uuid>/"`. Taken as a page, that
-    // would make every reopened tab claim to have inherited the container it was just put
-    // in, and the rule that moved it there would never move it again.
+  it("moves a tab by its rule even when CC itself opened the tab for the navigation", async () => {
+    // CC's reopens carry `originUrl: "moz-extension://<uuid>/"`. This does NOT pin the
+    // http(s) filter on it in engine.ts: a rule naming Gmail moves a Work tab whether or not
+    // that origin is read as lineage, and removing the filter leaves every non-e2e case green.
     const browser = aFakeBrowser();
     const work = browser.addContainerNamed({ name: "Work" });
     const tab = browser.existingTab({ url: "about:blank", cookieStoreId: work.cookieStoreId });

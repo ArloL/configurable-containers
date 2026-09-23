@@ -150,9 +150,11 @@ describe("a background restart — state that cannot be", () => {
     expect(containerNames(browser)).toEqual(["tmp1", "tmp2"]);
 
     // The fresh engine guards the reopen it just performed, which is what makes this one
-    // wasted hop rather than the F1 runaway. Change how resolve() treats a pre-commit tab
-    // and this count goes red.
+    // wasted hop rather than the F1 runaway. Pre-commit for the same reason as above: left
+    // reading its url, resolve() answers `stay` on its own and this passes with the guard
+    // removed.
     const secondThrowawayTab = theTabOtherThan(browser, sourceTab.id);
+    secondThrowawayTab.url = "about:blank";
     const settled = await browser.navigates(
       aNavigationTo({ requestId: "3", tabId: secondThrowawayTab.id }),
     );
