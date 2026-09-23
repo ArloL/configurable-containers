@@ -97,7 +97,8 @@ rules:
   #   default: Personal
 
 # Isolation-continuity groups: sites in one group stay in the SAME throwaway as you
-# move between them, while crossing to anything outside it spins up a clean one.
+# move between them, while crossing to anything outside it spins up a clean one. From a
+# named container, a member no rule matches stays in that container.
 # Each group is a plain list of hostnames — no "match:" key here, unlike a rule.
 # groups:
 #   - [example.com, example.org]

@@ -93,7 +93,8 @@ F15 — whether a tab that inherited a container counts as being in it — are p
   - *`inherit` neutrality* — an `inherit` match never yields `temp` or `named`, and for a
     fixed initiator its result is invariant under the rest of the config. (F6)
   - *Continuity monotonicity* — same registrable domain or same group ⇒ never a new temp;
-    different site and different group ⇒ always isolate. (F3)
+    different site and different group ⇒ always isolate. From a named container, only the
+    group keeps the tab. (F3)
 
 Properties are the core anti-subtle-bug weapon: they explore configs no human would
 hand-write, which is where precedence and totality bugs hide.

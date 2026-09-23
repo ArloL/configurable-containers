@@ -293,7 +293,8 @@ rules:
         run: "localStorage.setItem('jetpack_post_subscribe_modal_dismissed', Date.now().toString());"
 
 # Isolation-continuity groups: sites in one group stay in the SAME throwaway as you
-# move between them, while crossing to anything outside it spins up a clean one.
+# move between them, while crossing to anything outside it spins up a clean one. From a
+# named container, a member no rule matches stays in that container.
 # Each group is a plain list of matchers — no "match:" key here, unlike a rule — in
 # the same grammar rules use (hostname, "scheme://host/path" pattern, { regex: … }).
 # Order-significant, first-match wins; a URL resolves to at most one group. Groups

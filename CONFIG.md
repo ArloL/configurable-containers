@@ -253,6 +253,13 @@ Every top-level (`main_frame`) navigation is evaluated fresh. Three mechanisms, 
    about the page it was clicked on: the browser starts that tab in the clicked page's
    container, so a same-site or same-group link keeps the session it came from.
 
+   **From a named container, a group holds too; same-site does not.** A navigation matching
+   no rule stays in the permanent container it is leaving when the two pages share a
+   `group` — Jira in `Work` linking to `home.atlassian.com` stays in `Work`, given
+   `[atlassian.net, atlassian.com]`. A group is declared and a registrable domain only
+   inferred, so same-site alone still isolates. It never reaches an `open: Temporary` rule
+   (that rule demands a throwaway), and the default container does not count as named.
+
 3. **Explicit exemptions (`inherit` / `ignore` / `redirector`).** Exempt from both above.
    `inherit: true` keeps the tab in whichever container *initiated* the navigation — the
    SSO mechanism; the navigation is otherwise handled normally, overlays included.
@@ -270,7 +277,7 @@ Every top-level (`main_frame`) navigation is evaluated fresh. Three mechanisms, 
 
 There is deliberately **no automatic "inherit the container I came from"** for unmarked
 domains: a link from a permanent container to an unmanaged domain lands in a fresh
-temporary one. The accepted cost is that SSO, auth and payment-redirect domains break
+temporary one, unless a `group` joins the two pages (mechanism 2). The accepted cost is that SSO, auth and payment-redirect domains break
 until configured as `inherit`, which is already the workflow — Temporary Containers keeps
 an equivalent exclusion list by hand. There is **no auth-flow auto-detection**; the sole
 user knows which domains need `inherit`.
@@ -349,10 +356,11 @@ boundary to cross.
 ## Groups (isolation continuity)
 
 `groups` is a **separate top-level list**, parallel to `rules`. A group is a set of
-matchers that count as **one site** for the temporary-isolation path only: navigating
-between members keeps the current throwaway instead of spawning a new one. A group
-**never routes** and **never overrides** an `open` or `inherit` rule; it only affects
-members that would otherwise be temporary, and it is **symmetric** within the set.
+matchers that count as **one site**: navigating between members keeps the current
+throwaway instead of spawning a new one, and a member no rule matches stays in the named
+container it is reached from, when the page it is reached from is a member too. A group
+**never routes** and **never overrides** a rule — `open: Temporary` included; it only
+affects members that would otherwise be temporary, and it is **symmetric** within the set.
 
 ```yaml
 groups:

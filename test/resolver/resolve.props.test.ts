@@ -187,4 +187,15 @@ describe("resolve — properties", () => {
       else expect(d).toEqual({ kind: "reopen", into: { kind: "temporary" } });
     }));
   });
+
+  // The same question asked from a named container, where only a group keeps the tab:
+  // same-site is inferred rather than declared, and does not.
+  it("F3: an unmatched hop out of a named container stays exactly when a group joins the two", () => {
+    fc.assert(fc.property(arbUrl, arbUrl, arbGroups, (curUrl, tgtUrl, groups) => {
+      const d = resolve(aNavigation(tgtUrl, { url: curUrl, container: theContainerNamed("Work") }), aConfigOf([], groups), deps);
+      const gA = deps.matchGroup(curUrl, groups);
+      if (gA !== null && gA === deps.matchGroup(tgtUrl, groups)) expect(d).toEqual({ kind: "stay" });
+      else expect(d).toEqual({ kind: "reopen", into: { kind: "temporary" } });
+    }));
+  });
 });
