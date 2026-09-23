@@ -271,8 +271,8 @@ assignment, real container create/dispose, real redirects.
   closed, gone by the grace. The only case that can fail when a long background timer is
   throttled, coalesced or dropped — a fake clock cannot lie about a duration it invents,
   and 500ms is too short to be treated that way. Excluded from `npm test` by filename and
-  run by `npm run test:realtime`; excluded rather than skipped, so `npm test` skips
-  nothing.
+  run by `npm run test:realtime`; excluded rather than skipped, so `npm test`'s only
+  skip stays the one undriveable case `suite.test.ts` allows.
 
   Observation is `listContainers`, a probe command over `contextualIdentities.query`,
   because `data-cc-containers` is a snapshot written when a document loaded — watching a
@@ -294,7 +294,7 @@ name.
 Which is why the coverage matrix has **no L5 column**. A column claims a class is owned
 there, and nothing is owned here. The column that used to sit there ticked seven classes
 and could not say what the ticks meant — every test is behaviour-named by policy, so it
-would tick all fourteen and prove nothing.
+would tick all fifteen and prove nothing.
 
 This replaced a `TESTS.md` of 47 Gherkin scenarios written before implementation, deleted
 once the tests asserted the same behaviour: two descriptions of one system, free to drift,
@@ -741,8 +741,9 @@ issue on regression rather than blocking a PR — guard rails, not gatekeepers. 
   is trustworthy must not take its dependencies from a mutable cache an earlier run could
   have poisoned.
 - `.github/workflows/check-actions.yaml` — `actionlint` and `zizmor` over the workflows
-  themselves, on every push and PR. zizmor fails the build on any finding and there are no
-  suppressions.
+  themselves, on every push and PR. zizmor fails the build on any finding; its one
+  suppression (`self-repository`, whose fix actionlint rejects) is argued in
+  `docs/static-analysis.md`.
 
 ## What CI still can't catch
 
