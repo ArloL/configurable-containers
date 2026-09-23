@@ -2,6 +2,13 @@ name: Publish dev update manifest
 
 on:
   workflow_call:
+    inputs:
+      tag:
+        # The release the caller just published. The manifest is not deployed without it:
+        # the API can list a fresh release with no assets, and dev-updates.js skips those.
+        description: The dev release this manifest must offer, e.g. v2609.0.146
+        required: false
+        type: string
   workflow_dispatch:
   release:
     types:
@@ -21,6 +28,7 @@ jobs:
     - name: Build updates.json from the dev releases
       env:
         GH_TOKEN: ${{ github.token }}
+        EXPECT_TAG: ${{ inputs.tag }}
       run: node scripts/dev-updates.js
     - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
   deploy:

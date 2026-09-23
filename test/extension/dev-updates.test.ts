@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { outputDir, updatesManifest } from "../../scripts/dev-updates.js";
+import { notYetOffered, outputDir, updatesManifest } from "../../scripts/dev-updates.js";
 
 interface Release {
   tag_name: string;
@@ -130,6 +130,39 @@ describe("updatesManifest", () => {
       updatesManifest([dev("v2607.0.104", []), dev("v2607.0.106")]),
     );
     expect(updates.map((u) => u.version)).toEqual(["2607.0.106"]);
+  });
+});
+
+// The skip above is right for history and wrong for the release a run exists to announce.
+// On 2026-09-23 the API listed v2609.0.144-146 with no assets to three manifest runs in a
+// row; each deployed a manifest without its own release and went green.
+describe("notYetOffered", () => {
+  const tag = "v2609.0.146";
+  const signed = asset("configurable_containers_dev-2609.0.146.xpi");
+  const reproducible = asset("configurable-containers-2609.0.146.xpi");
+
+  it("is satisfied once the release lists its signed xpi", () => {
+    expect(notYetOffered([dev("v2609.0.143"), dev(tag, [reproducible, signed])], tag))
+      .toBeUndefined();
+  });
+
+  it("waits for a release listed with no assets", () => {
+    expect(notYetOffered([dev(tag, [])], tag)).toBe(`${tag} has no signed xpi (assets: none)`);
+  });
+
+  it("waits while only the unsigned build is listed", () => {
+    expect(notYetOffered([dev(tag, [reproducible])], tag))
+      .toBe(`${tag} has no signed xpi (assets: configurable-containers-2609.0.146.xpi)`);
+  });
+
+  it("waits for a release missing from the listing", () => {
+    expect(notYetOffered([dev("v2609.0.143")], tag)).toBe(`${tag} is not in the release listing`);
+  });
+
+  // The manifest filters on the flag, so a listed release would never appear in it.
+  it("refuses a release that is not a prerelease", () => {
+    expect(notYetOffered([{ ...dev(tag, [signed]), prerelease: false }], tag))
+      .toBe(`${tag} is not a prerelease`);
   });
 });
 

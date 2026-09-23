@@ -101,6 +101,10 @@ jobs:
       # The tag is checked for shape first, for the reason verify-reproducible.ts's
       # `releaseTag` gives: it goes into an API path, and one carrying "../" or "?" addresses
       # a different release from the one this job believes it is verifying.
+      #
+      # The download is retried because the API can list a release published seconds ago
+      # with no assets: v2609.0.144-146 each failed here with "no assets to download" and
+      # 146 passed when re-run. Five minutes, then the failure stands.
       name: Verify the release's build provenance
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -114,9 +118,14 @@ jobs:
         }
         version="${TAG#v}"
         dir="$(mktemp -d)"
-        gh release download "$TAG" --repo "$REPO" --dir "$dir" \
-          --pattern "configurable-containers-${version}.xpi" \
-          --pattern "configurable-containers-src-${version}.zip"
+        for attempt in $(seq 1 11); do
+          gh release download "$TAG" --repo "$REPO" --dir "$dir" --clobber \
+            --pattern "configurable-containers-${version}.xpi" \
+            --pattern "configurable-containers-src-${version}.zip" && break
+          [ "$attempt" -lt 11 ] || exit 1
+          echo "assets not listed yet; retrying in 30s"
+          sleep 30
+        done
         commit="$(gh api "repos/${REPO}/commits/${TAG}" --jq .sha)"
         echo "$TAG is commit $commit"
         for file in "$dir"/*; do
