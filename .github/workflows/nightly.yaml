@@ -291,11 +291,11 @@ jobs:
         was written. What it means is that something Firefox is ABOUT to ship changes an
         answer CC depends on.
 
-        The facts most likely to move are the measured ones, and CLAUDE.md names them:
+        The facts most likely to move are the measured ones, and AGENTS.md names them:
         webNavigation.onBeforeNavigate firing before that navigation's webRequest (the F13
         view-source guard), tabs.create refusing about:newtab, tabs.create honouring
         windowId for popup windows, and onCreated firing with about:blank before the real
-        url (bug 1586612).
+        url.
 
         The other class is what the SUITE depends on rather than what CC does: how much of
         a privileged page WebDriver may still operate. That has moved twice, and both times

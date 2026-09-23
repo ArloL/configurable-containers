@@ -180,8 +180,9 @@ F13, F14, F15.
   checked continuously:
   - *No double-open* — one top-level navigation never yields two tabs. (F1)
   - *Loop-free* — a tab already in its resolved container is never reopened. (F1/F2)
-  - *No fight with MAC* — when the mock MAC claims a URL the engine backs off, exactly as
-    TCP's `getAssignment`-and-defer handshake does. (F2/F7)
+  - *No fight with MAC* — when the mock MAC claims a URL the engine backs off: TCP's
+    `getAssignment` handshake, minus its split — TCP defers outright only on `neverAsk`
+    (`request.ts`, `handleRequest`). (F2/F7)
   - *Disposal* — a temp with zero tabs is disposed after the configured delay on the fake
     clock, and never while a tab remains. (F10)
   - *Side-effect ordering* — a seeded `cookies` write and a `scripts` registration are

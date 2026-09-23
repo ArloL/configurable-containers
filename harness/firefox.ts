@@ -127,7 +127,8 @@ function ensureMacLocale(entries: Record<string, Uint8Array>): void {
 //
 // This stands in for the one step of a real MAC setup that cannot be scripted: an assignment
 // is created from MAC's browser-action popup or context menu, both chrome UI Selenium cannot
-// drive, and MAC's external API has `getAssignment` but no setter. What is under test stays
+// drive, and MAC's external API has `getAssignment` but no setter. Firefox 155+'s
+// `contextualIdentities.setSiteAssociation` is not one: ESR lacks it. What is under test stays
 // stock MAC — the seeding calls MAC's OWN `storageArea.set`, so the key format lives in MAC's
 // code, and CC reads it back through MAC's real `getAssignment`.
 function injectMacAssignment(

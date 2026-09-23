@@ -258,12 +258,16 @@ mechanics of L4/L5.
 - **Only an ASSIGNED domain tests the handshake** — `macOwns` swallows throws, so a broken
   handshake and "no assignment" look identical. Backing the F7 defer out fails as no
   container tab at all, not a `tmp` one: CC and MAC fight over the navigation.
-- **An assignment cannot be scripted** (chrome UI only; MAC's API has no setter), so the
+- **An assignment cannot be scripted on both legs** — MAC's API has no setter, and Firefox's
+  own `contextualIdentities.setSiteAssociation`, which MAC imports, is 155+ only — so the
   harness appends a script to MAC's background page *inside the xpi it builds* calling
   MAC's own `storageArea.set` — with `neverAsk: true`, or MAC parks on its confirm
   interstitial and no container tab appears, and only after the container RESOLVES,
   since MAC deletes an assignment whose container it can't `get` and Firefox provisions
-  even built-in ones lazily.
+  even built-in ones lazily. Keep the seeded host on a non-default port: on 155+
+  `storageArea.set` mirrors every assignment into Firefox's site association, and only a
+  port-qualified key (MAC's `siteFromStoreKey`) matches no navigation, so what the test
+  sees is MAC's handshake rather than Firefox routing natively.
 - **Nothing may navigate until the assignment is READABLE; `launch` blocks on a beacon.**
   MAC reads it in `onBeforeRequest`, CC a `getAssignment` roundtrip later, so a write
   landing mid-flight is seen by one and missed by the other. A background page's storage
