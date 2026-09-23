@@ -58,19 +58,19 @@ taken.
   worth keeping: the reasoning, where a reviewer would see it, in a project that can be
   recreated. Suppression is per rule and path
   (`sonar.issue.ignore.multicriteria.<id>.{ruleKey,resourceKey}`), and each id in that file
-  carries the comment saying why. Unlike zizmor — whose one suppression is there only
-  because the other workflow gate rejects its fix —
+  carries the comment saying why. Unlike zizmor, which has none,
   a few of these rules are simply wrong about this code, and one of them is wrong in the
   direction that matters: `S2871` asks for `localeCompare` behind the `.sort()` in
   `scripts/package.ts`, and taking that advice breaks reproducible builds, since that sort
   is what makes the xpi's entry order the same on every machine and collation is not. The
   other two are `S4036` (absolute paths for `git`/`gh`/`npm`/`curl` in dev scripts) and
-  `S5332` (the `"http://" + hostish + "/"` in `bareHost`, which parses a string and fetches
+  `S5332` (the `"http://" + hostish + "/"` in `canonicalHost`, which parses a string and fetches
   nothing). Everything else gets fixed.
-- **`?? ""` on a `spawnSync().stdout` is not a dead defence**, whatever the types say:
-  `@types/node` declares `string` once an encoding is set, and a spawn that never started
-  reports null — which is the case `harness/reaper.ts` exists for. Both sites carry a
-  suppression rather than a "fix".
+- **`?? ""` on a `spawnSync().stdout` is not a dead defence** unless `error` was checked
+  first, whatever the types say: `@types/node` declares `string` once an encoding is set,
+  and a spawn that never started has no stdout at all — which is the case
+  `harness/reaper.ts` exists for. `ps()` there carries a suppression rather than a "fix";
+  `pidsMatching` throws on `run.error` first, so it needs neither.
 - **`exactOptionalPropertyTypes` draws a real line at the port seam.** A property mapped
   *out* of a browser object carries `| undefined` because Firefox sets it that way;
   `CreateTabProps.url` does not, because absent and `undefined` are different requests
