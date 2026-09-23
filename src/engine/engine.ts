@@ -92,12 +92,17 @@ async function buildNavContext(
   // Only when there is NO opener. An opener in another container is a lineage the guard
   // below deliberately refuses, and `originUrl` must not smuggle it back in.
   //
-  // http(s) only, and measured rather than defensive: CC's own reopens arrive carrying
-  // `originUrl: "moz-extension://<uuid>/"`. Read as a page, that would have every reopened
-  // tab claim to have inherited the container it was just put in, and the rule that moved
-  // it there would never move it again.
+  // A web page, or CC itself. CC's own reopens arrive carrying
+  // `originUrl: "moz-extension://<uuid>/"` (measured), and that IS their lineage: the tab is
+  // in the container CC just put it in. It is read here only when `reopenedNav` missed the
+  // reopen's own request (a background restart mid-reopen loses the marker), and discarded
+  // it left nothing to say where the tab came from — an unmatched url bought another
+  // throwaway, and `inherit`, with no initiator, sent the tab to the DEFAULT container. A
+  // rule naming another container still moves the tab: `resolve` checks the container, not
+  // the lineage. Any other extension's page is no lineage of ours.
   const origin = current === null && opener === null ? d.originUrl : undefined;
-  const openedBy = origin !== undefined && /^https?:/.test(origin) ? origin : null;
+  const openedBy =
+    origin !== undefined && (/^https?:/.test(origin) || origin.startsWith(port.getURL(""))) ? origin : null;
 
   let initiator: ContainerRef | null;
   if (current) {

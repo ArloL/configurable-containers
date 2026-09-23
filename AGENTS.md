@@ -179,10 +179,11 @@ because `test/fitness/` reads source with comments stripped).
   that page's container because Firefox inherits it. Measured (probe + `window.open(…,
   "share", "width=640,height=480")`): a different `windowId`, no `openerTabId`, the
   opener's `cookieStoreId`, `originUrl` = the opener's page. The same run showed CC's OWN
-  reopens arriving with `originUrl: "moz-extension://<uuid>/"`, which is why the fallback
-  tests for http(s) rather than for presence — read as a page, that would have every
-  reopened tab claim it inherited the container it was just put in, and the rule that moved
-  it there would never move it again. The fallback is reached only when there is no opener
+  reopens arriving with `originUrl: "moz-extension://<uuid>/"`, and that is real lineage —
+  the tab is where CC just put it. It was once discarded as "not http(s)", which reopened a
+  tab `reopenedNav` had missed (a restart mid-reopen) and sent an `inherit` one to the
+  DEFAULT container; so accept CC's own origin, and no other extension's. The fallback is
+  reached only when there is no opener
   tab: an opener in a different container is a lineage `buildNavContext` deliberately
   refuses, and originUrl must not smuggle it back in.
 - **`openerTabId` outlives the click that set it** for the life of the tab, and

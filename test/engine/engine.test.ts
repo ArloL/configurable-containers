@@ -1207,7 +1207,7 @@ describe("engine — what it says it did", () => {
 // tab reports a different `windowId`, no `openerTabId`, the opener's `cookieStoreId`, and
 // its main_frame request carries `originUrl` = the opener's page. The same measurement
 // showed CC's OWN reopens carrying `originUrl: "moz-extension://<uuid>/"`, which is why the
-// fallback tests for http(s) rather than merely for presence.
+// fallback accepts http(s) or CC's own origin rather than merely any value.
 //
 // Reported for Outlook: the web app sits in a container, its re-sign-in popup asked which
 // container to open in, and the answer was the one it was already in.
@@ -1264,19 +1264,73 @@ describe("engine — a window.open popup, which has no opener tab to read", () =
     expect(asked).toEqual([["Haeger", "HSP"]]);
   });
 
-  it("moves a tab by its rule even when CC itself opened the tab for the navigation", async () => {
-    // CC's reopens carry `originUrl: "moz-extension://<uuid>/"`. This does NOT pin the
-    // http(s) filter on it in engine.ts: a rule naming Gmail moves a Work tab whether or not
-    // that origin is read as lineage, and removing the filter leaves every non-e2e case green.
-    const browser = aFakeBrowser();
-    const work = browser.addContainerNamed({ name: "Work" });
-    const tab = browser.existingTab({ url: "about:blank", cookieStoreId: work.cookieStoreId });
-    createEngine({ port: browser.port, config: parseConfig("rules:\n  - match: example.com\n    open: Gmail\n"), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
+  // A reopen's own request, when `reopenedNav` did not absorb it — after a background
+  // restart mid-reopen, which loses the marker. CC's reopens carry its own page as
+  // `originUrl`, the tab reads about:blank and has no opener (the source tab was replaced),
+  // so that origin is the only lineage left: the tab is where CC just put it. Discarded as
+  // "not a page", each of these reopened again — into a fresh throwaway, into the same
+  // container, and for `inherit` into the DEFAULT container, for want of an initiator.
+  describe("a reopen's own request that the guard missed", () => {
+    const fromCC = (browser: ReturnType<typeof aFakeBrowser>, tabId: number) =>
+      aNavigationTo({ tabId, originUrl: browser.port.getURL("") });
 
-    await browser.navigates(
-      aNavigationTo({ tabId: tab.id, originUrl: "moz-extension://5c5b6d4e-9f3a-4a21-8b7c-1d2e3f4a5b6c/" })
-    );
+    it("stays in the throwaway CC put it in", async () => {
+      const browser = aFakeBrowser();
+      const tmp1 = browser.addContainerNamed({ name: "tmp1" });
+      const tab = browser.existingTab({ url: "about:blank", cookieStoreId: tmp1.cookieStoreId });
+      const suffix = sequentialTmpSuffixes();
+      suffix();
+      createEngine({ port: browser.port, config: { rules: [], groups: [] }, deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: suffix });
 
-    expect(browser.decisions.at(-1)?.decision).toEqual({ kind: "reopen", into: { kind: "permanent", name: "Gmail" } });
+      await browser.navigates(fromCC(browser, tab.id));
+
+      expect(browser.decisions.at(-1)?.decision).toEqual({ kind: "stay" });
+    });
+
+    it("stays in the container its rule opened it in", async () => {
+      const browser = aFakeBrowser();
+      const work = browser.addContainerNamed({ name: "Work" });
+      const tab = browser.existingTab({ url: "about:blank", cookieStoreId: work.cookieStoreId });
+      createEngine({ port: browser.port, config: parseConfig("rules:\n  - match: example.com\n    open: Work\n"), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
+
+      await browser.navigates(fromCC(browser, tab.id));
+
+      expect(browser.decisions.at(-1)?.decision).toEqual({ kind: "stay" });
+    });
+
+    it("keeps an inherited container rather than falling to the default one", async () => {
+      const browser = aFakeBrowser();
+      const work = browser.addContainerNamed({ name: "Work" });
+      const tab = browser.existingTab({ url: "about:blank", cookieStoreId: work.cookieStoreId });
+      createEngine({ port: browser.port, config: parseConfig("rules:\n  - match: example.com\n    inherit: true\n"), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
+
+      await browser.navigates(fromCC(browser, tab.id));
+
+      expect(browser.decisions.at(-1)?.decision).toEqual({ kind: "stay" });
+    });
+
+    it("still moves the tab when its rule names another container", async () => {
+      const browser = aFakeBrowser();
+      const work = browser.addContainerNamed({ name: "Work" });
+      const tab = browser.existingTab({ url: "about:blank", cookieStoreId: work.cookieStoreId });
+      createEngine({ port: browser.port, config: parseConfig("rules:\n  - match: example.com\n    open: Gmail\n"), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
+
+      await browser.navigates(fromCC(browser, tab.id));
+
+      expect(browser.decisions.at(-1)?.decision).toEqual({ kind: "reopen", into: { kind: "permanent", name: "Gmail" } });
+    });
+
+    it("reads no lineage from another extension's page", async () => {
+      const browser = aFakeBrowser();
+      const tmp1 = browser.addContainerNamed({ name: "tmp1" });
+      const tab = browser.existingTab({ url: "about:blank", cookieStoreId: tmp1.cookieStoreId });
+      const suffix = sequentialTmpSuffixes();
+      suffix();
+      createEngine({ port: browser.port, config: { rules: [], groups: [] }, deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: suffix });
+
+      await browser.navigates(aNavigationTo({ tabId: tab.id, originUrl: "moz-extension://someone-else/page.html" }));
+
+      expect(browser.decisions.at(-1)?.decision).toEqual({ kind: "reopen", into: { kind: "temporary" } });
+    });
   });
 });
