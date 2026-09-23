@@ -363,9 +363,10 @@ mutant no other case catches.
 
   A survivor has two honest exits, and every survivor so far took one: write the missing
   L1/L2 case, or — when the change provably cannot alter an answer — mark it
-  `// Stryker disable … : <why>`. There are sixteen such comments — four older than the
+  `// Stryker disable … : <why>`. There are twenty-one such comments — four older than the
   widening, twelve that arrived with the parser, the sync record and the cookies overlay it
-  brought into scope — each naming an equivalence a reader can check. Lowering the threshold
+  brought into scope, and five `CallExpression` equivalents Stryker 10 added to the parser
+  (`f343e16`) — each naming an equivalence a reader can check. Lowering the threshold
   is not an exit.
 
   It reads the code as it is, not as it is meant to be, so it also reports **dead
@@ -398,8 +399,8 @@ mutant no other case catches.
   Excluding a file, or lowering a floor, is not an exit.
 - **The production dependency tree** — `npm run audit` (`npm audit --omit=dev`), every
   push. The xpi is an esbuild bundle of `src/`, so no `node_modules` package ships and
-  every current advisory is dev tooling with no upstream fix. That makes the unfiltered
-  `npm audit` permanently loud and this one meaningful: the shipped tree is two packages
+  every current advisory is dev tooling. That makes the unfiltered `npm audit` loud and
+  this one meaningful: the shipped tree is two packages
   wide (`tldts`, `yaml`), and an advisory in either is a real one, in code that runs
   inside every page load's decision.
 - **The reproducibility promise** — `npm run verify:reproducible`, on two triggers. Every

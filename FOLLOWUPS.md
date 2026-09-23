@@ -17,6 +17,20 @@ cookieStoreId: "firefox-container-1" })`; navigate to `http://nomatch.example/` 
 (a port-qualified site matches nothing); record which container the tab ends in and whether
 it is reopened. If they fight, F7 grows a second owner to defer to.
 
+## CI's `latest-esr` leg is about to leave the 140 floor (2026-09-23)
+
+`FIREFOX_ESR_NEXT` is 153.3.0esr and 140 ESR reaches end of life around 2026-09-29. When
+`firefox-esr-latest-ssl` (what CI's `latest-esr` and `get-firefox.sh` fetch) resolves to
+153, the floor of 140 becomes a version no leg runs — which `firefox-floor.test.ts` gives as
+the reason not to declare a floor below what CI measures — and TESTING.md's "ESR is the
+only channel exercising that path" (`onCreated` seeing `about:blank` first) goes false:
+153 answers `tabs.create({})` with `about:newtab`, like release.
+
+Measured 2026-09-23 on 153.3.0esr: `routing`, `privileged-protocol` and `view-source` pass.
+Once `FIREFOX_ESR` in <https://product-details.mozilla.org/1.0/firefox_versions.json> is
+153.x, run the full suite on it, then decide: raise the floor to 153, or pin a leg to the
+last 140 ESR.
+
 ## `vitest` is held at 4 so the mutation gate can measure (2026-09-21)
 
 `@stryker-mutator/vitest-runner@10` narrows a mutant's run to its covering tests by

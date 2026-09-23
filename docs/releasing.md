@@ -138,10 +138,12 @@ shaped the way they are.
 - **`npm audit` is loud and `npm run audit` (`--omit=dev`) is the one that means anything,
   and it gates every push.** The
   xpi is an esbuild bundle of `src/`, so no `node_modules` package ships and every current
-  advisory is transitive dev tooling with no upstream fix (`image-size` under
-  `addons-linter`, `brace-expansion` under two `minimatch` lines, `nanoid`, `qs`). `npm
-  audit fix` advertises a fix and changes nothing — check its `--dry-run` first. Don't
-  silence any of it with `overrides`: forcing a transitive dev dependency past what its
-  dependent declares is a standing compatibility risk taken for a warning no user sees.
+  advisory is transitive dev tooling (2026-09-23: `image-size` ≤2.0.2 under `addons-linter`
+  under `web-ext`, fixed by web-ext 10.7.0). `npm audit fix` can advertise a fix and change
+  nothing — `.npmrc`'s `min-release-age=7` holds back a fix younger than a week, and the
+  `--dry-run` warning says so; check it first. An `overrides` entry is the last resort, not
+  a way to quiet the warning: forcing a transitive dev dependency past what its dependent
+  declares is a standing compatibility risk no user benefits from. One taken carries its
+  reason and removal condition in `package.json`'s `overridesComments`.
   After any change here `npm run lint:ext` is the check that matters — web-ext is the only
   thing that consumes these packages.
