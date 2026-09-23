@@ -4,7 +4,7 @@ import { ConfigError, parseConfig } from "../../src/config/parse";
 // Every way the parser refuses a config, with the words it refuses in.
 //
 // Two reasons this is a table rather than prose cases. The diagnostics ARE the product
-// here: a config is hand-written YAML, the extension reloads on save, and a rejected one
+// here: a config is hand-written YAML, a save applies it at once, and a rejected one
 // leaves every site opening in a throwaway until the user can see what is wrong (a broken
 // stored config never falls back to the seed — see load.ts). And the `path` is what the
 // options page underlines, so a wrong one points the user at the wrong line.

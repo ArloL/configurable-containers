@@ -50,12 +50,19 @@ function aNavigationTo(over: Partial<WebRequestDetails> = {}): WebRequestDetails
 }
 
 describe("engine — property-based invariants", () => {
-  it("bounded effect: any single fired nav opens at most one tab (F1)", async () => {
+  it("bounded effect: one navigation opens at most one tab, whatever echoes of it follow (F1)", async () => {
+    // F1 needs a second event — a re-fire of the same request, or the reopened tab's own
+    // pre-commit request — so one navigates() alone could never show it.
     await fc.assert(
       fc.asyncProperty(arbConfig, arbUrl, async (config, url) => {
         const { browser, tab } = freshMockWithTab();
         createEngine({ port: browser.port, config, deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
         await browser.navigates(aNavigationTo({ tabId: tab.id, url }));
+        await browser.navigates(aNavigationTo({ tabId: tab.id, url }));
+        for (const reopened of [...browser.openTabs.values()].filter((t) => t.id !== tab.id)) {
+          reopened.url = "about:blank";
+          await browser.navigates(aNavigationTo({ requestId: "2", tabId: reopened.id, url }));
+        }
         expect(browser.openedTabs.length).toBeLessThanOrEqual(1);
       })
     );
@@ -66,13 +73,15 @@ describe("engine — property-based invariants", () => {
       fc.asyncProperty(arbConfig, arbUrl, async (config, url) => {
         const { browser, tab } = freshMockWithTab();
         createEngine({ port: browser.port, config, deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
-        const blockingResponse = await browser.navigates(aNavigationTo({ tabId: tab.id, url }));
-        if (blockingResponse && blockingResponse.cancel && browser.openedTabs.length === 1) {
-          // Whatever container we opened must exist as a real store the registry
-          // recognizes (default, a named permanent, or a tmp throwaway).
+        await browser.navigates(aNavigationTo({ tabId: tab.id, url }));
+        const decided = browser.decisions.at(-1)?.decision;
+        if (decided?.kind === "reopen") {
+          expect(browser.openedTabs).toHaveLength(1);
           const store = browser.openedTabs[0]!.cookieStoreId;
-          const known = store === "firefox-default" || (await browser.port.getIdentity(store)) !== null;
-          expect(known).toBe(true);
+          const landed = await browser.port.getIdentity(store);
+          if (decided.into.kind === "permanent") expect(landed?.name).toBe(decided.into.name);
+          else if (decided.into.kind === "temporary") expect(landed?.name).toMatch(/^tmp\d+$/);
+          else expect(store).toBe("firefox-default");
         }
       })
     );
