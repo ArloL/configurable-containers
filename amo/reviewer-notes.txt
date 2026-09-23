@@ -27,7 +27,8 @@ PERMISSIONS
   request is cancelled and the tab reopened there. It must block because the
   decision precedes the request, and any domain may be routed.
 - cookies — Firefox requires it for tabs.create({ cookieStoreId }), which
-  otherwise throws. Also used by the optional cookie-seeding feature.
+  otherwise throws. Also seeds a rule's optional cookies, which a blocking
+  onBeforeSendHeaders listener adds to the Cookie header.
 - contextualIdentities, tabs — create/query/remove containers and tabs.
 - storage — storage.local holds the config; the disposer's note of when each
   temporary container went empty; and the pause recordings — the sites seen while
@@ -44,8 +45,8 @@ CONTENT SCRIPTS
 
 The config has an optional "scripts" key; src/engine/script-injector.ts passes
 that string to contentScripts.register(). The code comes only from the user's own
-storage.local config, never the network: no eval, no new Function, no remote
-code. The shipped default has no "scripts" entries.
+config, edited here or synced in (WHERE DATA GOES), never a server: no eval, no
+new Function, no remote code. The shipped default has no "scripts" entries.
 
 WHERE DATA GOES
 
@@ -55,5 +56,4 @@ reaches the author or any third party.
 One thing leaves the machine. src/extension/config-sync.ts writes the config text
 into storage.sync, so Firefox carries it over the user's own Firefox Account —
 end-to-end encrypted, between their machines only. It has no toggle; a profile
-with no account signed in keeps it locally. Nothing else is published there: the
-pause recordings and the empty-since notes stay in storage.local.
+with no account signed in keeps it locally. Nothing else is published there.

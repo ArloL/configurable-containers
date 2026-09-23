@@ -7,10 +7,9 @@ Write a rule for the sites you want a named container for. Everything else opens
 - A bare domain is the common case: it opens in a container named after it. Add detail for a different name, several domains in one container, or a choice between containers.
 - Single sign-on keeps working: identity providers stay in the container the login started from, so "Sign in with Google / Microsoft / Okta" does not break.
 - Sites you group together share one throwaway; an unrelated site gets a clean one.
-- A rule can offer several containers and let you pick.
+- A rule can offer several containers and let you pick; Ctrl+Shift+O reopens the tab in another of them.
 - Known link redirectors are not isolated, and the tab closes itself if it strands you on one.
 - Optional per-site cookies and content scripts, applied in the routed container.
-- Reopen the current tab in another container with Ctrl+Shift+O.
 - The toolbar button pauses routing in the container you are in: nothing is moved, and the sites seen while it is paused are recorded with the container each one would have gone to — so you can write the rule from what actually happened.
 
 **How you configure it**

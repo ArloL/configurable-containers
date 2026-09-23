@@ -302,4 +302,19 @@ describe("the copy this repo actually ships", () => {
 
     expect(/Firefox Sync|Firefox Account/.test(readListingCopy().description)).toBe(mirrors);
   });
+
+  // webRequestBlocking is the permission a reviewer audits hardest, and the bullet justified
+  // it by the one listener it named while a second — the cookie seeder's
+  // onBeforeSendHeaders, which rewrites the Cookie header — shipped unexplained from the
+  // day the notes were written. Exact, both directions, as the permissions case.
+  it("names every webRequest event src/ listens on, and no others", () => {
+    const code = sourceFiles("src").map((f) => f.code).join("\n");
+    const used = [...new Set([...code.matchAll(/browser\.webRequest\.(on\w+)\.addListener/g)].map((m) => m[1]!))];
+    expect(used.length).toBeGreaterThan(0);
+    const notes = readListingCopy().reviewerNotes;
+    const events = ["onBeforeRequest", "onBeforeSendHeaders", "onSendHeaders", "onHeadersReceived",
+      "onAuthRequired", "onResponseStarted", "onBeforeRedirect", "onCompleted", "onErrorOccurred"];
+
+    expect(events.filter((e) => new RegExp(`\\b${e}\\b`).test(notes)).sort()).toEqual(used.sort());
+  });
 });
