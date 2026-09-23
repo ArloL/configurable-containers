@@ -30,8 +30,8 @@ one when nothing matches, and keeping single-sign-on flows from breaking on the 
 - **Temporary by default, permanent by choice.** Anything no rule matches opens in a fresh
   throwaway; long-lived named containers are opt-in, one rule at a time.
 - **Continuity without leakage.** Isolation-continuity groups keep related sites in the
-  same throwaway as you move between them, while crossing to an unrelated site still spins
-  up a clean container.
+  same container as you move between them, while crossing to an unrelated site still spins
+  up a clean one.
 
 ## Configuration
 

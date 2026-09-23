@@ -35,12 +35,32 @@ function disposablePath(nav: NavContext, config: Config, deps: Deps): Decision {
     if (!/^https?:/.test(current.url)) return { kind: "stay" };
 
     const sameSite = deps.sameSite(current.url, nav.targetUrl);
-    const gA = deps.matchGroup(current.url, config.groups);
-    const gB = deps.matchGroup(nav.targetUrl, config.groups);
-    const sameGroup = gA !== null && gA === gB;
-    if (sameSite || sameGroup) return { kind: "stay" };
+    if (sameSite || inOneGroup(current.url, nav.targetUrl, config, deps)) return { kind: "stay" };
   }
   return { kind: "reopen", into: { kind: "temporary" } };
+}
+
+function inOneGroup(a: string, b: string, config: Config, deps: Deps): boolean {
+  const g = deps.matchGroup(a, config.groups);
+  return g !== null && g === deps.matchGroup(b, config.groups);
+}
+
+// A navigation no rule matches. A group says its hosts may share a session, and the
+// disposable path honours that between throwaways; this honours it in a NAMED container
+// too, which is where the session usually is. Jira in `Work` linking to the Atlassian
+// profile on `home.atlassian.com` belongs in `Work` — a throwaway lands logged out.
+//
+// Unmatched only, never an `open: Temporary` rule: that rule says the host must be in SOME
+// throwaway, and the group that lets YouTube keep a Google login in one must not carry
+// YouTube into the Gmail container. A group only, never mere same-site: a group is
+// declared, a registrable domain inferred, and `*.personio.com` is every Personio customer.
+// A named container only: the default one is where a tab is before anything routed it.
+function unmatched(nav: NavContext, config: Config, deps: Deps): Decision {
+  const from = nav.current ?? nav.inheritedFrom;
+  if (from?.container.kind === "permanent" && inOneGroup(from.url, nav.targetUrl, config, deps)) {
+    return { kind: "stay" };
+  }
+  return disposablePath(nav, config, deps);
 }
 
 // `open:` is two actions wearing one key. With one container it names a target; with
@@ -85,8 +105,8 @@ export function resolve(nav: NavContext, config: Config, deps: Deps): Decision {
   const contained = nav.current?.container ?? nav.inheritedFrom?.container ?? null;
 
   // No rule is the founding premise rather than a fallthrough: anything unmatched is
-  // disposable.
-  if (!rule) return disposablePath(nav, config, deps);
+  // disposable, unless a group keeps it in the named container it is leaving.
+  if (!rule) return unmatched(nav, config, deps);
 
   const action = rule.action;
   switch (action.kind) {

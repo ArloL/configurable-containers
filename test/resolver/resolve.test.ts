@@ -238,6 +238,48 @@ describe("resolve — a rule outranks continuity", () => {
   });
 });
 
+// A group says its hosts may share a session, and the session is usually in a NAMED
+// container: Jira in `Work` linking to the Atlassian profile on `home.atlassian.com`. Before
+// this, the group held only between throwaways, so that click landed in one, logged out.
+describe("resolve — a group keeps an unmatched host in the named container it is leaving", () => {
+  const atlassian = { match: ["atlassian.net", "atlassian.com"] };
+  const jiraInWork = { url: "https://acme.atlassian.net/jira", container: theContainerNamed("Work") };
+
+  it("a click in place stays in the named container", () => {
+    expect(resolve(aNavigation("https://home.atlassian.com/people", jiraInWork, theContainerNamed("Work")), aConfigOf([], [atlassian]), deps))
+      .toEqual({ kind: "stay" });
+  });
+
+  it("a link opened in a new tab stays in the container it inherited", () => {
+    expect(resolve(aNavigationFromALinkOn(jiraInWork, "https://home.atlassian.com/people"), aConfigOf([], [atlassian]), deps))
+      .toEqual({ kind: "stay" });
+  });
+
+  it("a host in a DIFFERENT group still gets a throwaway", () => {
+    const cfg = aConfigOf([], [{ match: ["microsoft.com"] }, atlassian]);
+    expect(resolve(aNavigation("https://microsoft.com/", jiraInWork, theContainerNamed("Work")), cfg, deps))
+      .toEqual({ kind: "reopen", into: { kind: "temporary" } });
+  });
+
+  // `open: Temporary` says the host must be in SOME throwaway. The group that lets YouTube
+  // keep a Google login inside a throwaway must not carry YouTube into the Gmail container.
+  it("an open:Temporary rule is not overridden by the group", () => {
+    const youtubeTemp: Rule = { match: ["youtube.com"], action: { kind: "open", containers: ["Temporary"] } };
+    const cfg = aConfigOf([youtubeTemp], [{ match: ["google.com", "youtube.com"] }]);
+    expect(resolve(
+      aNavigation("https://youtube.com/", { url: "https://www.google.com/", container: theContainerNamed("Gmail") }, theContainerNamed("Gmail")),
+      cfg, deps,
+    )).toEqual({ kind: "reopen", into: { kind: "temporary" } });
+  });
+
+  it("the default container is not a named one", () => {
+    expect(resolve(
+      aNavigation("https://home.atlassian.com/", { url: "https://acme.atlassian.net/", container: theDefaultContainer }),
+      aConfigOf([], [atlassian]), deps,
+    )).toEqual({ kind: "reopen", into: { kind: "temporary" } });
+  });
+});
+
 describe("resolve — multi-open", () => {
   const withDefault: Rule = {
     match: ["trello.com"],
