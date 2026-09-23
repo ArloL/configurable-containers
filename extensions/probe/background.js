@@ -105,6 +105,8 @@ browser.runtime.onMessageExternal.addListener((msg) => {
 //             REMOVED through it means re-navigating something on every poll; this
 //             asks the browser instead, from a tab that never moves.
 //   notifications — every notification CC's test build echoed to us so far.
+//   associate — Firefox's own site association (155+), host -> a container by name,
+//             created if missing. Answers {} where the API is absent.
 //   decisions — what CC decided about each navigation it saw, and what it did about it,
 //             oldest first, at most MAX_DECISIONS of them. The one command that answers
 //             "why", which is what a timeout otherwise leaves the reader to guess.
@@ -161,6 +163,17 @@ browser.runtime.onMessage.addListener(async (msg, sender) => {
   }
   if (msg && msg.cmd === "decisions") {
     return decisions;
+  }
+  if (msg && msg.cmd === "associate") {
+    if (!browser.contextualIdentities.setSiteAssociation) return {};
+    const [found] = await browser.contextualIdentities.query({ name: msg.container });
+    const identity = found || (await browser.contextualIdentities.create({ name: msg.container, color: "red", icon: "circle" }));
+    try {
+      await browser.contextualIdentities.setSiteAssociation({ site: msg.site, cookieStoreId: identity.cookieStoreId });
+    } catch (e) {
+      return { error: String(e) };
+    }
+    return { cookieStoreId: identity.cookieStoreId };
   }
   return null;
 });

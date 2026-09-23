@@ -39,6 +39,19 @@ describe("cookie-seeder", () => {
     expect(blockingResponse).toEqual({ requestHeaders: [{ name: "Cookie", value: "s=1" }] });
   });
 
+  // F16: Firefox builds the channel in the container it associates with the host and only
+  // then moves the load to a new tab there. The tab it leaves reads the old store.
+  it("seeds the store the request runs in when Firefox is moving it out of the tab's", async () => {
+    const browser = aFakeBrowser();
+    const tab = browser.existingTab({ url: "about:blank", cookieStoreId: "firefox-default" });
+    createCookieSeeder({ port: browser.port, config, deps: { matchRule } });
+
+    await browser.sendsHeaders(headers({ tabId: tab.id, cookieStoreId: "firefox-container-8" }));
+
+    expect(browser.cookieIn("firefox-container-8", "s")).toEqual({ name: "s", value: "1" });
+    expect(browser.cookieIn("firefox-default", "s")).toBeNull();
+  });
+
   it("merges into an existing Cookie header", async () => {
     const browser = aFakeBrowser();
     const tab = browser.existingTab({ url: "https://seed.example/", cookieStoreId: "firefox-container-9" });

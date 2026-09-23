@@ -28,6 +28,10 @@ export interface WebRequestDetails {
   method: string;
   originUrl?: string | undefined;
   documentUrl?: string | undefined;
+  // The container the REQUEST runs in. Equal to the tab's, except while Firefox is moving
+  // the load into the container it associates with the host (F16): it builds the channel
+  // there, then hands the load to a new tab.
+  cookieStoreId?: string | undefined;
 }
 
 // A top-level navigation ABOUT to start, from webNavigation.onBeforeNavigate. The one place
@@ -46,6 +50,7 @@ export interface HeadersDetails {
   url: string;
   type: string; // as WebRequestDetails.type
   requestHeaders: HttpHeader[]; // present only because the listener opts into them
+  cookieStoreId?: string | undefined; // as WebRequestDetails.cookieStoreId
 }
 
 export interface BlockingHeadersResponse {
@@ -213,6 +218,10 @@ export interface BrowserPort {
 
   // MAC coexistence handshake (F7).
   sendExternalMessage(extensionId: string, message: unknown): Promise<unknown>;
+
+  // The cookieStoreId Firefox associates with this exact host (F16), or null — also where
+  // the API is missing (before 155) or refuses the host.
+  getSiteAssociation(host: string): Promise<string | null>;
 
   // Tab lifecycle, for the disposer (F10), auto-temp, pause and the redirector-closer —
   // `onTabRemoved` and `onTabUpdated` each have two of them listening.

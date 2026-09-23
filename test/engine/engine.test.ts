@@ -681,6 +681,70 @@ describe("engine — F7 MAC defer + choice", () => {
   });
 });
 
+// Firefox 155+ moves a navigation to an associated host into that container itself, under
+// `privacy.containers.switchDuringNavigation.enabled`, which an extension cannot read. It
+// always wins: it moves CC's reopen too. So CC defers wherever Firefox is provably in charge,
+// and routes as before wherever it is not.
+describe("engine — F16 Firefox site association defer", () => {
+  it("F16: defers while Firefox is moving the load into another container", async () => {
+    const browser = aFakeBrowser();
+    const tab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
+
+    const blockingResponse = await browser.navigates(aNavigationTo({ tabId: tab.id, cookieStoreId: "firefox-container-8" }));
+
+    expect(blockingResponse).toBeUndefined();
+    expect(browser.openedTabs).toHaveLength(0);
+    expect(browser.createdContainers).toHaveLength(0);
+    expect(browser.decisions.at(-1)?.outcome).toBe("deferred: Firefox is moving this load into the container it associates with the site (F16)");
+  });
+
+  it("F16: shows no choice screen while Firefox is moving the load", async () => {
+    const browser = aFakeBrowser();
+    const tab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
+    let asked = false;
+    createEngine({ port: browser.port, config: choiceConfig(), deps, onChoice: () => void (asked = true), pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
+
+    const blockingResponse = await browser.navigates(aNavigationTo({ tabId: tab.id, cookieStoreId: "firefox-container-1" }));
+
+    expect(blockingResponse).toBeUndefined();
+    expect(asked).toBe(false);
+  });
+
+  // Measured on 156 with the pref on: CC reopened into Work, kept the source tab because it
+  // had a page, and Firefox moved the reopen straight back. One extra tab per click.
+  it("F16: leaves a tab in the container Firefox associates with the host", async () => {
+    const browser = aFakeBrowser();
+    const native = browser.addContainerNamed({ name: "Native" });
+    const tab = browser.existingTab({ url: "https://example.com/a", cookieStoreId: native.cookieStoreId });
+    browser.firefoxAssociates("example.com", native.cookieStoreId);
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
+
+    const blockingResponse = await browser.navigates(
+      aNavigationTo({ tabId: tab.id, url: "https://example.com/b", cookieStoreId: native.cookieStoreId }),
+    );
+
+    expect(blockingResponse).toBeUndefined();
+    expect(browser.openedTabs).toHaveLength(0);
+    expect(browser.decisions.at(-1)?.outcome).toBe("deferred: the tab is in the container Firefox associates with the site (F16)");
+  });
+
+  // With the pref off Firefox moves nothing, yet the association persists (MAC mirrors its
+  // assignments into it, and they outlive MAC). Deferring on it alone would route the host
+  // nowhere.
+  it("F16: routes as before when the tab is not in the associated container and Firefox is not moving it", async () => {
+    const browser = aFakeBrowser();
+    const tab = browser.existingTab({ url: "https://start.test/", cookieStoreId: "firefox-default" });
+    browser.firefoxAssociates("example.com", "firefox-container-8");
+    createEngine({ port: browser.port, config: workConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
+
+    const blockingResponse = await browser.navigates(aNavigationTo({ tabId: tab.id, cookieStoreId: "firefox-default" }));
+
+    expect(blockingResponse).toEqual({ cancel: true });
+    expect(browser.openedTabs).toHaveLength(1);
+  });
+});
+
 describe("engine.reopen — extracted F1-guarded effect", () => {
   it("reopens a tab into the target container, preserving placement, and guards the reopened tab's first nav", async () => {
     const browser = aFakeBrowser();

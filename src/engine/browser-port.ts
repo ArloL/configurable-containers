@@ -48,6 +48,7 @@ export function createBrowserPort(): BrowserPort {
           handler({
             requestId: d.requestId, tabId: d.tabId, url: d.url, type: d.type,
             method: d.method, originUrl: d.originUrl, documentUrl: d.documentUrl,
+            cookieStoreId: d.cookieStoreId,
           }).then((r) => r ?? {}), // void -> empty response (proceed)
         { urls: ["<all_urls>"], types: ["main_frame"] },
         ["blocking"]
@@ -111,6 +112,19 @@ export function createBrowserPort(): BrowserPort {
       return browser.runtime.sendMessage(extensionId, message);
     },
 
+    async getSiteAssociation(host): Promise<string | null> {
+      // Absent before 155, and from the installed typings.
+      const api = browser.contextualIdentities as unknown as {
+        getSiteAssociation?: (d: { site: string }) => Promise<{ cookieStoreId: string } | null>;
+      };
+      if (!api.getSiteAssociation) return null;
+      try {
+        return (await api.getSiteAssociation({ site: host }))?.cookieStoreId ?? null;
+      } catch {
+        return null; // a host Firefox refuses to key on, so it can match no navigation either
+      }
+    },
+
     onTabCreated(handler) {
       browser.tabs.onCreated.addListener((t) => handler(mapTab(t)));
     },
@@ -143,7 +157,7 @@ export function createBrowserPort(): BrowserPort {
         (d) =>
           handler({
             requestId: d.requestId, tabId: d.tabId, url: d.url, type: d.type,
-            requestHeaders: d.requestHeaders ?? [],
+            requestHeaders: d.requestHeaders ?? [], cookieStoreId: d.cookieStoreId,
           }).then((r) => r ?? {}), // void -> empty response (proceed)
         { urls: ["<all_urls>"], types: ["main_frame"] },
         ["blocking", "requestHeaders"]
