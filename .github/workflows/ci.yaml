@@ -222,6 +222,8 @@ jobs:
       pages: write
       id-token: write
     uses: $/.github/workflows/publish-dev-manifest.yaml
+    with:
+      tag: v${{ needs.prerelease.outputs.version }}
 
   required-status-check:
     name: ci.required-status-check

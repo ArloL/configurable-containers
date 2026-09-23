@@ -132,6 +132,13 @@ shaped the way they are.
   the same way — `workflow_call` with the tag as an input, invoked by `ci.yaml` and
   `release.yaml` after they publish — and keeps `on: release` only for a release a person
   creates in the UI, which does fire.
+- **A release published seconds ago can be LISTED WITH NO ASSETS**, so every job that reads
+  the release it was just handed waits for it rather than trusting the first answer. The
+  manifest job is the one where this failed silently: `dev-updates.js` skips an assetless
+  release, and on 2026-09-23 three runs deployed a manifest without their own release and
+  went green, leaving the dev channel on v2609.0.143. It now takes the tag (`EXPECT_TAG`)
+  and fails after five minutes rather than publish without it; `verify-release.yaml`
+  retries its download for as long.
 - **GitHub immutable releases are ENABLED**: assets can't be edited, so the dev xpi ships
   in the same `gh release create`, and a rollback is *deleting* a release plus
   republishing the manifest.

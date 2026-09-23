@@ -83,10 +83,46 @@ export function outputDir(raw, root = process.cwd()) {
   return dir;
 }
 
-function main() {
-  const outDir = outputDir(process.argv[2] ?? "_site");
+/**
+ * Why the release CI just published cannot be offered yet, or undefined once it can.
+ *
+ * `updatesManifest` skips a release with no signed xpi, which is right for history and
+ * wrong for the release this run exists to announce: the API can list a release published
+ * seconds ago with no assets, and on 2026-09-23 it did so for three runs in a row
+ * (v2609.0.144-146). Each built a manifest without its own release, deployed it and
+ * went green, so every dogfooder stayed on 143. The named release is required instead.
+ */
+export function notYetOffered(releases, tag) {
+  const release = releases.find((r) => r.tag_name === tag);
+  if (!release) return `${tag} is not in the release listing`;
+  if (!release.prerelease) return `${tag} is not a prerelease`;
+  if (!signedXpi(release)) {
+    const names = release.assets.map((a) => a.name).join(", ") || "none";
+    return `${tag} has no signed xpi (assets: ${names})`;
+  }
+  return undefined;
+}
 
-  const releases = fetchReleases();
+// Five minutes: the provenance check that saw the same empty asset list passed on a re-run
+const ATTEMPTS = 11;
+const RETRY_MS = 30_000;
+
+async function main() {
+  const outDir = outputDir(process.argv[2] ?? "_site");
+  // Empty for a hand-dispatched run, which has no release of its own to wait for
+  const expected = process.env["EXPECT_TAG"] || undefined;
+
+  let releases = fetchReleases();
+  for (let attempt = 1; expected; attempt++) {
+    const why = notYetOffered(releases, expected);
+    if (!why) break;
+    if (attempt === ATTEMPTS) {
+      throw new Error(`${why} after ${ATTEMPTS} listings; not publishing a manifest without it`);
+    }
+    console.error(`${why}; listing again in ${RETRY_MS / 1000}s`);
+    await new Promise((resolve) => setTimeout(resolve, RETRY_MS));
+    releases = fetchReleases();
+  }
   const manifest = updatesManifest(releases);
 
   mkdirSync(outDir, { recursive: true });
@@ -96,10 +132,8 @@ function main() {
 
 // Guard against accidental execution
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
-  try {
-    main();
-  } catch (err) {
+  main().catch((err) => {
     console.error(err instanceof Error ? err.message : err);
     process.exit(1);
-  }
+  });
 }
