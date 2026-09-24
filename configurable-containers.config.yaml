@@ -140,6 +140,67 @@ rules:
   - match: "overcast.fm"
   - match: "songkick.com"
   - match: "soundcloud.com"
+    scripts:
+      # Never start an "Autoplay station" when the queue runs out. The toggle is the
+      # play queue's `fallbackEnabled` state: never persisted, on at load, and switched
+      # back on by `playSource` each time a track or playlist is started. So this wraps
+      # `playSource` to switch it off after every start. A toggle flipped on by hand
+      # holds until the next start.
+      #
+      # The queue is a webpack module with a minified id, reached through
+      # `webpackJsonp` and found by shape. A content script is an isolated world, so
+      # page objects are reached through `wrappedJSObject` and anything handed to the
+      # page goes through `exportFunction`/`cloneInto`. Injecting a page <script>
+      # instead is blocked by any CSP or script blocker, silently.
+      #
+      # Every giving-up path says why in the page global `ccAutoplay`. Not on <html>:
+      # logged in, a track page drops attributes set there while the script still runs.
+      - at: document_start
+        run: |
+          (() => {
+            const page = window.wrappedJSObject;
+            const state = (s) => { page.ccAutoplay = s; };
+            state("waiting");
+            const isQueue = (x) => {
+              try {
+                return !!x && typeof x.playSource === "function"
+                  && typeof x.getState("fallbackEnabled") === "boolean";
+              } catch (e) { return false; }
+            };
+            let req = null;
+            let pushed = false;
+            const find = () => {
+              const jsonp = page.webpackJsonp;
+              // Until the runtime loads, webpackJsonp is a plain array and a push only queues.
+              if (!pushed) {
+                if (!jsonp || jsonp.push === page.Array.prototype.push) return "no-webpack";
+                pushed = true;
+                const grab = (m, e, r) => { req = r.wrappedJSObject || r; };
+                jsonp.push(cloneInto([["cc-autoplay"], { "cc-autoplay": grab }, [["cc-autoplay"]]],
+                  page, { cloneFunctions: true }));
+              }
+              if (!req) return "no-require";
+              for (const m of Object.values(req.c)) if (m && isQueue(m.exports)) return m.exports;
+              return "no-queue";
+            };
+            const until = Date.now() + 60000;
+            const timer = setInterval(() => {
+              const q = find();
+              if (typeof q === "string") {
+                if (Date.now() > until) { clearInterval(timer); state("gave-up:" + q); }
+                return;
+              }
+              clearInterval(timer);
+              const off = () => q.toggleState("fallbackEnabled", false);
+              const playSource = q.playSource;
+              q.playSource = exportFunction(function (...args) {
+                // Spread, not apply(this, arguments): the page cannot read this world's arguments object.
+                try { return playSource.call(this, ...args); } finally { off(); }
+              }, page);
+              off();
+              state("hooked");
+            }, 100);
+          })();
   - match: "splitwise.com"
   - match: "spotify.com"
   - match: "taste.io"
