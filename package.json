@@ -16,7 +16,7 @@
     "package": "tsx scripts/package.ts",
     "verify:reproducible": "tsx scripts/verify-reproducible.ts",
     "sign:dev": "tsx scripts/sign-dev.ts",
-    "lint:ext": "tsx scripts/package.ts && web-ext lint --source-dir dist/cc",
+    "lint:ext": "tsx scripts/package.ts && tsx scripts/lint-ext.ts",
     "submit": "tsx scripts/submit.ts"
   },
   "dependencies": {

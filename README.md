@@ -109,7 +109,7 @@ The rest of the checks:
 
 ```
 npm run typecheck
-npm run lint:ext      # addons-linter, the validator AMO runs
+npm run lint:ext      # addons-linter, the validator AMO runs; fails on any unaccepted warning
 npm test              # unit + e2e; launches real Firefox via Selenium
 npm run test:mutation # nightly guard rail: mutates the pure modules, gated at 100%
 ```
