@@ -180,7 +180,17 @@ describe("buildAmoMetadata", () => {
   it("caps every field the submit body carries, and no others", () => {
     const meta = buildAmoMetadata({ ...COPY, version: "1", timestamp: "T", channel: "listed" });
 
-    expect(fieldsSubmitted(meta)).toEqual(Object.keys(AMO_FIELD_LIMITS).sort());
+    // `compatibility` is the one field sent without a cap: it is a list of app names, not text.
+    expect(fieldsSubmitted(meta)).toEqual([...Object.keys(AMO_FIELD_LIMITS), "compatibility"].sort());
+  });
+
+  it("declares desktop Firefox only, on both channels", () => {
+    // Left to AMO, compatibility follows `gecko_android` in the manifest, and that default has
+    // been "Android too" before. Containers do not exist there, so nothing would route.
+    for (const channel of ["listed", "unlisted"] as const) {
+      const meta = buildAmoMetadata({ ...COPY, version: "1", timestamp: "T", channel });
+      expect(meta.version.compatibility).toEqual(["firefox"]);
+    }
   });
 
   it("refuses empty copy, which is what a mis-read file looks like", () => {

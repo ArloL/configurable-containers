@@ -68,6 +68,10 @@ shaped the way they are.
   carries its reason, and one that stops matching fails too. AMO may run a newer linter
   than the pinned `web-ext`, so a Developer Hub warning the gate missed means bumping
   `web-ext`, not widening the list.
+- **Android is excluded by the UPLOAD, not the manifest.** No manifest key says "not
+  Android"; AMO infers Android from `gecko_android` being present, so both channels send
+  `compatibility: ["firefox"]` (`scripts/amo-metadata.ts`) rather than rely on that
+  default, which was "Android too" before October 2023.
 - **Never derive a dev version from the clock** — `YYMM.DD.HHMM` outranks every
   `YYMM.0.<micro>` for the rest of the month, so one local build would own the update
   channel. Nothing enforces this; it is a rule for whoever sets `VERSION`.
