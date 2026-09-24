@@ -60,6 +60,14 @@ shaped the way they are.
   its permission tells a reviewer the add-on asks for something it does not. Add a claim
   to `amo/` and the question is whether it can join them — a hand-read is what let all
   four of these ship.
+- **`npm run lint:ext` fails on ANY addons-linter finding not accepted in
+  `scripts/lint-ext.ts`** — errors, warnings and notices alike. addons-linter exits zero on
+  a warning, so before this a warning's first reader was the Developer Hub, after the
+  upload. Don't swap it for `--warnings-as-errors`: the Android-floor warning is deliberate
+  (`test/fitness/firefox-floor.test.ts`), so that flag is red on every run. An acceptance
+  carries its reason, and one that stops matching fails too. AMO may run a newer linter
+  than the pinned `web-ext`, so a Developer Hub warning the gate missed means bumping
+  `web-ext`, not widening the list.
 - **Never derive a dev version from the clock** — `YYMM.DD.HHMM` outranks every
   `YYMM.0.<micro>` for the rest of the month, so one local build would own the update
   channel. Nothing enforces this; it is a rule for whoever sets `VERSION`.
