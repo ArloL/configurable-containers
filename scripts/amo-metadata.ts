@@ -60,8 +60,17 @@ export interface AmoMetadataOptions extends ListingCopy {
 export interface AmoMetadata {
   summary: Record<string, string>;
   description: Record<string, string>;
-  version: { approval_notes: string };
+  version: { approval_notes: string; compatibility: typeof COMPATIBILITY };
 }
+
+// Firefox for desktop only, stated rather than left to AMO's default. AMO derives
+// compatibility from the manifest, marking a version Android-compatible exactly when
+// `browser_specific_settings.gecko_android` is present, and that default has flipped once
+// already: before October 2023 the signing API marked EVERY upload Android-compatible.
+// Containers do not exist on Android, so an Android listing is an add-on that installs and
+// routes nothing. The list form takes the min/max from the manifest, so the floor stays
+// declared in one place (test/fitness/firefox-floor.test.ts).
+const COMPATIBILITY = ["firefox"] as const;
 
 export function readListingCopy(dir: string = COPY_DIR): ListingCopy {
   return {
@@ -126,7 +135,7 @@ export function buildAmoMetadata(opts: AmoMetadataOptions): AmoMetadata {
   return {
     summary: { "en-US": summary },
     description: { "en-US": description },
-    version: { approval_notes: approvalNotes },
+    version: { approval_notes: approvalNotes, compatibility: COMPATIBILITY },
   };
 }
 
