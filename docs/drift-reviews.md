@@ -303,3 +303,38 @@ it; a gotcha that genuinely is cross-cutting, however long it runs; and any prop
 *loses* reasoning rather than relocating it — this codebase's premise is that the reasoning is
 the artifact, so deleting an argument to save tokens trades a cheap cost for the expensive one
 these reviews exist to prevent.
+
+## D10 — Counts that carry nothing
+
+**Does each number in the prose earn its place, or would the sentence say the same without it?**
+Scope: `AGENTS.md`, `TESTING.md`, the files `AGENTS.md` routes to, this file, and comments in
+`src/`, `harness/`, `scripts/`, `test/`.
+
+D1 asks whether a count is still *true*. This asks whether it needs to be there at all. A
+present-tense tally of something that can grow — "the three task-scoped files", "four seeds
+differ", "the four other `storage.local` keys" — is false the day someone adds one, and
+nothing fails when it goes. Where the sentence names the items anyway, or `grep` answers the
+count, the number buys nothing and costs a D1 finding later.
+
+Enumerate rather than recall:
+
+```
+grep -nwE '[0-9]+|two|three|four|five|six|seven|eight|nine|ten' AGENTS.md TESTING.md docs/*.md
+```
+
+**A finding here is a count whose removal loses nothing**: quote it with `file:line`, give the
+wording without it, and say what the count was restating — the list beside it, a directory
+listing, a `grep`.
+
+Not findings:
+
+- **A number that is the rule or the value** — a threshold, a version floor, a cap, an exit
+  code, `strict_min_version: "140.0"`. D3 checks those against the source.
+- **A count that is the claim.** "Exactly two honest ways", "the single `runtime.onMessage`
+  registration", "one queue": completeness or uniqueness is the point, and a new member is
+  meant to contradict it.
+- **A count a fitness inventory pins.** Adding a member already fails a test, so the prose
+  cannot drift unnoticed.
+- **Past-tense history and symptoms.** "Three e2e tests passed with auto-temp entirely broken"
+  stays true, and is what keeps the rule beside it from reading as arbitrary.
+- **Dated measurements**, which are true of a version on a date — D3's subject.
