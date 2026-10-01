@@ -30,7 +30,7 @@
     "@types/firefox-webext-browser": "^143.0.0",
     "@types/node": "^26.6.2",
     "@types/selenium-webdriver": "^4.35.7",
-    "@vitest/coverage-v8": "^4.1.11",
+    "@vitest/coverage-v8": "^5.0.1",
     "esbuild": "^0.28.1",
     "fast-check": "^4.10.2",
     "fflate": "^0.8.3",
@@ -39,7 +39,7 @@
     "selenium-webdriver": "^4.25.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
-    "vitest": "^4.1.11",
+    "vitest": "^5.0.1",
     "web-ext": "^10.7.0"
   },
   "overridesComments": {
