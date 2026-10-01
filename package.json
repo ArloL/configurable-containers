@@ -32,7 +32,7 @@
     "@types/selenium-webdriver": "^4.35.7",
     "@vitest/coverage-v8": "^4.1.11",
     "esbuild": "^0.28.1",
-    "fast-check": "^4.9.0",
+    "fast-check": "^4.10.2",
     "fflate": "^0.8.3",
     "oxlint": "^1.80.0",
     "oxlint-tsgolint": "^7.0.2001",
