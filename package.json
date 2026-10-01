@@ -40,7 +40,7 @@
     "tsx": "^4.23.1",
     "typescript": "^7.0.2",
     "vitest": "^4.1.11",
-    "web-ext": "^10.6.0"
+    "web-ext": "^10.7.0"
   },
   "overridesComments": {
     "typed-rest-client": "SECURITY: typed-rest-client 2.3.1 (via @stryker-mutator/core 10.0.0, dev-only) pins qs to exactly 6.15.1, which carries GHSA for qs <=6.15.1 (qs.stringify DoS). Force qs ^6.15.3. Remove when Stryker depends on typed-rest-client >=3 (qs ^6.16.0); after npm install, npm ls qs must still show >=6.15.2."
