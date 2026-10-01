@@ -35,7 +35,7 @@
     "fast-check": "^4.10.2",
     "fflate": "^0.8.3",
     "oxlint": "^1.85.0",
-    "oxlint-tsgolint": "^7.0.2001",
+    "oxlint-tsgolint": "^7.0.2003",
     "selenium-webdriver": "^4.25.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
