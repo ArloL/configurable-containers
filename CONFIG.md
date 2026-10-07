@@ -51,7 +51,7 @@ Every rule is a `match` plus **at most one** action:
 | *(none)*        | Open in a container **named after the host** (the **first** host when `match` is a list). |
 | `open: X`       | Open matching sites in container `X`.                                           |
 | `open: [A, B]`  | Eligible containers. With `default:` one auto-opens; without, a choice screen.  |
-| `inherit: true` | Never route on its own; stay in the container that initiated the navigation.    |
+| `inherit: true` | Never route on its own; stay in the container that initiated the navigation. Leaving one keeps a throwaway. |
 | `ignore: true`  | Engine does nothing: no routing, isolation or side-effects.                     |
 | `redirector: true` | Transient link shim: don't isolate the hop; auto-close the tab if it is left stranded on the shim. |
 
@@ -260,6 +260,11 @@ Every top-level (`main_frame`) navigation is evaluated fresh. Three mechanisms, 
    inferred, so same-site alone still isolates. It never reaches an `open: Temporary` rule
    (that rule demands a throwaway), and the default container does not count as named.
 
+   **Leaving a sign-in page keeps the throwaway.** From a page an `inherit` rule matches,
+   a navigation on the disposable path stays, wherever it goes: that is the way back from
+   a login, and an OAuth callback is a cross-site GET. In a throwaway only — from a named
+   container an unmatched site is still isolated.
+
 3. **Explicit exemptions (`inherit` / `ignore` / `redirector`).** Exempt from both above.
    `inherit: true` keeps the tab in whichever container *initiated* the navigation — the
    SSO mechanism; the navigation is otherwise handled normally, overlays included.
@@ -314,6 +319,21 @@ An identity provider or shared payment redirector is configured one of two ways:
 there is no automatic inheritance every auth and payment domain must opt in. In the
 author's data that is a real list: `accounts.google.com`, `login.microsoftonline.com`,
 `credorax.net`, `payment.unzer.com`, and other 3DS processors.
+
+The way back needs nothing more: leaving the provider's page keeps the throwaway
+([mechanism 2](#resolution-engine)), on whichever host the callback arrives. That puts a
+price on an entry that also matches pages that are not logins — `okta.com` is every
+tenant's app dashboard too, and every app launched from one in a throwaway shares it.
+Where that matters, match the sign-in paths with a pattern. A site that is both a provider
+and a container of its own needs that anyway:
+
+```yaml
+- match:
+  - "https://github.com/login*"       # sign-in and OAuth authorize
+  - "https://github.com/sessions/*"   # two-factor
+  inherit: true
+- match: github.com
+```
 
 Since an `inherit` list shares nothing between its hosts
 ([above](#what-a-match-list-means-depends-on-the-action)), the whole list belongs in
@@ -395,10 +415,12 @@ signed-in-for-age-gate YouTube:
    group, so the navigation is same-site, stays in **T**, and the video plays.
 4. When **T** is disposed, five minutes after its last tab closes, the login evaporates.
 
-Step 3 works only if `accounts.google.com`'s group membership is still recognised even
-though it resolved via `inherit` in step 2 — hence the constraint. **Residual risk:** a
-login hop through a domain *outside* the group (a stray `*.googleusercontent.com`) still
-isolates; the fix is to add that domain to the group.
+Step 3 recognises `accounts.google.com`'s group membership even though it resolved via
+`inherit` in step 2 — hence the constraint. (Leaving a sign-in page now keeps **T** on its
+own, so this hop no longer depends on it; a hop between members that some rule matches
+still does.) **Residual risk:** a hop between members through a domain *outside* the
+group (a stray `*.googleusercontent.com`) still isolates; the fix is to add that domain
+to the group.
 
 ## Overlays (`cookies` / `scripts`)
 

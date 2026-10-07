@@ -21,7 +21,7 @@ Failure classes drawn from the model and from Temporary Containers' source, whos
 | F3 | **Same-site continuity misfire** — a new temp on a same-domain nav, or *keeping* one across a real site boundary. | Cookie leak (kept too long) or lost session (churned). |
 | F4 | **Group membership resolved by routing, not by target URL** — the age-gate chain. | Login silently dropped on the redirect back. |
 | F5 | **Precedence error** — wrong first-match in `rules` or `groups`; cross-list shadowing. | Wrong container, and it looks plausible. |
-| F6 | **`inherit` routes or isolates** instead of staying put. | Breaks SSO, or leaks identity across a boundary. |
+| F6 | **`inherit` routes or isolates** instead of staying put — on the hop to the sign-in host, or on the way back, where an OAuth callback is a cross-site GET leaving the provider's page. | Breaks SSO, or leaks identity across a boundary. The way back fails as a login that "succeeds" in a fresh throwaway, which looks like the provider's fault. |
 | F7 | **Race** — `onBeforeRequest` vs `onBeforeNavigate` vs MAC. | Nondeterministic; passes locally, fails in the wild. |
 | F8 | **Background restart mid-flow** — in-memory guard state lost when the context dies. | Reintroduces F1/F2, but only sometimes. |
 | F9 | **Redirect-binding breakage** — a reopen turns a SAML `POST` into a `GET`, dropping the assertion. | Only fails for POST-binding IdPs. |
@@ -93,8 +93,8 @@ F15 — whether a tab that inherited a container counts as being in it — are p
   - *`inherit` neutrality* — an `inherit` match never yields `temp` or `named`, and for a
     fixed initiator its result is invariant under the rest of the config. (F6)
   - *Continuity monotonicity* — same registrable domain or same group ⇒ never a new temp;
-    different site and different group ⇒ always isolate. From a named container, only the
-    group keeps the tab. (F3)
+    different site and different group ⇒ always isolate, for a config with no rules. From a
+    named container, only the group keeps the tab. (F3)
 
 Properties are the core anti-subtle-bug weapon: they explore configs no human would
 hand-write, which is where precedence and totality bugs hide.
@@ -174,8 +174,8 @@ than by properties of the answers.
 
 Everything stateful runs here against a mock `browser.*` (fake `tabs`,
 `contextualIdentities`, `webRequest`, `webNavigation`, and a fake clock). We drive
-*sequences* of events and assert invariants after each step. Home of F1, F2, F7, F8, F10,
-F13, F14, F15, F16.
+*sequences* of events and assert invariants after each step. Home of F1, F2, F6 (the
+sign-in round trip), F7, F8, F10, F13, F14, F15, F16.
 
 - **Invariants, pinned by hand-written event sequences** — plus three fast-check
   properties over a random config and URL in `engine.props.test.ts` (bounded effect,
@@ -243,6 +243,10 @@ assignment, real container create/dispose, real redirects.
   where it came from: it gets its own window, so `openerTabId` is absent and the request's
   `originUrl` is the only surviving signal. A mock is free to hand the engine both, which
   is exactly why the L3 case cannot own this alone.
+- **Sign-in round trip (F6)** — from an app in a throwaway, through an `inherit` host
+  that renders a page, back to the app: by a link, by a POST the provider answers with a
+  302, and in a `window.open` popup. That the tab reads the provider's url by the time the
+  return is decided is the browser fact; L3 sets it by hand.
 - **Firefox site associations (F16)** — launch with the switching pref on, associate a
   host through Firefox's own API, and assert CC mints no throwaway, leaves a click inside the
   associated tab in that tab, and seeds the rule's cookies into Firefox's container. That
@@ -646,7 +650,7 @@ mutant no other case catches.
 | F3 continuity misfire      | ✅ |    | ✅ |    | ✅ |
 | F4 group-by-target-URL     | ✅ |    | ✅ |    | ✅ |
 | F5 precedence              | ✅ | ✅ |    |    | ✅ |
-| F6 inherit neutrality      | ✅ |    |    |    | ✅ |
+| F6 inherit neutrality      | ✅ |    | ✅ | ✅ | ✅ |
 | F7 race / MAC              |    |    | ✅ | ✅ |    |
 | F8 background restart      |    |    | ✅ |    |    |
 | F9 redirect binding        |    |    | ✅ | ✅ |    |
@@ -668,7 +672,7 @@ ticks move only when a decision moves into or out of the gate's five modules —
 creeping, since the gate is all-or-nothing.
 
 Every class has a deterministic owner (L1–L3) and, where the browser is the source of
-truth (F1, F2, F7, F9, F10, F11, F12, F13, F14, F15, F16), a real-Firefox confirmation. F9 was the
+truth (F1, F2, F6, F7, F9, F10, F11, F12, F13, F14, F15, F16), a real-Firefox confirmation. F9 was the
 long-standing exception — POST bodies and redirect bindings don't exist in a pure resolver
 — and gained an L3 owner when the decision *not* to reopen a non-GET navigation moved into
 the engine.
