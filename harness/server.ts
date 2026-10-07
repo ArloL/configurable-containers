@@ -90,10 +90,16 @@ export async function startServer(): Promise<TestServer> {
     // &popup=1 makes the click a window.open with features — a share button. Firefox gives
     // that its own popup WINDOW with a pre-commit tab, the case a reopen must put back where
     // it found it.
+    // &post=1 makes #go a form's submit button instead, same tab: a consent screen's
+    // "Authorize", whose POST the server answers with a 302 when it is aimed at /redirect.
     const link = params.get("link");
     const popup = params.has("popup");
     const target = params.has("same") || popup ? "" : ` target="_blank"`;
-    const anchor = link ? `<a id="go"${target} href="${escapeAttr(link)}">go</a>` : "";
+    const anchor = !link
+      ? ""
+      : params.has("post")
+        ? `<form method="POST" action="${escapeAttr(link)}"><button id="go">go</button></form>`
+        : `<a id="go"${target} href="${escapeAttr(link)}">go</a>`;
     // The url stays in the href (escaped above) and the script reads it back from there,
     // never interpolated into JS, so this adds no second injection sink.
     const popupScript =
