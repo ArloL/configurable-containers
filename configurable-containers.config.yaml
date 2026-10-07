@@ -278,6 +278,11 @@ rules:
       # navigation, back-navigation onto an already-fixed video, and the revert all the
       # same case, with no bookkeeping to get wrong.
       #
+      # Nothing type-checks or tests this snippet (it ships as a string inside YAML), and
+      # patching `ytInitialPlayerResponse` does nothing: the player re-derives from its own
+      # `/youtubei/v1/player` fetch, so the retarget landed before the player read it and
+      # German played anyway.
+      #
       # Full reversing notes: docs/superpowers/specs/2026-07-31-youtube-original-audio-design.md
       - at: document_start
         run: |
@@ -395,6 +400,16 @@ groups:
   - [microsoft.com, office.com, cloud.microsoft, sharepoint.com, microsoftonline.com, azure.com, azure.net, microsofticm.com]
   - [atlassian.net, atlassian.com, trello.com]
   - [docusign.net, docusign.com]
+  # Google is ~190 registrable domains, one per ccTLD, and a redirect between two of
+  # them (google.com -> google.de) is a cross-site navigation that would otherwise cost
+  # the throwaway you were signed into. No match pattern can say this — a host wildcard
+  # is only a leading "*." — so it is the regex form or 190 lines. Single-quoted so the
+  # backslashes are the regex's own and not YAML escapes.
+  #
+  # It is deliberately loose at the tail: `google.zz` is inside the group whether or not
+  # Google owns it. The cost of that is a stranger's site sharing a THROWAWAY with a
+  # Google session that is itself disposable, which is a non-event; the cost of being
+  # strict is enumerating every ccTLD and re-checking the list forever.
   - # google, all published ccTLDs + the properties that share its session
     - youtube.com
     - youtu.be
