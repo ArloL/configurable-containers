@@ -82,6 +82,10 @@ describe("resolve — properties", () => {
     fc.assert(
       fc.property(arbUrl, arbUrl, arbAction, fc.array(arbRule, { maxLength: 5 }), arbGroups, (from, to, action, tail, groups) => {
         const head = aRuleMatching(to, action);
+        // Rules are also read for the page the tab is on, since leaving a sign-in page keeps
+        // a throwaway. A tail that makes `from` one changes that answer, not precedence.
+        const onSignIn = (rules: Rule[]) => deps.matchRule(from, rules)?.action.kind === "inherit";
+        fc.pre(onSignIn([head, ...tail]) === onSignIn([head]));
         // The tail is generated over the same host pool, so it contains rules that match
         // `to` and answer differently. Taking the LAST match instead of the first is what
         // this equality stops being true under.
