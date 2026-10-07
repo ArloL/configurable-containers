@@ -1063,6 +1063,132 @@ rules:
   });
 });
 
+// `inherit` carries a throwaway TO the sign-in host; the way back is a second, cross-site
+// navigation. An OAuth callback is a GET (a SAML one is a POST, declined anyway), and once
+// the provider has shown a page the tab is on its site, so plain isolation buys a fresh
+// throwaway for the callback and the login lands without the session it was for. Reported
+// for code.facebook.com/cla → github.com/login/oauth/authorize.
+describe("engine — a sign-in round trip from a throwaway", () => {
+  const ssoConfig = () =>
+    parseConfig(`
+rules:
+  - match: "https://code.example/login*"
+    inherit: true
+  - match: code.example
+    open: Code
+  - match: [idp.example, mfa.example]
+    inherit: true
+`);
+
+  function aThrowawayOn(url: string) {
+    const browser = aFakeBrowser();
+    const tmp1 = browser.addContainerNamed({ name: "tmp1" });
+    const tab = browser.existingTab({ url, cookieStoreId: tmp1.cookieStoreId });
+    const suffix = sequentialTmpSuffixes();
+    suffix(); // tmp1 above was issued by this counter
+    createEngine({ port: browser.port, config: ssoConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: suffix });
+    return { browser, tab };
+  }
+
+  it("comes home to the throwaway the login started in", async () => {
+    const { browser, tab } = aThrowawayOn("https://cla.example/individual");
+
+    expect(await browser.navigates(aNavigationTo({ requestId: "1", tabId: tab.id, url: "https://idp.example/oauth2/authorize?client_id=x" }))).toBeUndefined();
+    tab.url = "https://idp.example/oauth2/authorize?client_id=x"; // the provider showed a page
+
+    const callback = await browser.navigates(aNavigationTo({ requestId: "2", tabId: tab.id, url: "https://cla.example/callback?code=c" }));
+
+    expect(callback).toBeUndefined();
+    expect(browser.openedTabs).toEqual([]);
+    expect(browser.createdContainers).toEqual([]);
+  });
+
+  it("comes home through more than one sign-in host", async () => {
+    const { browser, tab } = aThrowawayOn("https://cla.example/individual");
+
+    await browser.navigates(aNavigationTo({ requestId: "1", tabId: tab.id, url: "https://idp.example/login" }));
+    tab.url = "https://idp.example/login";
+    expect(await browser.navigates(aNavigationTo({ requestId: "2", tabId: tab.id, url: "https://mfa.example/challenge" }))).toBeUndefined();
+    tab.url = "https://mfa.example/challenge";
+
+    const callback = await browser.navigates(aNavigationTo({ requestId: "3", tabId: tab.id, url: "https://cla.example/callback?code=c" }));
+
+    expect(callback).toBeUndefined();
+    expect(browser.openedTabs).toEqual([]);
+  });
+
+  // GitHub's shape: the sign-in pages are `inherit`, the rest of the site has a container.
+  it("comes home from sign-in pages on a site that has a container of its own", async () => {
+    const { browser, tab } = aThrowawayOn("https://cla.example/individual");
+
+    expect(await browser.navigates(aNavigationTo({ requestId: "1", tabId: tab.id, url: "https://code.example/login?return_to=%2Flogin%2Foauth%2Fauthorize" }))).toBeUndefined();
+    tab.url = "https://code.example/login?return_to=%2Flogin%2Foauth%2Fauthorize";
+    expect(await browser.navigates(aNavigationTo({ requestId: "2", tabId: tab.id, url: "https://code.example/login/oauth/authorize?client_id=x" }))).toBeUndefined();
+    tab.url = "https://code.example/login/oauth/authorize?client_id=x";
+
+    const callback = await browser.navigates(aNavigationTo({ requestId: "3", tabId: tab.id, url: "https://cla.example/callback?code=c" }));
+
+    expect(callback).toBeUndefined();
+    expect(browser.openedTabs).toEqual([]);
+  });
+
+  // "Sign in with…" in a popup or a new tab: the tab has no page of its own until the
+  // provider's commits, so where the login started is the page that opened it.
+  it("comes home in a sign-in tab the app opened", async () => {
+    const { browser, tab: app } = aThrowawayOn("https://cla.example/individual");
+    const popup = browser.existingTab({ url: "about:blank", cookieStoreId: app.cookieStoreId, openerTabId: app.id });
+
+    expect(await browser.navigates(aNavigationTo({ requestId: "1", tabId: popup.id, url: "https://idp.example/oauth2/authorize?client_id=x" }))).toBeUndefined();
+    popup.url = "https://idp.example/oauth2/authorize?client_id=x";
+
+    const callback = await browser.navigates(aNavigationTo({ requestId: "2", tabId: popup.id, url: "https://cla.example/callback?code=c" }));
+
+    expect(callback).toBeUndefined();
+    expect(browser.openedTabs).toEqual([]);
+  });
+
+  // Nothing remembers where the login started, so a callback on a site of its own — which
+  // then forwards to the app — is as much a way home as the app itself.
+  it("comes home through a callback on a site of its own", async () => {
+    const { browser, tab } = aThrowawayOn("https://cla.example/individual");
+
+    await browser.navigates(aNavigationTo({ requestId: "1", tabId: tab.id, url: "https://idp.example/oauth2/authorize?client_id=x" }));
+    tab.url = "https://idp.example/oauth2/authorize?client_id=x";
+
+    const callback = await browser.navigates(aNavigationTo({ requestId: "2", tabId: tab.id, url: "https://cla-auth.example/callback?code=c" }));
+
+    expect(callback).toBeUndefined();
+    expect(browser.openedTabs).toEqual([]);
+  });
+
+  // A sign-in page lets an UNMATCHED site stay, nothing more: a rule still decides a site it
+  // names.
+  it("still routes a site with a rule of its own", async () => {
+    const { browser, tab } = aThrowawayOn("https://idp.example/oauth2/authorize?client_id=x");
+    browser.addContainerNamed({ name: "Code" });
+
+    const repo = await browser.navigates(aNavigationTo({ requestId: "1", tabId: tab.id, url: "https://code.example/some/repo" }));
+
+    expect(repo).toEqual({ cancel: true });
+    const code = (await browser.port.queryIdentities()).find((c) => c.name === "Code")!;
+    expect(browser.openedTabs[0]!.cookieStoreId).toBe(code.cookieStoreId);
+  });
+
+  // The pass applies in a THROWAWAY only. A named container leaving for a site no rule
+  // names is the user's session going somewhere it was not configured to go.
+  it("still isolates an unmatched site reached from a sign-in page in a named container", async () => {
+    const browser = aFakeBrowser();
+    const work = browser.addContainerNamed({ name: "Work" });
+    const tab = browser.existingTab({ url: "https://idp.example/oauth2/authorize?client_id=x", cookieStoreId: work.cookieStoreId });
+    createEngine({ port: browser.port, config: ssoConfig(), deps, onChoice: ignoreChoices, pause: noPause, tmpSuffix: sequentialTmpSuffixes() });
+
+    const elsewhere = await browser.navigates(aNavigationTo({ requestId: "1", tabId: tab.id, url: "https://elsewhere.example/" }));
+
+    expect(elsewhere).toEqual({ cancel: true });
+    expect(browser.createdContainers.map((c) => c.name)).toEqual(["tmp1"]);
+  });
+});
+
 // `reopenedNav` guards ONE navigation. Every case above is a hop of it; these two are what
 // happens when it is over — the marker has to stop applying, or the tab it guarded never
 // routes again.
