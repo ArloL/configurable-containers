@@ -52,6 +52,9 @@ rules:
     - onelogin.com
     - pingone.com
     - login.personio.com
+    # GitHub is a provider AND a container of its own: only its sign-in pages inherit.
+    - "https://github.com/login*"      # sign-in and OAuth authorize
+    - "https://github.com/sessions/*"  # two-factor
     inherit: true
 
   # A card payment's "verify with your bank" step is the same situation: it must
