@@ -36,6 +36,12 @@ function disposablePath(nav: NavContext, config: Config, deps: Deps): Decision {
 
     const sameSite = deps.sameSite(current.url, nav.targetUrl);
     if (sameSite || inOneGroup(current.url, nav.targetUrl, config, deps)) return { kind: "stay" };
+
+    // `inherit` brought the throwaway TO the sign-in page; leaving it is the way back, and
+    // an OAuth callback is a cross-site GET. Nothing records where the login started, so a
+    // callback on a host of its own comes home too. The price: an `inherit` entry that also
+    // matches non-login pages (an Okta dashboard) keeps everything opened from them here.
+    if (deps.matchRule(current.url, config.rules)?.action.kind === "inherit") return { kind: "stay" };
   }
   return { kind: "reopen", into: { kind: "temporary" } };
 }

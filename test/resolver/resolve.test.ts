@@ -213,6 +213,47 @@ describe("resolve — disposable path + continuity", () => {
   });
 });
 
+// `inherit` carries a throwaway to the sign-in host, and leaving that host is the way back —
+// an OAuth callback is a cross-site GET from the provider's page. Nothing records where the
+// login started, so leaving a sign-in page keeps the throwaway wherever it goes.
+describe("resolve — leaving a sign-in page in a throwaway", () => {
+  const signIn = { url: "https://accounts.google.com/o/oauth2/auth", container: aThrowaway };
+
+  it("keeps the throwaway for a site no rule names", () => {
+    expect(resolve(aNavigation("https://cla.example/callback?code=c", signIn), aConfigOf([inheritGoogle]), deps))
+      .toEqual({ kind: "stay" });
+  });
+
+  it("keeps it for an open: Temporary site too", () => {
+    expect(resolve(aNavigation("https://pinterest.com/auth", signIn), aConfigOf([inheritGoogle, pinterestTemp]), deps))
+      .toEqual({ kind: "stay" });
+  });
+
+  it("keeps it in a sign-in tab opened from the provider's page", () => {
+    expect(resolve(aNavigationFromALinkOn(signIn, "https://cla.example/callback?code=c"), aConfigOf([inheritGoogle]), deps))
+      .toEqual({ kind: "stay" });
+  });
+
+  it("does not hold a site a rule sends elsewhere", () => {
+    expect(resolve(aNavigation("https://mail.google.com/", signIn), aConfigOf([inheritGoogle, gmail]), deps))
+      .toEqual({ kind: "reopen", into: { kind: "permanent", name: "Gmail" } });
+  });
+
+  it("is a sign-in page only by an inherit rule", () => {
+    const pinterestPage = { url: "https://pinterest.com/", container: aThrowaway };
+    expect(resolve(aNavigation("https://imgur.com/", pinterestPage), aConfigOf([pinterestTemp]), deps))
+      .toEqual({ kind: "reopen", into: { kind: "temporary" } });
+  });
+
+  // In a named container an unmatched site is the session going somewhere nobody
+  // configured; the throwaway has no such owner.
+  it("does not apply in a named container", () => {
+    const workSignIn = { url: signIn.url, container: theContainerNamed("Work") };
+    expect(resolve(aNavigation("https://cla.example/callback", workSignIn, theContainerNamed("Work")), aConfigOf([inheritGoogle]), deps))
+      .toEqual({ kind: "reopen", into: { kind: "temporary" } });
+  });
+});
+
 // A rule is enforcement, not a preference: `resolve` consults `matchRule` before the
 // disposable path, so a matched host leaves its throwaway even when every continuity check
 // says it could stay. These pin it, because swapping the two steps is a one-line change no
