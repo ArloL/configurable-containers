@@ -15,6 +15,7 @@
 #
 # Saving applies the config straight away.
 
+version: 2
 rules:
 
   # ---------------------------------------------------------------------------
@@ -50,6 +51,7 @@ rules:
     - okta.com
     - onelogin.com
     - pingone.com
+    - login.personio.com
     inherit: true
 
   # A card payment's "verify with your bank" step is the same situation: it must
@@ -57,6 +59,7 @@ rules:
   # — add one here whenever a payment bounces you to a blank page or an endless
   # verification loop.
   - match:
+    - adyen.link
     - acs.3dsecure-atruvia.de
     - credorax.net
     - heidelpay.hpcgw.net
@@ -64,6 +67,9 @@ rules:
     - secure.kps-payment.de
     - threeds.upcgw.com
     - threedssvc.pay1.de
+    - js.live.kustom.co
+    - mollie.com
+    - mollie.nl
     inherit: true
 
   # Link shims: transient hops that exist only to bounce you somewhere else. Not
@@ -109,22 +115,34 @@ rules:
     - haeger-consulting.atlassian.net
     - haegerconsulting.atlassian.net
     - haegerconsulting2006.sharepoint.com
+    - haegerconsulting2006-my.sharepoint.com
     open: Haeger
+
+  - match: slack.com
+    open: [Haeger]
+
+  - match: entra.microsoft.com
+    open: [Haeger]
 
   - match: "goflink.com"
     open: Flink
 
   # Two eligible containers, no `default:` — so this one asks every time.
-  - match: outlook.cloud.microsoft
+  - match:
+    - outlook.cloud.microsoft
+    - azure.com
     open: [Haeger, HSP]
 
   # Auto-named: container name = the matched host (first host when `match` is a list).
   - match: "adventofcode.com"
   - match: "airbnb.de"
+  - match: backblaze.com
   - match: "bahn.de"
   - match: "bandcamp.com"
   - match: "beatport.com"
+  - match: bitwarden.com
   - match: "booking.com"
+  - match: docker.com
   - match: "eatthismuch.com"
   - match: "feedly.com"
   - match: "followupthen.com"
@@ -136,10 +154,12 @@ rules:
   - match: "linkedin.com"
   - match: "mail.google.com"
   - match: "mend.io"
+  - match: miro.com
   - match: "mural.co"
   - match: "overcast.fm"
+  - match: scouter.de
   - match: "songkick.com"
-  - match: "soundcloud.com"
+  - match: soundcloud.com
     scripts:
       # Never start an "Autoplay station" when the queue runs out. The toggle is the
       # play queue's `fallbackEnabled` state: never persisted, on at load, and switched
@@ -201,6 +221,7 @@ rules:
               state("hooked");
             }, 100);
           })();
+  - match: sonarcloud.io
   - match: "splitwise.com"
   - match: "spotify.com"
   - match: "taste.io"
@@ -215,18 +236,22 @@ rules:
   - match: "wohnsinn.com"
   - match: "wolt.com"
   - match: "zeldadungeon.net"
+  - match: momo.abo-kiste.com
 
   # Multi-host, auto-named after the first host (order chosen so the first host
   # is the name we want; later hosts are additional matchers only).
   - match: [claude.ai, claude.com]            # -> "claude.ai"
   - match: [discord.com, discord.gg]          # -> "discord.com"
-  - match: [github.com, github.dev]           # -> "github.com"
+  - match: [github.com, github.dev, vscode.dev]
   - match: [gls.de, gls-online-filiale.de]    # -> "gls.de"
   - match: [notion.com, notion.so]            # -> "notion.com"
   - match: [openai.com, chatgpt.com]          # -> "openai.com"
   - match: [paypal.com, py.pl]                # -> "paypal.com"
   - match: [wikipedia.org, wikimedia.org]     # -> "wikipedia.org"
   - match: [yahoo.com, yahooinc.com]          # -> "yahoo.com"
+  - match: [ikea.com, ikea.de]
+  - match: [eventbrite.com, eventbrite.de]
+
 
   # Disposable + overlays: `open: Temporary` (reuse the current throwaway only within
   # the same site/group, else isolate) plus per-domain cookie seeds / content scripts
@@ -249,11 +274,6 @@ rules:
       # at t=874, applied by t=1055, back on the dub by t=5750). That also makes SPA
       # navigation, back-navigation onto an already-fixed video, and the revert all the
       # same case, with no bookkeeping to get wrong.
-      #
-      # Nothing type-checks or tests this snippet (it ships as a string inside YAML), and
-      # patching `ytInitialPlayerResponse` does nothing: the player re-derives from its own
-      # `/youtubei/v1/player` fetch, so the retarget landed before the player read it and
-      # German played anyway.
       #
       # Full reversing notes: docs/superpowers/specs/2026-07-31-youtube-original-audio-design.md
       - at: document_start
@@ -343,15 +363,20 @@ rules:
             }, true);
             arm(); // the first load may already be under way
           })();
+
+
   - match: woki.de
     open: Temporary
     cookies:
       - { name: klaro, url: "https://www.woki.de/", value: '%7B%22cpConfig%22%3Atrue%2C%22basicCookie%22%3Atrue%2C%22cpIt%22%3Atrue%2C%22scrollContent%22%3Atrue%2C%22klaro%22%3Atrue%2C%22youtube%22%3Afalse%2C%22googleMaps%22%3Afalse%2C%22googleRecaptcha%22%3Afalse%2C%22googleAnalytics%22%3Afalse%7D' }
+
+
   - match: kraftfuttermischwerk.de
     open: Temporary
     scripts:
       - at: document_start
         run: "localStorage.setItem('jetpack_post_subscribe_modal_dismissed', Date.now().toString());"
+
 
 # Isolation-continuity groups: sites in one group stay in the SAME throwaway as you
 # move between them, while crossing to anything outside it spins up a clean one. From a
@@ -361,22 +386,200 @@ rules:
 # Order-significant, first-match wins; a URL resolves to at most one group. Groups
 # never route and never override a rule.
 groups:
-  # Google is ~190 registrable domains, one per ccTLD, and a redirect between two of
-  # them (google.com -> google.de) is a cross-site navigation that would otherwise cost
-  # the throwaway you were signed into. No match pattern can say this — a host wildcard
-  # is only a leading "*." — so it is the regex form or 190 lines. Single-quoted so the
-  # backslashes are the regex's own and not YAML escapes.
-  #
-  # It is deliberately loose at the tail: `google.zz` is inside the group whether or not
-  # Google owns it. The cost of that is a stranger's site sharing a THROWAWAY with a
-  # Google session that is itself disposable, which is a non-event; the cost of being
-  # strict is enumerating every ccTLD and re-checking the list forever.
-  - [
-      { regex: '^https?://([^/]+\.)?google\.[a-z]{2,3}(\.[a-z]{2})?/' },
-      youtube.com, youtu.be,
-    ]
   - [oracle.com, oraclecloud.com, identity.oraclecloud.com]
   - [check24.de, check24.com]
   - [conrad.de, conrad.com]
-  - [microsoft.com, office.com, cloud.microsoft, sharepoint.com, microsoftonline.com]
+  - [microsoft.com, office.com, cloud.microsoft, sharepoint.com, microsoftonline.com, azure.com, azure.net, microsofticm.com]
   - [atlassian.net, atlassian.com, trello.com]
+  - [docusign.net, docusign.com]
+  - # google, all published ccTLDs + the properties that share its session
+    - youtube.com
+    - youtu.be
+    - { regex: '^https?://([^/]+\.)?google\.[a-z]{2,3}(\.[a-z]{2})?/' }
+    - google.ad
+    - google.ae
+    - google.al
+    - google.am
+    - google.as
+    - google.at
+    - google.az
+    - google.ba
+    - google.be
+    - google.bf
+    - google.bg
+    - google.bi
+    - google.bj
+    - google.bs
+    - google.bt
+    - google.by
+    - google.ca
+    - google.cat
+    - google.cd
+    - google.cf
+    - google.cg
+    - google.ch
+    - google.ci
+    - google.cl
+    - google.cm
+    - google.cn
+    - google.co.ao
+    - google.co.bw
+    - google.co.ck
+    - google.co.cr
+    - google.co.id
+    - google.co.il
+    - google.co.in
+    - google.co.jp
+    - google.co.ke
+    - google.co.kr
+    - google.co.ls
+    - google.co.ma
+    - google.co.mz
+    - google.co.nz
+    - google.co.th
+    - google.co.tz
+    - google.co.ug
+    - google.co.uk
+    - google.co.uz
+    - google.co.ve
+    - google.co.vi
+    - google.co.za
+    - google.co.zm
+    - google.co.zw
+    - google.com
+    - google.com.af
+    - google.com.ag
+    - google.com.ar
+    - google.com.au
+    - google.com.bd
+    - google.com.bh
+    - google.com.bn
+    - google.com.bo
+    - google.com.br
+    - google.com.bz
+    - google.com.co
+    - google.com.cu
+    - google.com.cy
+    - google.com.do
+    - google.com.ec
+    - google.com.eg
+    - google.com.et
+    - google.com.fj
+    - google.com.gh
+    - google.com.gi
+    - google.com.gt
+    - google.com.hk
+    - google.com.jm
+    - google.com.kh
+    - google.com.kw
+    - google.com.lb
+    - google.com.ly
+    - google.com.mm
+    - google.com.mt
+    - google.com.mx
+    - google.com.my
+    - google.com.na
+    - google.com.ng
+    - google.com.ni
+    - google.com.np
+    - google.com.om
+    - google.com.pa
+    - google.com.pe
+    - google.com.pg
+    - google.com.ph
+    - google.com.pk
+    - google.com.pr
+    - google.com.py
+    - google.com.qa
+    - google.com.sa
+    - google.com.sb
+    - google.com.sg
+    - google.com.sl
+    - google.com.sv
+    - google.com.tj
+    - google.com.tr
+    - google.com.tw
+    - google.com.ua
+    - google.com.uy
+    - google.com.vc
+    - google.com.vn
+    - google.cv
+    - google.cz
+    - google.de
+    - google.dj
+    - google.dk
+    - google.dm
+    - google.dz
+    - google.ee
+    - google.es
+    - google.fi
+    - google.fm
+    - google.fr
+    - google.ga
+    - google.ge
+    - google.gg
+    - google.gl
+    - google.gm
+    - google.gr
+    - google.gy
+    - google.hn
+    - google.hr
+    - google.ht
+    - google.hu
+    - google.ie
+    - google.im
+    - google.iq
+    - google.is
+    - google.it
+    - google.je
+    - google.jo
+    - google.kg
+    - google.ki
+    - google.kz
+    - google.la
+    - google.li
+    - google.lk
+    - google.lt
+    - google.lu
+    - google.lv
+    - google.md
+    - google.me
+    - google.mg
+    - google.mk
+    - google.ml
+    - google.mn
+    - google.mu
+    - google.mv
+    - google.mw
+    - google.ne
+    - google.nl
+    - google.no
+    - google.nr
+    - google.nu
+    - google.pl
+    - google.pn
+    - google.ps
+    - google.pt
+    - google.ro
+    - google.rs
+    - google.ru
+    - google.rw
+    - google.sc
+    - google.se
+    - google.sh
+    - google.si
+    - google.sk
+    - google.sm
+    - google.sn
+    - google.so
+    - google.sr
+    - google.st
+    - google.td
+    - google.tg
+    - google.tl
+    - google.tm
+    - google.tn
+    - google.to
+    - google.tt
+    - google.vu
+    - google.ws
