@@ -47,7 +47,7 @@ jobs:
     - # L1-L3 only, seconds, no browser. The scan step imports the lcov this writes; without
       # this step the analysis still succeeds and reports the project at 0% covered.
       run: npm run test:coverage
-    - uses: SonarSource/sonarqube-scan-action@ba9859eae8dd6bd29e412f25ddbbef3d032000f4 # v8.2.2
+    - uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
       env:
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         # The action targets SonarQube Server by default. Cloud needs the host named
