@@ -31,11 +31,12 @@ Stryker builds the filter either way.
 
 Upstream is <https://github.com/stryker-mutator/stryker-js/issues/6210>, fix proposed in
 PR #6214. When a `@stryker-mutator/vitest-runner` release carries it: drop the
-`packageRules` entry in `renovate.json5`, take `vitest` and `@vitest/coverage-v8` to 5,
-restore the two-parameter `Matchers` declaration in `harness/browser/matchers.ts` (the
-comment there says what 5 wants), delete `test/fitness/mutation-gate.test.ts`, and check
-`npm run test:mutation` still ends at 100.00% — that run is the whole point of the pin,
-and it is the one thing a green `npm test` does not tell you.
+`packageRules` entry in `renovate.json5` and the `ignore` in `.github/dependabot.yml`,
+take `vitest` and `@vitest/coverage-v8` to 5, restore the two-parameter `Matchers`
+declaration in `harness/browser/matchers.ts` (the comment there says what 5 wants), delete
+`test/fitness/mutation-gate.test.ts`, and check `npm run test:mutation` still ends at
+100.00% — that run is the whole point of the pin, and it is the one thing a green
+`npm test` does not tell you.
 
 ## `package.json` has dependency overrides (2026-09-17)
 

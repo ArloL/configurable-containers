@@ -32,3 +32,9 @@ updates:
       patterns:
       - "vitest"
       - "@vitest/*"
+  # Mirrors renovate.json5's hold: vitest 5 blinds the mutation gate (FOLLOWUPS.md).
+  ignore:
+  - dependency-name: "vitest"
+    update-types: ["version-update:semver-major"]
+  - dependency-name: "@vitest/*"
+    update-types: ["version-update:semver-major"]
