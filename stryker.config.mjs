@@ -29,14 +29,8 @@ export default {
   // Run only the tests that covered the mutated line. Safe here because the suite has no
   // shared mutable state — every case builds its own config object.
   //
-  // It is also what pins `vitest` to 4 (FOLLOWUPS.md, and
-  // `test/fitness/mutation-gate.test.ts` fails the fast lane if that slips). Stryker
-  // names the covering tests by writing a regex into `testNamePattern`, built from the
-  // suite chain and the test name joined with a SPACE; vitest 5 matches it against
-  // `task.fullTestName`, joined with " > ". It selects nothing, no test runs against the
-  // mutant, and a mutant no test ran is reported as SURVIVED — 769 of them on
-  // 2026-09-21, against 0 on the same commit under vitest 4. Switching this to "all"
-  // does not help: measured at the same 769, Stryker builds the filter either way.
+  // Under vitest 5 it needs `@stryker-mutator/vitest-runner` >= 10.1.1: earlier
+  // versions' filter matched no test, so every covered mutant reported SURVIVED.
   coverageAnalysis: "perTest",
 
   // 100 is the bar because the scope is 100-able: five pure modules, no I/O, no clock.

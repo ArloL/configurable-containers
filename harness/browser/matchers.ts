@@ -213,25 +213,18 @@ expect.extend({
   },
 });
 
-// The parameter list must match @vitest/expect's own `interface Matchers<T = any>`
-// exactly, or TS refuses the merge (TS2428) even though the matchers work. So the `any`
-// stays; it needs no suppression, because `typescript/no-explicit-any` is a pedantic rule
-// and `.oxlintrc.json` enables `correctness` plus a named list that does not include it.
-//
-// The arity is the vitest major's, not a choice: 4 declares `<T = any>`, 5 widened it to
-// the two-parameter jest shape `<R extends void | Promise<void> = void | Promise<void>,
-// T = unknown>` with the methods returning `Promise<void>`. TS2428 names only the
-// mismatch, never which side moved, so read the declaration in the installed
-// `@vitest/expect` and copy it rather than guessing at the arity. `vitest` is held at 4
-// for the mutation gate (FOLLOWUPS.md), so this block and that pin move together.
+// The parameter list must match vitest's own `interface Matchers<R …, T = unknown>`
+// exactly, or TS refuses the merge (TS2428) even though the matchers work. TS2428 names
+// only the mismatch, never which side moved, so on a vitest major read the installed
+// declaration and copy it rather than guessing at the arity.
 declare module "vitest" {
-  interface Matchers<T = any> {
-    toHaveText(expected: string | RegExp, opts?: WaitOpts): Promise<T>;
-    toContainText(expected: string, opts?: WaitOpts): Promise<T>;
-    toHaveValue(expected: string | RegExp, opts?: WaitOpts): Promise<T>;
-    toHaveAttribute(name: string, expected: string | RegExp, opts?: WaitOpts): Promise<T>;
-    toHaveCount(expected: number, opts?: WaitOpts): Promise<T>;
-    toBeVisible(opts?: WaitOpts): Promise<T>;
-    toBeEnabled(opts?: WaitOpts): Promise<T>;
+  interface Matchers<R extends void | Promise<void> = void | Promise<void>, T = unknown> {
+    toHaveText(expected: string | RegExp, opts?: WaitOpts): Promise<void>;
+    toContainText(expected: string, opts?: WaitOpts): Promise<void>;
+    toHaveValue(expected: string | RegExp, opts?: WaitOpts): Promise<void>;
+    toHaveAttribute(name: string, expected: string | RegExp, opts?: WaitOpts): Promise<void>;
+    toHaveCount(expected: number, opts?: WaitOpts): Promise<void>;
+    toBeVisible(opts?: WaitOpts): Promise<void>;
+    toBeEnabled(opts?: WaitOpts): Promise<void>;
   }
 }

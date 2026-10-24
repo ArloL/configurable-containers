@@ -442,13 +442,9 @@ because `test/fitness/` reads source with comments stripped).
   it leaves the gate red. The parser's error messages and `path`s are inside the gate:
   `test/config/parse.rejections.test.ts` pins one row per rejection, so rewording a
   diagnostic without updating it is a failure, not a silent drift. A survivor is killed or
-  named (`// Stryker disable … : why`), never absorbed by lowering the threshold.
-  **`vitest` is held at 4** — don't take it to 5 to fix a type error. Vitest 5 breaks
-  Stryker's per-test filter, so every covered mutant reports SURVIVED: a gate that has
-  stopped measuring rather than one that goes red. `test/fitness/mutation-gate.test.ts`
-  fails the fast lane on a bump and carries the measurement; FOLLOWUPS.md has the removal
-  condition. The two settings that make `stryker run` die at startup rather than score
-  badly argue themselves in `stryker.config.mjs`.
+  named (`// Stryker disable … : why`), never absorbed by lowering the threshold. The two
+  settings that make `stryker run` die at startup rather than score badly argue
+  themselves in `stryker.config.mjs`.
 - **`test/engine/mock-port.ts` fidelity is where "L3 green, Firefox broken" comes from.**
   It fires `onTabCreated` from `createTab`, fires `onTabRemoved` from `removeTab` (Firefox
   doesn't care who closed the tab — while it didn't, a tab CC itself closed was invisible
