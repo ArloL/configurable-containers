@@ -167,7 +167,7 @@ describe("comparing runs of the same tier", () => {
 
 // The failure this comparison could not see, and the reason a run now carries `success`.
 //
-// Measured against vitest 4: a `beforeAll` that throws records every case it owns as
+// Measured against vitest 4 and 5: a `beforeAll` that throws records every case it owns as
 // **"skipped"** and leaves `numFailedTests` at 0, while the report's own `success` is false.
 // At the case level that is byte-identical to a deliberate `it.skip` — so a launch that
 // dies in EVERY run has every case agreeing in every run, and the job used to print
