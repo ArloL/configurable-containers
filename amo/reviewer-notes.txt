@@ -1,6 +1,6 @@
 BUILD INSTRUCTIONS
 
-Node 24, which is what CI builds and verifies the checksum on.
+Node 26, which is what CI builds and verifies the checksum on.
 
     git clone https://github.com/ArloL/configurable-containers
     cd configurable-containers
