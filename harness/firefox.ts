@@ -474,9 +474,9 @@ export async function setCookieHere(page: Page, cookie: string): Promise<void> {
 // protocol command, and every caller is an http(s) page where scripts are allowed.
 export async function readLocalStorage(page: Page, key: string): Promise<string | null> {
   await page.switchHere();
-  return (await page.driver.executeScript(
+  return page.driver.executeScript<string | null>(
     `return localStorage.getItem(${JSON.stringify(key)});`
-  )) as string | null;
+  );
 }
 
 export interface ProbeTab {
