@@ -12,13 +12,16 @@ export const DEV_ID = "configurable-containers-dev@k5d.de";
 
 const OWNER_REPO = "ArloL/configurable-containers";
 
-function fetchReleases() {
-  const json = execSync(
-    `gh api "repos/${OWNER_REPO}/releases?per_page=100" --paginate --slurp`,
-    { encoding: "utf8" },
-  );
-  // --paginate --slurp outputs an array of page arrays; flatten once
-  return JSON.parse(json).flat();
+// Only the fields this script reads, one release per line. The full listing grows with
+// every dev release and passed execSync's 1 MiB default at 189 releases (1.2 MB,
+// 2026-11-22): ENOBUFS, and no manifest deployed for three pushes.
+export const RELEASES_COMMAND =
+  `gh api "repos/${OWNER_REPO}/releases?per_page=100" --paginate ` +
+  `--jq '.[] | {tag_name, prerelease, assets: [.assets[] | {name, browser_download_url}]}'`;
+
+export function fetchReleases(command = RELEASES_COMMAND) {
+  const lines = execSync(command, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  return lines.split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l));
 }
 
 /**
