@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { notYetOffered, outputDir, updatesManifest } from "../../scripts/dev-updates.js";
+import {
+  fetchReleases,
+  notYetOffered,
+  outputDir,
+  updatesManifest,
+} from "../../scripts/dev-updates.js";
 
 interface Release {
   tag_name: string;
@@ -163,6 +168,27 @@ describe("notYetOffered", () => {
   it("refuses a release that is not a prerelease", () => {
     expect(notYetOffered([{ ...dev(tag, [signed]), prerelease: false }], tag))
       .toBe(`${tag} is not a prerelease`);
+  });
+});
+
+// Stands in for `gh api --jq`, which prints one compact release per line.
+const printing = (release: Release, times: number) =>
+  `node -e 'for (let i = 0; i < ${times}; i++) console.log(process.argv[1])' '${JSON.stringify(release)}'`;
+
+describe("fetchReleases", () => {
+  it("reads one release per line", () => {
+    expect(fetchReleases(printing(dev("v2611.0.126"), 2))).toEqual([
+      dev("v2611.0.126"),
+      dev("v2611.0.126"),
+    ]);
+  });
+
+  // 2026-11-22: the listing passed execSync's 1 MiB default and every manifest run died
+  // with ENOBUFS.
+  it("accepts a listing larger than 1 MiB", () => {
+    const line = JSON.stringify(dev("v2611.0.126")).length + 1;
+    const times = Math.ceil((2 * 1024 * 1024) / line);
+    expect(fetchReleases(printing(dev("v2611.0.126"), times))).toHaveLength(times);
   });
 });
 
